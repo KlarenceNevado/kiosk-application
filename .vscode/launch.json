@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🟢 1. RUN KIOSK (Patient)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_kiosk.dart",
+            "flutterMode": "debug"
+        },
+        {
+            "name": "🔵 2. RUN ADMIN DESKTOP (Doctor)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_admin_desktop.dart",
+            "flutterMode": "debug"
+        },
+        {
+            "name": "🟠 3. RUN PATIENT MOBILE (Android Emulator)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_mobile.dart",
+            "deviceId": "emulator-5554"
+        }
+    ]
+}

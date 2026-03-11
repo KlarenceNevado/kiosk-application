@@ -1,0 +1,136 @@
+import 'dart:convert';
+
+class User {
+  final String id;
+  final String firstName;
+  final String middleInitial;
+  final String lastName;
+  final String sitio;
+  final String phoneNumber;
+  final String pinCode; // NEW: Mobile Companion Auth
+  final DateTime dateOfBirth; // NEW
+  final String gender; // NEW
+  final String? parentId; // NEW: Family Dependents mapping
+  final bool isSynced;
+  final DateTime? updatedAt;
+  final bool isDeleted;
+  final bool isActive; // NEW: Archiving support
+
+  User({
+    required this.id,
+    required this.firstName,
+    required this.middleInitial,
+    required this.lastName,
+    required this.sitio,
+    required this.phoneNumber,
+    required this.pinCode,
+    required this.dateOfBirth,
+    required this.gender,
+    this.parentId,
+    this.isSynced = false,
+    this.updatedAt,
+    this.isDeleted = false,
+    this.isActive = true, // Default to active
+  });
+
+  String get fullName =>
+      "$firstName ${middleInitial.isNotEmpty ? '$middleInitial. ' : ''}$lastName";
+
+  // Helper to calculate age
+  int get age {
+    final now = DateTime.now();
+    int age = now.year - dateOfBirth.year;
+    if (now.month < dateOfBirth.month ||
+        (now.month == dateOfBirth.month && now.day < dateOfBirth.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'firstName': firstName,
+      'middleInitial': middleInitial,
+      'lastName': lastName,
+      'sitio': sitio,
+      'phoneNumber': phoneNumber,
+      'pinCode': pinCode,
+      'dateOfBirth': dateOfBirth.toIso8601String(),
+      'gender': gender,
+      'parentId': parentId,
+      'is_synced': isSynced ? 1 : 0, // Explicitly int for SQLite
+      'updated_at': updatedAt?.toIso8601String(),
+      'is_deleted': isDeleted ? 1 : 0, // Explicitly int for SQLite
+      'isActive': isActive ? 1 : 0, // NEW
+    };
+  }
+
+  factory User.fromMap(Map<String, dynamic> map) {
+    // Robust bool parser for various data types (int, bool, null)
+    bool parseBool(dynamic value, bool defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      if (value is int) return value == 1;
+      if (value is String) return value.toLowerCase() == 'true' || value == '1';
+      return defaultValue;
+    }
+
+    return User(
+      id: map['id'] ?? '',
+      firstName: map['firstName'] ?? map['first_name'] ?? '',
+      middleInitial: map['middleInitial'] ?? map['middle_initial'] ?? '',
+      lastName: map['lastName'] ?? map['last_name'] ?? '',
+      sitio: map['sitio'] ?? '',
+      phoneNumber: map['phoneNumber'] ?? map['phone_number'] ?? '',
+      pinCode: map['pinCode'] ?? map['pin_code'] ?? '123456',
+      dateOfBirth:
+          DateTime.tryParse(map['dateOfBirth'] ?? map['date_of_birth'] ?? '') ??
+              DateTime.now(),
+      gender: map['gender'] ?? 'Not Specified',
+      parentId: map['parentId'] ?? map['parent_id'],
+      isSynced: parseBool(map['isSynced'] ?? map['is_synced'], false),
+      updatedAt: DateTime.tryParse(map['updated_at'] ?? ''),
+      isDeleted: parseBool(map['is_deleted'], false),
+      isActive: parseBool(map['isActive'] ?? map['is_active'], true),
+    );
+  }
+
+  String toJson() => json.encode(toMap());
+
+  User copyWith({
+    String? id,
+    String? firstName,
+    String? middleInitial,
+    String? lastName,
+    String? sitio,
+    String? phoneNumber,
+    String? pinCode,
+    DateTime? dateOfBirth,
+    String? gender,
+    String? parentId,
+    bool? isSynced,
+    DateTime? updatedAt,
+    bool? isDeleted,
+    bool? isActive,
+  }) {
+    return User(
+      id: id ?? this.id,
+      firstName: firstName ?? this.firstName,
+      middleInitial: middleInitial ?? this.middleInitial,
+      lastName: lastName ?? this.lastName,
+      sitio: sitio ?? this.sitio,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      pinCode: pinCode ?? this.pinCode,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      gender: gender ?? this.gender,
+      parentId: parentId ?? this.parentId,
+      isSynced: isSynced ?? this.isSynced,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isActive: isActive ?? this.isActive,
+    );
+  }
+
+  factory User.fromJson(String source) => User.fromMap(json.decode(source));
+}

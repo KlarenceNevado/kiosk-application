@@ -1,0 +1,1252 @@
+import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../../../core/constants/app_colors.dart';
+import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../../core/services/database/sync_service.dart';
+import '../../health_check/models/vital_signs_model.dart';
+import '../data/mobile_navigation_provider.dart';
+import '../../user_history/data/history_repository.dart';
+import 'dart:math' as math;
+
+class PatientDashboardScreen extends StatefulWidget {
+  const PatientDashboardScreen({super.key});
+
+  @override
+  State<PatientDashboardScreen> createState() => _PatientDashboardScreenState();
+}
+
+class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
+  bool _isLoading = true;
+  List<VitalSigns> _vitals = [];
+  Map<String, dynamic>? _latestAnnouncement;
+  String _errorMessage = '';
+  StreamSubscription? _announcementSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+
+    // LISTEN FOR REAL-TIME UPDATES
+    _announcementSubscription = SyncService().announcementStream.listen((_) {
+      if (mounted) {
+        debugPrint(
+            "🔔 Patient Dashboard: Real-time/Sync update received. Reloading (Local Only)...");
+        _loadData(forceSync: false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _announcementSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadData({bool forceSync = true}) async {
+    try {
+      final authRepo = context.read<AuthRepository>();
+      final historyRepo = context.read<HistoryRepository>();
+      final user = authRepo.currentUser;
+      if (user == null) {
+        setState(() {
+          _errorMessage = "User session expired. Please log in again.";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 1. Initial Local Fetch
+      final records = await SyncService().fetchPatientVitals(user.id);
+      final announcements =
+          await SyncService().fetchAnnouncements(currentUser: user);
+
+      if (mounted) {
+        setState(() {
+          _vitals = records;
+          if (announcements.isNotEmpty) {
+            _latestAnnouncement = announcements.first;
+          } else {
+            _latestAnnouncement = null;
+          }
+        });
+      }
+
+      // 2. Only sync with Cloud if forced (e.g. on Init or Pull-to-Refresh)
+      if (forceSync) {
+        debugPrint("📱 Dashboard: Triggering full cloud sync...");
+        await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo,
+            triggerStream: true); // Enable broadcasting to siblings
+
+        // 3. Post-Sync Fetch
+        final updatedAnnouncements =
+            await SyncService().fetchAnnouncements(currentUser: user);
+
+        if (!mounted) return;
+        setState(() {
+          if (updatedAnnouncements.isNotEmpty) {
+            _latestAnnouncement = updatedAnnouncements.first;
+          } else {
+            _latestAnnouncement = null;
+          }
+          _isLoading = false;
+        });
+      } else {
+        // Just stop loading if we were using it for a local refresh
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = "Failed to load health records.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.read<AuthRepository>().currentUser;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: AppColors.brandGreen,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── App Bar ──────────────────────────────────────────────────
+            SliverAppBar(
+              expandedHeight: 130,
+              floating: false,
+              pinned: true,
+              automaticallyImplyLeading: false,
+              backgroundColor: AppColors.brandGreen,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.brandGreenDark,
+                        AppColors.brandGreen,
+                      ],
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            "Hi, ${user?.firstName ?? 'Patient'} 👋",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Here's your health overview",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded,
+                          color: Colors.white, size: 28),
+                      onPressed: () {
+                        context
+                            .read<MobileNavigationProvider>()
+                            .goToAnnouncements();
+                      },
+                    ),
+                    if (_latestAnnouncement != null)
+                      Positioned(
+                        right: 12,
+                        top: 12,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+
+            // ── Body Content ─────────────────────────────────────────────
+            SliverToBoxAdapter(child: _buildBody()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 400,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.brandGreen),
+        ),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return SizedBox(
+        height: 400,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi_off_rounded,
+                    color: Colors.orange, size: 64),
+                const SizedBox(height: 16),
+                Text(_errorMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Retry"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = '';
+                    });
+                    _loadData();
+                  },
+                )
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildSectionHeader(
+                  "Barangay Announcement", Icons.campaign_rounded),
+              TextButton(
+                onPressed: () => context
+                    .read<MobileNavigationProvider>()
+                    .goToAnnouncements(),
+                child: const Text("View All",
+                    style: TextStyle(
+                        color: AppColors.brandGreen,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildLatestAnnouncementCard(),
+          const SizedBox(height: 24),
+          if (_vitals.isEmpty) ...[
+            SizedBox(
+              height: 350,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(28),
+                        decoration: const BoxDecoration(
+                          color: AppColors.brandGreenLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.monitor_heart_rounded,
+                            color: AppColors.brandGreen, size: 56),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text("No Health Records Yet",
+                          style: TextStyle(
+                              color: AppColors.brandDark,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text(
+                          "Visit a Barangay Kiosk to take your first checkup!",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.grey, fontSize: 14, height: 1.5)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            _buildSectionHeader(
+                "Health Insights", Icons.tips_and_updates_rounded),
+            const SizedBox(height: 12),
+            _buildInsightsCard(),
+            const SizedBox(height: 24),
+            _buildLatestMetricsCard(),
+            const SizedBox(height: 24),
+            _buildBpTrend(),
+            _buildHeartRateTrend(),
+            _buildSpo2Trend(),
+            _buildTempTrend(),
+            _buildBmiTrend(),
+            const SizedBox(height: 24),
+            _buildSectionHeader("Recent Checkups", Icons.history_rounded),
+            const SizedBox(height: 12),
+            _buildHistoryList(),
+            const SizedBox(height: 16),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInsightsCard() {
+    if (_vitals.isEmpty) return const SizedBox.shrink();
+    final latest = _vitals.first;
+
+    final List<Map<String, dynamic>> insights = [];
+
+    if (latest.systolicBP > 140 || latest.diastolicBP > 90) {
+      insights.add({
+        'icon': Icons.warning_amber_rounded,
+        'title': 'High Blood Pressure Detected',
+        'desc':
+            'Consider a restricted sodium diet and consult with your Barangay doctor.',
+        'color': Colors.red,
+      });
+    }
+    if (latest.oxygen < 94) {
+      insights.add({
+        'icon': Icons.air_rounded,
+        'title': 'Low Blood Oxygen',
+        'desc':
+            'Try deep breathing exercises. If you feel short of breath, visit the clinic immediately.',
+        'color': Colors.orange,
+      });
+    }
+    if (latest.bmi != null && latest.bmi! > 25) {
+      insights.add({
+        'icon': Icons.directions_run_rounded,
+        'title': 'Weight Management',
+        'desc':
+            'Your BMI indicates overweight. A regular 30-minute weekly exercise routine is recommended.',
+        'color': Colors.blue,
+      });
+    }
+
+    if (insights.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.brandGreen.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: AppColors.brandGreen.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                color: AppColors.brandGreen, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Looking Good!",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandDark,
+                          fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(
+                      "Your latest vitals are within normal limits. Keep up the healthy habits!",
+                      style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                          height: 1.4)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: insights.map((insight) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: (insight['color'] as Color).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: (insight['color'] as Color).withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(insight['icon'] as IconData,
+                  color: insight['color'] as Color, size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(insight['title'] as String,
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: insight['color'] as Color,
+                            fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text(insight['desc'] as String,
+                        style: TextStyle(
+                            color: Colors.grey.shade800,
+                            fontSize: 13,
+                            height: 1.4)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.brandGreen, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandDark),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLatestMetricsCard() {
+    final latest = _vitals.first;
+    final bmiValue = latest.bmi;
+    final bmiStr = bmiValue != null ? bmiValue.toStringAsFixed(2) : '--';
+    final bmiCategory = _getBmiCategory(bmiValue);
+
+    final date =
+        "${latest.timestamp.year}-${latest.timestamp.month.toString().padLeft(2, '0')}-${latest.timestamp.day.toString().padLeft(2, '0')}";
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandGreen.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.brandGreenDark, AppColors.brandGreen],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.health_and_safety_rounded,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text("Latest Checkup",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15)),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(date,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+
+          // Vitals Grid
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Row 1: BP, Heart, Temp
+                Row(
+                  children: [
+                    Expanded(
+                        child: _buildVitalCard(
+                            "Blood Pressure",
+                            "${latest.systolicBP}/${latest.diastolicBP}",
+                            "mmHg",
+                            Icons.favorite_rounded,
+                            Colors.red.shade400,
+                            Colors.red.shade50)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _buildVitalCard(
+                            "Heart Rate",
+                            "${latest.heartRate}",
+                            "bpm",
+                            Icons.monitor_heart_rounded,
+                            Colors.purple.shade400,
+                            Colors.purple.shade50)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _buildVitalCard(
+                            "Temperature",
+                            "${latest.temperature}",
+                            "°C",
+                            Icons.thermostat_rounded,
+                            Colors.orange.shade400,
+                            Colors.orange.shade50)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Row 2: SpO2, BMI (wider)
+                Row(
+                  children: [
+                    Expanded(
+                        child: _buildVitalCard(
+                            "SpO₂",
+                            "${latest.oxygen}",
+                            "%",
+                            Icons.water_drop_rounded,
+                            Colors.blue.shade400,
+                            Colors.blue.shade50)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        flex: 2, child: _buildBmiCard(bmiStr, bmiCategory)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVitalCard(String label, String value, String unit, IconData icon,
+      Color iconColor, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: iconColor,
+                      height: 1),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Text(unit,
+                  style: TextStyle(
+                      fontSize: 11, color: iconColor.withValues(alpha: 0.7))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: iconColor.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBmiCard(String bmiStr, String category) {
+    final (color, bgColor) = _getBmiColors(category);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.accessibility_new_rounded, color: color, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(bmiStr,
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                            height: 1)),
+                    const SizedBox(width: 4),
+                    Text("BMI",
+                        style: TextStyle(
+                            fontSize: 11, color: color.withValues(alpha: 0.7))),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(category,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: color,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getBmiCategory(double? bmi) {
+    if (bmi == null) return 'N/A';
+    if (bmi < 18.5) return 'Underweight';
+    if (bmi < 25.0) return 'Normal';
+    if (bmi < 30.0) return 'Overweight';
+    return 'Obese';
+  }
+
+  (Color, Color) _getBmiColors(String category) {
+    switch (category) {
+      case 'Underweight':
+        return (Colors.blue.shade600, Colors.blue.shade50);
+      case 'Normal':
+        return (AppColors.brandGreenDark, AppColors.brandGreenLight);
+      case 'Overweight':
+        return (Colors.orange.shade600, Colors.orange.shade50);
+      case 'Obese':
+        return (Colors.red.shade600, Colors.red.shade50);
+      default:
+        return (Colors.grey, Colors.grey.shade100);
+    }
+  }
+
+  Widget _buildTrendChart({
+    required String title,
+    required IconData icon,
+    required List<VitalSigns> chartData,
+    required List<LineChartBarData> lineBarsData,
+    required List<Map<String, dynamic>> legend,
+    double? minY,
+    double? maxY,
+  }) {
+    if (chartData.length < 2) {
+      return Container(
+        height: 160,
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.bar_chart_rounded,
+                  color: Colors.grey.shade300, size: 48),
+              const SizedBox(height: 8),
+              Text("Need at least 2 checkups for $title trend.",
+                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 240,
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 12),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.brandGreen, size: 20),
+                const SizedBox(width: 8),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark)),
+                const Spacer(),
+                ...legend.map((item) => Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: _buildLegendDot(item['color'], item['label']),
+                    )),
+              ],
+            ),
+          ),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                minY: minY,
+                maxY: maxY,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.withValues(alpha: 0.15),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 42,
+                      getTitlesWidget: (value, meta) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Text(
+                            value.toStringAsFixed(
+                                meta.max == meta.min || value == value.toInt()
+                                    ? 0
+                                    : 1),
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 10),
+                            textAlign: TextAlign.right,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        int index = value.toInt();
+                        if (index < 0 || index >= chartData.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final date = chartData[index].timestamp;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Text("${date.month}/${date.day}",
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 10)),
+                        );
+                      },
+                      interval: 1,
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: lineBarsData,
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    tooltipBgColor: Colors.white,
+                    tooltipRoundedRadius: 8,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final label = legend[spot.barIndex]['label'];
+                        return LineTooltipItem(
+                          "${spot.y.toStringAsFixed(spot.y == spot.y.toInt() ? 0 : 1)} $label",
+                          TextStyle(
+                              color: legend[spot.barIndex]['color'],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBpTrend() {
+    final chartData = _vitals.reversed.toList();
+    if (chartData.isEmpty) return const SizedBox.shrink();
+
+    double minY =
+        (chartData.map((e) => e.diastolicBP).reduce(math.min) / 10).floor() *
+                10 -
+            20;
+    double maxY =
+        (chartData.map((e) => e.systolicBP).reduce(math.max) / 10).ceil() * 10 +
+            20;
+
+    return _buildTrendChart(
+      title: "Blood Pressure",
+      icon: Icons.favorite_rounded,
+      chartData: chartData,
+      minY: minY,
+      maxY: maxY,
+      legend: [
+        {'color': Colors.redAccent, 'label': 'Systolic'},
+        {'color': Colors.blueAccent, 'label': 'Diastolic'},
+      ],
+      lineBarsData: [
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) =>
+                    FlSpot(e.key.toDouble(), e.value.systolicBP.toDouble()))
+                .toList(),
+            Colors.redAccent),
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) =>
+                    FlSpot(e.key.toDouble(), e.value.diastolicBP.toDouble()))
+                .toList(),
+            Colors.blueAccent),
+      ],
+    );
+  }
+
+  Widget _buildHeartRateTrend() {
+    final chartData = _vitals.reversed.toList();
+    return _buildTrendChart(
+      title: "Heart Rate",
+      icon: Icons.monitor_heart_rounded,
+      chartData: chartData,
+      legend: [
+        {'color': Colors.purple.shade400, 'label': 'BPM'}
+      ],
+      lineBarsData: [
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) =>
+                    FlSpot(e.key.toDouble(), e.value.heartRate.toDouble()))
+                .toList(),
+            Colors.purple.shade400),
+      ],
+    );
+  }
+
+  Widget _buildSpo2Trend() {
+    final chartData = _vitals.reversed.toList();
+    return _buildTrendChart(
+      title: "Oxygen Level (SpO₂)",
+      icon: Icons.water_drop_rounded,
+      chartData: chartData,
+      legend: [
+        {'color': Colors.blue.shade400, 'label': '%'}
+      ],
+      lineBarsData: [
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) => FlSpot(e.key.toDouble(), e.value.oxygen.toDouble()))
+                .toList(),
+            Colors.blue.shade400),
+      ],
+    );
+  }
+
+  Widget _buildTempTrend() {
+    final chartData = _vitals.reversed.toList();
+    return _buildTrendChart(
+      title: "Temperature",
+      icon: Icons.thermostat_rounded,
+      chartData: chartData,
+      legend: [
+        {'color': Colors.orange.shade400, 'label': '°C'}
+      ],
+      lineBarsData: [
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) =>
+                    FlSpot(e.key.toDouble(), e.value.temperature.toDouble()))
+                .toList(),
+            Colors.orange.shade400),
+      ],
+    );
+  }
+
+  Widget _buildBmiTrend() {
+    final chartData = _vitals.reversed.where((e) => e.bmi != null).toList();
+    return _buildTrendChart(
+      title: "BMI Index",
+      icon: Icons.accessibility_new_rounded,
+      chartData: chartData,
+      legend: [
+        {'color': AppColors.brandGreen, 'label': 'BMI'}
+      ],
+      lineBarsData: [
+        _createLineData(
+            chartData
+                .asMap()
+                .entries
+                .map((e) => FlSpot(e.key.toDouble(), e.value.bmi!))
+                .toList(),
+            AppColors.brandGreen),
+      ],
+    );
+  }
+
+  Widget _buildLatestAnnouncementCard() {
+    if (_latestAnnouncement == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.brandGreen.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_outline_rounded,
+                  color: AppColors.brandGreen, size: 28),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("You're all caught up!",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.brandDark)),
+                  SizedBox(height: 4),
+                  Text(
+                      "There are no active announcements from the Barangay at the moment.",
+                      style: TextStyle(
+                          color: Colors.grey, fontSize: 13, height: 1.4)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final title = _latestAnnouncement!['title'] ?? 'Announcement';
+    final content = _latestAnnouncement!['content'] ?? '';
+    final isUrgent = _latestAnnouncement!['target_group'] == 'BROADCAST_ALL';
+
+    return GestureDetector(
+      onTap: () {
+        context.read<MobileNavigationProvider>().goToAnnouncements();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isUrgent
+                ? [Colors.red.shade700, Colors.red.shade500]
+                : [AppColors.brandGreenDark, AppColors.brandGreen],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: (isUrgent ? Colors.red : AppColors.brandGreen)
+                  .withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isUrgent
+                        ? Icons.warning_rounded
+                        : Icons.info_outline_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded,
+                    color: Colors.white70, size: 14),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              content,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.4,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  LineChartBarData _createLineData(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+            radius: 4, color: Colors.white, strokeWidth: 2, strokeColor: color),
+      ),
+      belowBarData: BarAreaData(
+        show: true,
+        color: color.withValues(alpha: 0.1),
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildHistoryList() {
+    final recent = _vitals.take(5).toList();
+    return Column(
+      children: recent.asMap().entries.map((entry) {
+        final vital = entry.value;
+        final isHypertensive = vital.systolicBP > 140;
+        final date =
+            "${vital.timestamp.year}-${vital.timestamp.month.toString().padLeft(2, '0')}-${vital.timestamp.day.toString().padLeft(2, '0')}";
+        final bmiStr = vital.bmi != null ? vital.bmi!.toStringAsFixed(2) : '--';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isHypertensive ? Colors.red.shade200 : Colors.transparent,
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2)),
+            ],
+          ),
+          child: ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isHypertensive
+                    ? Colors.red.shade50
+                    : AppColors.brandGreenLight,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isHypertensive
+                    ? Icons.warning_amber_rounded
+                    : Icons.monitor_heart_rounded,
+                color: isHypertensive ? Colors.red : AppColors.brandGreen,
+                size: 22,
+              ),
+            ),
+            title: Text(date,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandDark,
+                    fontSize: 14)),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 6,
+                children: [
+                  _buildChip("♥ ${vital.systolicBP}/${vital.diastolicBP}",
+                      isHypertensive ? Colors.red : Colors.grey.shade600),
+                  _buildChip("💓 ${vital.heartRate} bpm", Colors.grey.shade600),
+                  _buildChip("BMI $bmiStr", Colors.grey.shade600),
+                ],
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded,
+                color: Colors.grey, size: 20),
+            onTap: () {
+              context
+                  .read<MobileNavigationProvider>()
+                  .setIndex(1); // Go to History Tab
+            },
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildChip(String label, Color color) {
+    return Text(label, style: TextStyle(fontSize: 12, color: color));
+  }
+}

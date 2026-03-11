@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import '../../../core/services/database/database_helper.dart';
+import '../../../core/services/database/sync_service.dart';
+import '../../health_check/models/vital_signs_model.dart';
+
+class HistoryRepository extends ChangeNotifier {
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  List<VitalSigns> _records = [];
+  bool _isLoading = false;
+
+  List<VitalSigns> get records => List.unmodifiable(_records);
+  bool get isLoading => _isLoading;
+
+  /// Loads data ONLY for the specific user
+  Future<void> loadUserHistory(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _records = await _dbHelper.getRecordsByUserId(userId);
+    } catch (e) {
+      debugPrint("Error loading user history: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads ALL data regardless of user
+  Future<void> loadAllHistory() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _records = await _dbHelper.getAllRecords();
+    } catch (e) {
+      debugPrint("Error loading all history: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addRecord(VitalSigns record) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _dbHelper.createRecord(record);
+      // Add to local list (prepend)
+      _records.insert(0, record);
+      debugPrint("✅ Saved record for user ${record.userId}");
+
+      // Trigger Cloud Sync for the new Vital Sign
+      SyncService().createVitalSign(record);
+    } catch (e) {
+      debugPrint("❌ Failed to save record: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateRecord(VitalSigns updatedRecord) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _dbHelper.updateRecord(updatedRecord);
+      final index = _records.indexWhere((r) => r.id == updatedRecord.id);
+      if (index != -1) {
+        _records[index] = updatedRecord;
+      }
+      debugPrint("✅ Updated record validation status.");
+
+      // Trigger Cloud Sync for the Updated Status
+      SyncService().updateVitalSign(updatedRecord);
+    } catch (e) {
+      debugPrint("❌ Failed to update record: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearHistory() async {
+    try {
+      await _dbHelper.clearHistory();
+      _records.clear();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error clearing history: $e");
+    }
+  }
+}

@@ -1,0 +1,8 @@
+Analyzing kiosk_application...
+
+  error - lib\features\admin\screens\tabs\admin_scheduling_tab.dart:306:31 - Undefined name 'scaffoldMessenger'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+warning - lib\features\admin\screens\tabs\admin_alerts_tab.dart:135:45 - The value of the local variable 'scaffoldMessenger' isn't used. Try removing the variable or using it. - unused_local_variable
+   info - lib\features\admin\screens\tabs\admin_alerts_tab.dart:146:60 - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext. - use_build_context_synchronously
+   info - lib\features\admin\screens\tabs\admin_announcements_tab.dart:26:10 - The member 'build' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+
+4 issues found.
