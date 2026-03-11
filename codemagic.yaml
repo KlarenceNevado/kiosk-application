@@ -1,30 +1,76 @@
 workflows:
-  patient-mobile-ios:
-    name: Patient Mobile - iOS Release
+
+  # ─────────────────────────────────────────────
+  # APP 1: Kiosk — Linux ARM64 (Raspberry Pi 5)
+  # ─────────────────────────────────────────────
+  kiosk-linux:
+    name: "App 1 · Kiosk · Linux ARM64 (Raspberry Pi)"
     max_build_duration: 60
+    instance_type: linux_x2  # Codemagic Linux instance
+    environment:
+      flutter: stable
+      vars:
+        SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
+        SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
+    scripts:
+      - name: Install Linux build dependencies
+        script: |
+          sudo apt-get update -y
+          sudo apt-get install -y cmake ninja-build pkg-config \
+            libgtk-3-dev libblkid-dev liblzma-dev clang
+      - name: Write .env from CI secrets
+        script: |
+          echo "SUPABASE_URL=$SUPABASE_URL" > assets/.env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
+      - name: Enable Linux desktop
+        script: flutter config --enable-linux-desktop
+      - name: Get dependencies
+        script: flutter pub get
+      - name: Build Kiosk Linux release
+        script: |
+          flutter build linux \
+            --release \
+            --target=lib/main_kiosk.dart
+      - name: Bundle output into zip
+        script: |
+          cd build/linux/x64/release/bundle
+          zip -r ../../../../../dist/App1_HealthKiosk_Linux.zip .
+    artifacts:
+      - dist/App1_HealthKiosk_Linux.zip
+
+  # ─────────────────────────────────────────────
+  # APP 3: Patient Mobile — iOS IPA
+  # ─────────────────────────────────────────────
+  patient-mobile-ios:
+    name: "App 3 · Patient Mobile · iOS"
+    max_build_duration: 60
+    instance_type: mac_mini_m2  # Codemagic Mac instance (free tier available)
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
+      vars:
+        SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
+        SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
     scripts:
-      - name: Set up Flutter
-        script: flutter precache --ios
-
+      - name: Write .env from CI secrets
+        script: |
+          echo "SUPABASE_URL=$SUPABASE_URL" > assets/.env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
       - name: Get dependencies
         script: flutter pub get
-
-      - name: Build iOS IPA
+      - name: Install pods
+        script: |
+          cd ios && pod install
+      - name: Build iOS IPA (no-codesign for ad-hoc testing)
         script: |
           flutter build ipa \
             --release \
             --target=lib/main_patient_mobile.dart \
-            --export-options-plist=/Users/builder/export_options.plist \
             --no-codesign
-
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-
     publishing:
       email:
         recipients:
@@ -33,25 +79,32 @@ workflows:
           success: true
           failure: true
 
-  # Also build Android APK via Codemagic for convenience
+  # ─────────────────────────────────────────────
+  # APP 3: Patient Mobile — Android APK (bonus)
+  # ─────────────────────────────────────────────
   patient-mobile-android:
-    name: Patient Mobile - Android Release
+    name: "App 3 · Patient Mobile · Android"
     max_build_duration: 60
+    instance_type: linux_x2
     environment:
       flutter: stable
+      vars:
+        SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
+        SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
     scripts:
+      - name: Write .env from CI secrets
+        script: |
+          echo "SUPABASE_URL=$SUPABASE_URL" > assets/.env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
       - name: Get dependencies
         script: flutter pub get
-
       - name: Build Android APK
         script: |
           flutter build apk \
             --release \
             --target=lib/main_patient_mobile.dart
-
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-
     publishing:
       email:
         recipients:
@@ -59,3 +112,10 @@ workflows:
         notify:
           success: true
           failure: true
+
+  # ─────────────────────────────────────────────
+  # APP 2: Admin Desktop — Windows (local build, no Codemagic needed)
+  # ─────────────────────────────────────────────
+  # Note: Windows .exe builds require a Windows instance which Codemagic
+  # doesn't provide — build locally with:
+  #   flutter build windows -t lib/main_admin_desktop.dart --release
