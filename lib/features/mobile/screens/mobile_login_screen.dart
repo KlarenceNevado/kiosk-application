@@ -76,7 +76,8 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
         if (mounted) {
           setState(() {
             _filteredUsers = results;
-            _showSuggestions = results.isNotEmpty && _selectedUser == null;
+            // Show suggestions even if empty, so we can show "No results"
+            _showSuggestions = query.isNotEmpty && _selectedUser == null;
           });
         }
       } catch (e) {
@@ -285,7 +286,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                             const SizedBox(height: 20),
                             _buildTextField(
                               controller: _phoneController,
-                              label: "Phone Number (Password)",
+                              label: "Registered Phone Number",
                               icon: Icons.lock_outline_rounded,
                               keyboardType:
                                   TextInputType.number, // Native number pad
@@ -384,33 +385,51 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                                   border:
                                       Border.all(color: Colors.grey.shade300),
                                 ),
-                                child: ListView.separated(
-                                  padding: EdgeInsets.zero,
-                                  shrinkWrap: true,
-                                  itemCount: _filteredUsers.length,
-                                  separatorBuilder: (ctx, i) => const Divider(
-                                      height: 1, color: Colors.grey),
-                                  itemBuilder: (context, index) {
-                                    final user = _filteredUsers[index];
-                                    return ListTile(
-                                      dense: true,
-                                      leading: const CircleAvatar(
-                                        backgroundColor:
-                                            AppColors.brandGreenLight,
-                                        child: Icon(Icons.person,
-                                            color: AppColors.brandGreen),
+                                child: _filteredUsers.isEmpty
+                                    ? Container(
+                                        padding: const EdgeInsets.all(16),
+                                        child: const Row(
+                                          children: [
+                                            Icon(Icons.search_off,
+                                                color: Colors.grey),
+                                            SizedBox(width: 12),
+                                            Text("No matches found",
+                                                style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontStyle:
+                                                        FontStyle.italic)),
+                                          ],
+                                        ),
+                                      )
+                                    : ListView.separated(
+                                        padding: EdgeInsets.zero,
+                                        shrinkWrap: true,
+                                        itemCount: _filteredUsers.length,
+                                        separatorBuilder: (ctx, i) =>
+                                            const Divider(
+                                                height: 1, color: Colors.grey),
+                                        itemBuilder: (context, index) {
+                                          final user = _filteredUsers[index];
+                                          return ListTile(
+                                            dense: true,
+                                            leading: const CircleAvatar(
+                                              backgroundColor:
+                                                  AppColors.brandGreenLight,
+                                              child: Icon(Icons.person,
+                                                  color: AppColors.brandGreen),
+                                            ),
+                                            title: Text(user.fullName,
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold)),
+                                            subtitle: Text(user.sitio,
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey)),
+                                            onTap: () => _selectUser(user),
+                                          );
+                                        },
                                       ),
-                                      title: Text(user.fullName,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      subtitle: Text(user.sitio,
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey)),
-                                      onTap: () => _selectUser(user),
-                                    );
-                                  },
-                                ),
                               ),
                             ),
                           ),

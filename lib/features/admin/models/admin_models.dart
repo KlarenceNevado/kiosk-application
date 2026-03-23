@@ -10,6 +10,8 @@ class Announcement {
   final DateTime timestamp;
   final bool isActive;
   final Map<String, dynamic>? reactions; // { emoji: [userIds] }
+  final String? mediaUrl;
+  final String? mediaPath;
 
   Announcement({
     required this.id,
@@ -19,6 +21,8 @@ class Announcement {
     required this.timestamp,
     required this.isActive,
     this.reactions,
+    this.mediaUrl,
+    this.mediaPath,
   });
 
   /// Returns the timestamp specifically in Asia/Manila (PHT) for UI display
@@ -36,10 +40,12 @@ class Announcement {
       'id': id,
       'title': title,
       'content': content,
-      'targetGroup': targetGroup,
+      'target_group': targetGroup,
       'timestamp': timestamp.toIso8601String(),
-      'isActive': isActive ? 1 : 0,
+      'is_active': isActive ? 1 : 0,
       'reactions': reactions,
+      'media_url': mediaUrl,
+      'media_path': mediaPath,
     };
   }
 
@@ -65,6 +71,8 @@ class Announcement {
       timestamp: DateTime.parse(map['timestamp']),
       isActive: map['isActive'] == 1 || map['is_active'] == true,
       reactions: parsedReactions,
+      mediaUrl: map['media_url'],
+      mediaPath: map['media_path'],
     );
   }
 }
@@ -103,7 +111,7 @@ class HealthActivity {
       'date': date.toIso8601String(),
       'location': location,
       'assigned': assigned,
-      'colorValue': color.toARGB32(),
+      'color_value': color.toARGB32(),
     };
   }
 
@@ -114,7 +122,7 @@ class HealthActivity {
       date: DateTime.parse(map['date']),
       location: map['location'],
       assigned: map['assigned'],
-      color: Color(map['colorValue']),
+      color: Color(map['color_value'] ?? map['colorValue']),
     );
   }
 }
@@ -150,10 +158,10 @@ class SystemAlert {
     return {
       'id': id,
       'message': message,
-      'targetGroup': targetGroup,
-      'isEmergency': isEmergency ? 1 : 0,
+      'target_group': targetGroup,
+      'is_emergency': isEmergency ? 1 : 0,
       'timestamp': timestamp.toIso8601String(),
-      'isActive': isActive ? 1 : 0,
+      'is_active': isActive ? 1 : 0,
     };
   }
 
@@ -161,11 +169,13 @@ class SystemAlert {
     return SystemAlert(
       id: map['id'],
       message: map['message'],
-      targetGroup: map['targetGroup'],
-      isEmergency: map['isEmergency'] == 1 || map['is_emergency'] == true,
+      targetGroup: map['target_group'] ?? map['targetGroup'] ?? 'all',
+      isEmergency: map['is_emergency'] == 1 || map['is_emergency'] == true || map['isEmergency'] == 1 || map['isEmergency'] == true,
       timestamp: DateTime.parse(map['timestamp']),
-      isActive: map['isActive'] == 1 ||
+      isActive: map['is_active'] == 1 ||
           map['is_active'] == true ||
+          map['isActive'] == 1 ||
+          map['isActive'] == true ||
           (map['isActive'] == null &&
               map['is_active'] == null), // Default true for legacy
     );

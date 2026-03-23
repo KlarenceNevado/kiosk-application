@@ -21,8 +21,11 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   bool _isLoading = true;
   List<VitalSigns> _vitals = [];
   Map<String, dynamic>? _latestAnnouncement;
+  List<Map<String, dynamic>> _activeAlerts = [];
   String _errorMessage = '';
   StreamSubscription? _announcementSubscription;
+  StreamSubscription? _alertSubscription;
+  StreamSubscription? _vitalsSubscription;
 
   @override
   void initState() {
@@ -31,17 +34,23 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
     // LISTEN FOR REAL-TIME UPDATES
     _announcementSubscription = SyncService().announcementStream.listen((_) {
-      if (mounted) {
-        debugPrint(
-            "🔔 Patient Dashboard: Real-time/Sync update received. Reloading (Local Only)...");
-        _loadData(forceSync: false);
-      }
+      if (mounted) _loadData(forceSync: false);
+    });
+
+    _alertSubscription = SyncService().alertStream.listen((_) {
+      if (mounted) _loadData(forceSync: false);
+    });
+
+    _vitalsSubscription = SyncService().vitalsStream.listen((_) {
+      if (mounted) _loadData(forceSync: false);
     });
   }
 
   @override
   void dispose() {
     _announcementSubscription?.cancel();
+    _alertSubscription?.cancel();
+    _vitalsSubscription?.cancel();
     super.dispose();
   }
 
@@ -59,13 +68,15 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       }
 
       // 1. Initial Local Fetch
-      final records = await SyncService().fetchPatientVitals(user.id);
+      final records = await SyncService().fetchPatientVitalsLocal(user.id);
       final announcements =
           await SyncService().fetchAnnouncements(currentUser: user);
+      final alerts = await SyncService().fetchAlerts(currentUser: user);
 
       if (mounted) {
         setState(() {
           _vitals = records;
+          _activeAlerts = alerts;
           if (announcements.isNotEmpty) {
             _latestAnnouncement = announcements.first;
           } else {
@@ -212,6 +223,219 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
+  Widget _buildAlertBanner() {
+    if (_activeAlerts.isEmpty) return const SizedBox.shrink();
+
+    final latestAlert = _activeAlerts.first;
+    final bool isEmergency =
+        latestAlert['isEmergency'] == 1 || latestAlert['is_emergency'] == true;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isEmergency ? Colors.red.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isEmergency
+              ? Colors.red.withValues(alpha: 0.3)
+              : Colors.orange.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Show alert detail or mark as read? For now just static
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isEmergency ? Colors.red : Colors.orange,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isEmergency ? Colors.red : Colors.orange)
+                            .withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: Icon(
+                    isEmergency ? Icons.warning_rounded : Icons.info_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isEmergency ? "URGENT SYSTEM ALERT" : "SYSTEM NOTICE",
+                        style: TextStyle(
+                          color: isEmergency ? Colors.red : Colors.orange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        latestAlert['message'] ?? 'Stay healthy and safe!',
+                        style: const TextStyle(
+                          color: AppColors.brandDark,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: (isEmergency ? Colors.red : Colors.orange)
+                      .withValues(alpha: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoctorRemarksCard() {
+    if (_vitals.isEmpty) return const SizedBox.shrink();
+
+    // Find latest record that has remarks
+    final recordWithRemarks = _vitals.firstWhere(
+      (v) => v.remarks != null && v.remarks!.isNotEmpty,
+      orElse: () => _vitals.first,
+    );
+
+    if (recordWithRemarks.remarks == null || recordWithRemarks.remarks!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final bool isVerified = recordWithRemarks.status == 'verified_true' ||
+        recordWithRemarks.status == 'verified';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: isVerified ? AppColors.brandGreen : Colors.orange,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.rate_review_rounded,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  "Health Worker Remarks",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  isVerified ? "Verified" : "Under Review",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  recordWithRemarks.remarks!,
+                  style: const TextStyle(
+                    color: AppColors.brandDark,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+                if (recordWithRemarks.followUpAction != null &&
+                    recordWithRemarks.followUpAction != 'none') ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.medical_services_outlined,
+                            size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            "Follow-up: ${_formatAction(recordWithRemarks.followUpAction!)}",
+                            style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAction(String action) {
+    switch (action) {
+      case 'advise_clinic':
+        return "Advise Clinic Visit";
+      case 'home_visit':
+        return "Schedule Home Visit";
+      case 'refer_municipal':
+        return "Refer to Municipal Office";
+      default:
+        return "No further action needed at this time.";
+    }
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
       return const SizedBox(
@@ -267,6 +491,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_activeAlerts.isNotEmpty) ...[
+            _buildAlertBanner(),
+            const SizedBox(height: 20),
+          ],
+          _buildDoctorRemarksCard(),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

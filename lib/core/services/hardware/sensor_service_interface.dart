@@ -5,15 +5,24 @@ enum SensorStatus {
   error,
 }
 
-abstract class ISensorService {
-  /// Stream of live heart rate numbers (0-200)
-  Stream<int> get heartRateStream;
+enum SensorType {
+  weight,
+  oximeter,
+  thermometer,
+  bloodPressure,
+}
 
-  /// Stream of the connection status (Connecting, Error, etc.)
+abstract class ISensorService {
+  SensorType get type;
+
+  /// Stream of connection status
   Stream<SensorStatus> get statusStream;
 
   /// Current status value
   SensorStatus get currentStatus;
+
+  /// Stream of raw OR parsed data
+  Stream<dynamic> get dataStream;
 
   void startReading();
   void stopReading();

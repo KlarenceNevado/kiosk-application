@@ -1,26 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'core/config/routes.dart';
-import 'core/services/system/config_service.dart';
-import 'core/services/security/encryption_service.dart';
+import 'core/services/system/app_environment.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/user_history/data/history_repository.dart';
 import 'features/patient/data/mobile_navigation_provider.dart';
-import 'main_kiosk.dart'; // for LanguageProvider
+import 'core/providers/language_provider.dart';
 import 'features/patient/patient_app_theme.dart';
 import 'core/constants/app_colors.dart';
 import 'l10n/app_localizations.dart';
 import 'features/patient/widgets/announcement_notification_listener.dart';
-import 'core/services/security/notification_service.dart';
-import 'core/services/system/app_environment.dart';
 import 'features/chat/data/chat_repository.dart';
-import 'core/services/database/sync_service.dart';
+import 'core/services/system/initialization_service.dart';
 
 /// THE RULE: runApp() MUST be the very first thing that runs.
 /// ALL async initialization happens inside the widget tree,
@@ -28,15 +21,6 @@ import 'core/services/database/sync_service.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   AppEnvironment().setMode(AppMode.mobilePatient);
-
-  // Ensure the OS keyboard is not suppressed and UI is edge-to-edge
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.dark,
-  ));
 
   // ↓ synchronous — no awaits here
   runApp(const MobileBootstrapApp());
@@ -63,57 +47,11 @@ class _MobileBootstrapAppState extends State<MobileBootstrapApp> {
   }
 
   Future<void> _initialize() async {
-    // 0. Timezone Initialization
+    // Centralized Initialization
     try {
-      tz.initializeTimeZones();
-      tz.setLocalLocation(tz.getLocation('Asia/Manila'));
+      await InitializationService().initialize();
     } catch (e) {
-      debugPrint("⚠️ Timezone: $e");
-    }
-
-    // Initialize Local Notifications Service
-    try {
-      await NotificationService().init();
-    } catch (e) {
-      debugPrint("⚠️ NotificationService: $e");
-    }
-
-    // 1. Load .env
-    try {
-      await dotenv.load(fileName: "assets/.env");
-    } catch (e) {
-      debugPrint("⚠️ .env load: $e");
-    }
-
-    // 2. Supabase
-    try {
-      await Supabase.initialize(
-        url: dotenv.env['SUPABASE_URL'] ?? '',
-        anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
-      );
-    } catch (e) {
-      debugPrint("⚠️ Supabase: $e");
-    }
-
-    // 3. Encryption
-    try {
-      await EncryptionService().init();
-    } catch (e) {
-      debugPrint("⚠️ Encryption: $e");
-    }
-
-    // 4. Config
-    try {
-      await ConfigService().loadSettings();
-    } catch (e) {
-      debugPrint("⚠️ Config: $e");
-    }
-
-    // 5. Sync Service (Listeners & Backfill)
-    try {
-      SyncService().startSyncLoop();
-    } catch (e) {
-      debugPrint("⚠️ SyncService: $e");
+      debugPrint("⚠️ MobileBootstrapApp (Init): $e");
     }
 
     // Mark ready — triggers rebuild into the full app

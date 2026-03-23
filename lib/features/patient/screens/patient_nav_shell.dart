@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/models/user_model.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../mobile/screens/mobile_history_screen.dart';
 import 'patient_dashboard_screen.dart';
@@ -12,6 +11,9 @@ import 'patient_announcements_screen.dart';
 import '../../chat/screens/patient_chat_screen.dart';
 import '../../chat/data/chat_repository.dart';
 import '../data/mobile_navigation_provider.dart';
+import '../../../../core/services/security/notification_service.dart';
+import '../../../../core/services/database/sync_service.dart';
+import '../../user_history/data/history_repository.dart';
 
 /// The unified navigation shell for the Patient Mobile App.
 /// 4 tabs: Dashboard, History, Announcements, Profile
@@ -202,28 +204,6 @@ class _PatientProfileTab extends StatelessWidget {
             _buildLinkedAccountsSection(context),
             const SizedBox(height: 24),
 
-            if (user != null)
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.qr_code_2_rounded,
-                      color: Colors.white, size: 24),
-                  label: const Text("Show Login QR Code",
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandDark,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                    elevation: 4,
-                    shadowColor: AppColors.brandDark.withValues(alpha: 0.3),
-                  ),
-                  onPressed: () => _showQrDialog(context, user),
-                ),
-              ),
 
             const SizedBox(height: 32),
 
@@ -240,6 +220,94 @@ class _PatientProfileTab extends StatelessWidget {
                 Icons.phone, "Phone Number", user?.phoneNumber ?? "--"),
             _buildInfoTile(
                 Icons.badge, "Patient ID", user?.id.substring(0, 8) ?? "--"),
+
+            const SizedBox(height: 32),
+
+            // Notification Settings
+            _buildSettingsHeader("App Settings"),
+            _buildSettingCard(
+              child: FutureBuilder<bool>(
+                future: NotificationService().isNotificationsEnabled(),
+                builder: (context, snapshot) {
+                  final isEnabled = snapshot.data ?? true;
+                  return StatefulBuilder(
+                    builder: (context, setInternalState) {
+                      return SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        title: const Text("Push Notifications",
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        subtitle: const Text("Receive alerts and reminders"),
+                        secondary: Icon(
+                          isEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+                          color: isEnabled ? AppColors.brandGreen : Colors.grey,
+                        ),
+                        thumbColor: WidgetStateProperty.all(AppColors.brandGreen),
+                        trackColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return AppColors.brandGreen.withValues(alpha: 0.3);
+                          }
+                          return Colors.grey.shade300;
+                        }),
+                        value: isEnabled,
+                        onChanged: (val) async {
+                          if (val) {
+                            await NotificationService().requestPermissions();
+                          }
+                          await NotificationService().setNotificationsEnabled(val);
+                          setInternalState(() {}); // Local refresh
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            _buildSettingCard(
+              child: ListTile(
+                leading: const Icon(Icons.info_outline_rounded, color: Colors.blue),
+                title: const Text("About Kiosk Application", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("v1.2.5 - Stable Build"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  showAboutDialog(
+                    context: context,
+                    applicationName: "Barangay Health Kiosk",
+                    applicationVersion: "1.2.5",
+                    applicationIcon: const Icon(Icons.monitor_heart, color: AppColors.brandGreen, size: 48),
+                    children: [
+                      const Text("A comprehensive digital health monitoring system for community barangays."),
+                    ],
+                  );
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+
+             _buildSettingCard(
+              child: ListTile(
+                leading: const Icon(Icons.cloud_sync_rounded, color: Colors.orange),
+                title: const Text("Last Synchronized", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("Updated ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')} today"),
+                trailing: const Icon(Icons.refresh),
+                onTap: () async {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Syncing all data..."), duration: Duration(seconds: 1)));
+                   await SyncService().forceDownSyncAndRefresh(
+                     context.read<AuthRepository>(),
+                     context.read<HistoryRepository>(),
+                   );
+                   if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Data synchronized for offline use.")));
+                   }
+                },
+              ),
+            ),
 
             const SizedBox(height: 40),
 
@@ -260,6 +328,7 @@ class _PatientProfileTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: () async {
+                  context.read<MobileNavigationProvider>().reset();
                   await context.read<AuthRepository>().logout();
                   if (context.mounted) {
                     context.go('/patient/login');
@@ -335,7 +404,9 @@ class _PatientProfileTab extends StatelessWidget {
                     style: TextStyle(
                         fontWeight:
                             isCurrent ? FontWeight.bold : FontWeight.normal)),
-                subtitle: Text(isPrimary ? "Primary Account" : "Dependent"),
+                subtitle: Text(isPrimary
+                    ? "Primary Account"
+                    : (account.relation ?? "Dependent")),
                 trailing: isCurrent
                     ? const Icon(Icons.check_circle,
                         color: AppColors.brandGreen)
@@ -358,7 +429,9 @@ class _PatientProfileTab extends StatelessWidget {
     final firstCtrl = TextEditingController();
     final lastCtrl = TextEditingController();
     final dobCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController(text: activeUser.phoneNumber);
     String selectedGender = "Male";
+    String relation = "Child"; // Default
 
     showDialog(
       context: context,
@@ -405,6 +478,35 @@ class _PatientProfileTab extends StatelessWidget {
                     }).toList(),
                     onChanged: (val) => setState(() => selectedGender = val!),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                        labelText: "Dependent Phone Number",
+                        hintText: "Shares parent PIN by default",
+                        prefixIcon: Icon(Icons.phone),
+                        border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: relation,
+                    decoration: const InputDecoration(
+                        labelText: "Relationship to Primary Account",
+                        prefixIcon: Icon(Icons.people),
+                        border: OutlineInputBorder()),
+                    items: [
+                      "Child",
+                      "Spouse",
+                      "Parent",
+                      "Sibling",
+                      "Relative",
+                      "Other"
+                    ].map((r) {
+                      return DropdownMenuItem(value: r, child: Text(r));
+                    }).toList(),
+                    onChanged: (val) => setState(() => relation = val!),
+                  ),
                 ],
               ),
             ),
@@ -428,10 +530,11 @@ class _PatientProfileTab extends StatelessWidget {
                     lastName: lastCtrl.text,
                     middleInitial: "",
                     sitio: activeUser.sitio, // Inherit from parent
-                    phoneNumber: activeUser.phoneNumber, // Inherit from parent
                     pinCode: activeUser.pinCode, // Inherit from parent
                     dateOfBirth: DateTime.parse(dobCtrl.text),
                     gender: selectedGender,
+                    phoneNumber: phoneCtrl.text,
+                    relation: relation,
                     parentId: parentId, // Establish Link!
                   );
 
@@ -494,74 +597,37 @@ class _PatientProfileTab extends StatelessWidget {
     );
   }
 
-  void _showQrDialog(BuildContext context, User user) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                  width: 48,
-                  height: 6,
-                  decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(3))),
-              const SizedBox(height: 32),
-              const Text("Your Login QR Code",
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              const SizedBox(height: 8),
-              const Text(
-                  "Hold this in front of the Kiosk camera to log in instantly.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 14)),
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8))
-                    ]),
-                child: QrImageView(
-                  data: '{"action":"login","userId":"${user.id}"}',
-                  version: QrVersions.auto,
-                  size: 200.0,
-                  eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.circle, color: AppColors.brandDark),
-                  dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.circle,
-                      color: AppColors.brandDark),
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text(user.fullName,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18)),
-              Text("ID: ${user.id.substring(0, 8)}",
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
+  Widget _buildSettingsHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0, left: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(title,
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandDark)),
+      ),
     );
   }
+
+  Widget _buildSettingCard({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
 }
 
 class FadeIndexedStack extends StatefulWidget {

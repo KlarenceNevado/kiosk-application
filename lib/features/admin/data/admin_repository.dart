@@ -227,7 +227,7 @@ class AdminRepository extends ChangeNotifier {
     unawaited(() async {
       try {
         final map = announcement.toMap();
-        map['isActive'] = isActive ? 1 : 0;
+        map['is_active'] = isActive ? 1 : 0;
         map['is_synced'] = 0;
         await _dbHelper.updateAnnouncement(map);
 
@@ -398,7 +398,7 @@ class AdminRepository extends ChangeNotifier {
     unawaited(() async {
       try {
         final map = alert.toMap();
-        map['isActive'] = isActive ? 1 : 0;
+        map['is_active'] = isActive ? 1 : 0;
         map['is_synced'] = 0; // mark for general sync
         await _dbHelper.updateAlert(map);
 

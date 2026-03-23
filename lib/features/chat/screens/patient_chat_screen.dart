@@ -28,13 +28,42 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
       final user = context.read<AuthRepository>().currentUser;
       if (user != null) {
         // In the patient app, we're always chatting with the admin (system)
-        context.read<ChatRepository>().initChat(user.id, 'admin');
+        final chatRepo = context.read<ChatRepository>();
+        chatRepo.initChat(user.id, 'admin');
+
+        // AUTO-SCROLL LISTENER
+        chatRepo.addListener(_onChatChanged);
       }
     });
   }
 
+  void _onChatChanged() {
+    if (!mounted) return;
+    // Scroll to bottom if we are already near bottom
+    if (_scrollController.hasClients) {
+      final bool isNearBottom = _scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200;
+
+      if (isNearBottom) {
+        // Allow time for build
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
+    try {
+      context.read<ChatRepository>().removeListener(_onChatChanged);
+    } catch (_) {}
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _messageController.dispose();

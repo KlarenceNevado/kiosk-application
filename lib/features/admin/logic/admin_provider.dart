@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/printer/thermal_printer_service.dart';
 import '../../../core/services/database/database_helper.dart';
 import '../../user_history/data/history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
@@ -15,24 +14,20 @@ class AdminProvider extends ChangeNotifier {
   // System Status State
   String _networkStatus = "Checking...";
   Color _networkColor = Colors.grey;
-  bool _printerConnected = false;
   String _storageStatus = "Checking...";
   bool _isMaintenanceMode = false;
 
   // Getters
   String get networkStatus => _networkStatus;
   Color get networkColor => _networkColor;
-  bool get printerConnected => _printerConnected;
   String get storageStatus => _storageStatus;
   bool get isMaintenanceMode => _isMaintenanceMode;
 
   // Initialize Dashboard Data
   Future<void> initDashboard() async {
     await checkSystemHealth();
-    // Simulate checking hardware connections
+    // Simulate checking storage
     await Future.delayed(const Duration(milliseconds: 600));
-    _printerConnected =
-        true; // In real app, check ThermalPrinterService().isConnected
     _storageStatus = "85% Free";
     notifyListeners();
   }
@@ -58,29 +53,6 @@ class AdminProvider extends ChangeNotifier {
         "Maintenance mode ${_isMaintenanceMode ? 'ENABLED' : 'DISABLED'}",
         userId: "ADMIN");
     notifyListeners();
-  }
-
-  // Printer Test Page
-  Future<bool> testPrinter() async {
-    try {
-      final testRecord = VitalSigns(
-          id: "TEST-000",
-          userId: "ADMIN",
-          timestamp: DateTime.now(),
-          heartRate: 72,
-          systolicBP: 120,
-          diastolicBP: 80,
-          oxygen: 98,
-          temperature: 36.5);
-
-      await ThermalPrinterService().printReceipt(testRecord);
-      await DatabaseHelper.instance.logSecurityEvent(
-          "PRINTER_TEST", "Test receipt printed",
-          userId: "ADMIN");
-      return true;
-    } catch (e) {
-      return false;
-    }
   }
 
   // Secure Export to CSV

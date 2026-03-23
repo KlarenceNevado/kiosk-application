@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   connectivity_plus
+  flutter_libserialport
   flutter_secure_storage_windows
   printing
   screen_retriever

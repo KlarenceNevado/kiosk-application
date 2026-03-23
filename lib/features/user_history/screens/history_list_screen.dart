@@ -87,6 +87,13 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
       onTap: _resetPrivacyTimer,
       child: KioskScaffold(
         title: "My Health Trends",
+        onBackTap: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go(AppRoutes.patientHome);
+          }
+        },
         actions: [
           // SECURITY TOGGLE
           IconButton(

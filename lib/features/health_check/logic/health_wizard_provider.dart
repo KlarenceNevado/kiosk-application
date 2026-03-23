@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:math'; // For mock simulation
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 import '../../../core/services/hardware/sensor_service_interface.dart';
+import '../../../core/services/hardware/sensor_manager.dart';
 import '../models/vital_signs_model.dart';
+import '../../../core/services/system/system_log_service.dart';
 
 class HealthWizardProvider extends ChangeNotifier {
-  final ISensorService _sensorService;
+  final SensorManager _sensorManager;
 
   // LIVE DATA STATES
   int _currentHeartRate = 0;
@@ -21,8 +22,7 @@ class HealthWizardProvider extends ChangeNotifier {
 
   // SYSTEM STATE
   SensorStatus _status = SensorStatus.disconnected;
-  StreamSubscription? _hrSubscription;
-  StreamSubscription? _statusSubscription;
+  StreamSubscription? _sensorSubscription;
 
   // GETTERS
   int get currentHeartRate => _currentHeartRate;
@@ -55,7 +55,7 @@ class HealthWizardProvider extends ChangeNotifier {
     return "Obese";
   }
 
-  HealthWizardProvider(this._sensorService);
+  HealthWizardProvider(this._sensorManager);
 
   // --- ACTIONS ---
 
@@ -71,37 +71,41 @@ class HealthWizardProvider extends ChangeNotifier {
   }
 
   void startHealthCheck() {
-    _statusSubscription?.cancel();
-    _statusSubscription = _sensorService.statusStream.listen((newStatus) {
-      _status = newStatus;
-      notifyListeners();
-    });
+    SystemLogService().logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
+    _sensorSubscription?.cancel();
+    _sensorSubscription = _sensorManager.allDataStream.listen((event) {
+      _status = event.status;
 
-    _hrSubscription?.cancel();
-    _hrSubscription = _sensorService.heartRateStream.listen((data) {
-      _currentHeartRate = data;
-
-      // MOCK: Generate other vitals based on heart rate
-      final random = Random();
-      _currentSpO2 = 96 + random.nextInt(4); // 96-99
-      _currentTemp = 36.5 + (random.nextDouble() * 1.0); // 36.5 - 37.5
-      _currentSystolic = 110 + random.nextInt(20); // 110-130
-      _currentDiastolic = 70 + random.nextInt(15); // 70-85
-
-      if (_weightKg > 0) {
-        _weightKg = 70.0 + (random.nextDouble() * 0.2);
+      if (event.data != null) {
+        switch (event.type) {
+          case SensorType.weight:
+            _weightKg = event.data as double;
+            break;
+          case SensorType.oximeter:
+            final oximeter = event.data as Map<String, dynamic>;
+            _currentSpO2 = oximeter['spo2'] as int;
+            _currentHeartRate = oximeter['bpm'] as int;
+            break;
+          case SensorType.thermometer:
+            _currentTemp = event.data as double;
+            break;
+          case SensorType.bloodPressure:
+            final bp = event.data as Map<String, dynamic>;
+            _currentSystolic = bp['sys'] as int;
+            _currentDiastolic = bp['dia'] as int;
+            break;
+        }
       }
-
       notifyListeners();
     });
 
-    _sensorService.startReading();
+    _sensorManager.startAll();
   }
 
   void stopHealthCheck() {
-    _sensorService.stopReading();
-    _hrSubscription?.cancel();
-    _statusSubscription?.cancel();
+    SystemLogService().logAction(action: 'HEALTH_CHECK_STOP', module: 'HEALTH_CHECK');
+    _sensorManager.stopAll();
+    _sensorSubscription?.cancel();
 
     _status = SensorStatus.disconnected;
     notifyListeners();
@@ -110,6 +114,11 @@ class HealthWizardProvider extends ChangeNotifier {
   // Generate Final Data for Saving
   // FIXED: Ensure userId is required
   VitalSigns generateFinalResult(String userId) {
+    SystemLogService().logAction(
+      action: 'VITAL_SIGNS_CAPTURED',
+      module: 'HEALTH_CHECK',
+      userId: userId,
+    );
     return VitalSigns(
       id: const Uuid().v4(),
       userId: userId,
@@ -128,9 +137,8 @@ class HealthWizardProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _hrSubscription?.cancel();
-    _statusSubscription?.cancel();
-    _sensorService.stopReading();
+    _sensorSubscription?.cancel();
+    _sensorManager.stopAll();
     super.dispose();
   }
 }

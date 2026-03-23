@@ -1,11 +1,13 @@
 import 'dart:io';
-// FIXED: Removed unused import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 import '../../../features/health_check/models/vital_signs_model.dart';
+import '../database/database_helper.dart';
+import 'file_storage_service.dart';
 
 class PdfReportService {
   Future<void> generateAndOpenReport(VitalSigns data) async {
@@ -189,9 +191,30 @@ class PdfReportService {
 
     // Save and Open
     final output = await getApplicationDocumentsDirectory();
-    final file =
-        File("${output.path}/Medical_Report_${data.id.substring(0, 6)}.pdf");
-    await file.writeAsBytes(await pdf.save());
+    final fileName = "Medical_Report_${data.id.substring(0, 6)}.pdf";
+    final file = File("${output.path}/$fileName");
+    final pdfBytes = await pdf.save();
+    await file.writeAsBytes(pdfBytes);
+
+    // Upload to Supabase Storage
+    try {
+      final remotePath = "reports/${data.userId}/$fileName";
+      final publicUrl = await FileStorageService().uploadFile(
+        file,
+        'vitals-reports',
+        remotePath: remotePath,
+      );
+
+      if (publicUrl != null) {
+        // Update local database with URL and Local Path
+        await DatabaseHelper.instance.updateRecordRaw(data.id, {
+          'report_url': publicUrl,
+          'report_path': file.path,
+        });
+      }
+    } catch (e) {
+      debugPrint("⚠️ PDF Upload Failed: $e");
+    }
 
     // Open the PDF viewer
     await OpenFile.open(file.path);

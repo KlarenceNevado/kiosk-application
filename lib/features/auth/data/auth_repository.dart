@@ -9,13 +9,18 @@ import '../../../core/services/system/app_environment.dart';
 import '../models/user_model.dart';
 import '../../../core/services/notifications/chat_listener_service.dart';
 import '../../../core/services/notifications/system_alert_listener_service.dart';
+import '../../../core/services/notifications/vitals_listener_service.dart';
 import '../../../core/services/notifications/announcement_listener_service.dart';
+import '../../../core/services/security/security_logger.dart';
+import '../../../core/services/system/system_log_service.dart';
 
 class AuthRepository extends ChangeNotifier {
   User? _currentUser;
   List<User> _users = [];
   bool _isLoading = false;
+  bool _isRefreshing = false; // NEW: Prevent concurrent refreshes
   StreamSubscription? _patientSyncSub;
+  Timer? _refreshDebounce; // NEW: Debounce multiple sync events
 
   // STORAGE KEYS
   static const String _migrationKey = 'sqlite_migration_done';
@@ -27,32 +32,22 @@ class AuthRepository extends ChangeNotifier {
 
   AuthRepository() {
     _loadUsers();
-    SyncService().registerSyncCallback(_syncOfflineUsers);
 
-    // Listen for cloud changes and refresh local list
+    // Listen for cloud changes and refresh local list (Debounced to avoid lag)
     _patientSyncSub = SyncService().patientStream.listen((_) {
-      debugPrint("☁️ AuthRepository: Patient change detected, refreshing...");
-      _loadUsers();
+      _refreshDebounce?.cancel();
+      _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
+        debugPrint("☁️ AuthRepository: Sync event received, refreshing (debounced)...");
+        _loadUsers();
+      });
     });
   }
 
-  @override
-  void dispose() {
-    _patientSyncSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _syncOfflineUsers() async {
-    final unsynced = await DatabaseHelper.instance.getUnsyncedPatients();
-    for (final user in unsynced) {
-      final updatedUser = await SyncService().createPatient(user);
-      if (updatedUser != null && updatedUser.isSynced) {
-        await DatabaseHelper.instance.markPatientAsSynced(updatedUser.id);
-      }
-    }
-  }
 
   Future<void> _loadUsers() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
     final prefs = await SharedPreferences.getInstance();
     final isMigrated = prefs.getBool(_migrationKey) ?? false;
 
@@ -71,9 +66,26 @@ class AuthRepository extends ChangeNotifier {
 
     try {
       _users = await DatabaseHelper.instance.getPatients();
+      
+      // NEW: Trigger sync if we have a persisted session
+      final encryptedLastUserId = prefs.getString('last_logged_in_user_id');
+      if (encryptedLastUserId != null && _currentUser == null) {
+        try {
+          final lastUserId = EncryptionService().decryptData(encryptedLastUserId);
+          _currentUser = _users.firstWhere((u) => u.id == lastUserId);
+          if (_currentUser != null) {
+            SyncService().fullSyncForUser(_currentUser!.id);
+          }
+        } catch (_) {
+          debugPrint("⚠️ AuthRepository: Stale or unreadable session found. Clearing.");
+          await prefs.remove('last_logged_in_user_id');
+        }
+      }
     } catch (e) {
       debugPrint("❌ CRITICAL: Failed to load users from SQLite: $e");
       _users = [];
+    } finally {
+      _isRefreshing = false;
     }
     notifyListeners();
   }
@@ -144,9 +156,15 @@ class AuthRepository extends ChangeNotifier {
       _users = await DatabaseHelper.instance.getPatients();
       _currentUser = createdUser;
 
+      SecurityLogger.info("New patient registered", 
+          pii: createdUser.fullName);
+      
       DatabaseHelper.instance.logSecurityEvent(
-          "REGISTER", "New patient registered: ${createdUser.fullName}",
+          "REGISTER", "New patient registered", // Event log sanitized internally or masked
           userId: createdUser.id);
+
+      // Trigger immediate background sync push
+      SyncService().triggerSync();
 
       _isLoading = false;
       notifyListeners();
@@ -163,8 +181,10 @@ class AuthRepository extends ChangeNotifier {
     await DatabaseHelper.instance.updatePatient(updatedUser);
     _users = await DatabaseHelper.instance.getPatients();
 
+    SecurityLogger.info("Admin updated user", pii: updatedUser.fullName);
+
     DatabaseHelper.instance.logSecurityEvent(
-        "USER_UPDATE", "Admin updated user: ${updatedUser.fullName}",
+        "USER_UPDATE", "Admin updated user details",
         userId: "ADMIN");
 
     // Trigger Cloud Sync
@@ -191,8 +211,10 @@ class AuthRepository extends ChangeNotifier {
 
     _users = await DatabaseHelper.instance.getPatients();
 
+    SecurityLogger.info("Admin ${isActive ? 'restored' : 'archived'} user", pii: user.fullName);
+
     DatabaseHelper.instance.logSecurityEvent("USER_ARCHIVE",
-        "Admin ${isActive ? 'restored' : 'archived'} user: ${user.fullName}",
+        "Admin ${isActive ? 'restored' : 'archived'} user",
         userId: "ADMIN");
 
     // Trigger Cloud Sync
@@ -225,14 +247,34 @@ class AuthRepository extends ChangeNotifier {
       );
 
       if (localUser.id.isNotEmpty) {
+        // Fetch Dependents for the logged-in parent even in offline mode
+        final dependents = await SyncService().fetchDependents(localUser.id);
+        for (final dependent in dependents) {
+          await DatabaseHelper.instance.insertPatient(dependent);
+        }
+        _users = await DatabaseHelper.instance.getPatients();
+
         _currentUser = localUser;
         _isLoading = false;
+        
+        // Save for session restoration
+        final prefs = await SharedPreferences.getInstance();
+        final encryptedId = EncryptionService().encryptData(_currentUser!.id);
+        await prefs.setString('last_logged_in_user_id', encryptedId);
+
+        // NEW: EAGER FULL SYNC FOR OFFLINE
+        SyncService().fullSyncForUser(_currentUser!.id);
+
         // Start background listeners
         ChatListenerService().startListening(_currentUser!.id);
         AnnouncementListenerService().startListening();
+        SystemLogService().startSession(_currentUser!.id);
         SystemAlertListenerService().startListening(
           userRole: 'patient',
           sitio: _currentUser!.sitio,
+        );
+        VitalsListenerService().startListening(
+          familyIds: getLinkedAccounts().map((u) => u.id).toList(),
         );
 
         notifyListeners();
@@ -243,14 +285,38 @@ class AuthRepository extends ChangeNotifier {
       final cloudCheck =
           await SyncService().findPatient(firstName, phoneNumber);
       if (cloudCheck.isNotEmpty) {
-        _currentUser = User.fromMap(cloudCheck.first);
+        final cloudUser = User.fromMap(cloudCheck.first);
+
+        // Fetch Dependents for the logged-in parent
+        final dependents = await SyncService().fetchDependents(cloudUser.id);
+
+        await DatabaseHelper.instance.insertPatient(cloudUser);
+        for (final dependent in dependents) {
+          await DatabaseHelper.instance.insertPatient(dependent);
+        }
+        _users = await DatabaseHelper.instance.getPatients();
+
+        _currentUser = cloudUser;
         _isLoading = false;
+
+        // Save for session restoration
+        final prefs = await SharedPreferences.getInstance();
+        final encryptedId = EncryptionService().encryptData(_currentUser!.id);
+        await prefs.setString('last_logged_in_user_id', encryptedId);
+
+        // NEW: EAGER FULL SYNC FOR OFFLINE
+        SyncService().fullSyncForUser(_currentUser!.id);
+
         // Start background listeners
         ChatListenerService().startListening(_currentUser!.id);
         AnnouncementListenerService().startListening();
+        SystemLogService().startSession(_currentUser!.id);
         SystemAlertListenerService().startListening(
           userRole: 'patient',
           sitio: _currentUser!.sitio,
+        );
+        VitalsListenerService().startListening(
+          familyIds: getLinkedAccounts().map((u) => u.id).toList(),
         );
 
         notifyListeners();
@@ -292,11 +358,13 @@ class AuthRepository extends ChangeNotifier {
         _isLoading = false;
         // Start background listeners
         ChatListenerService().startListening(_currentUser!.id);
-        AnnouncementListenerService().startListening();
+        SystemLogService().startSession(_currentUser!.id);
         SystemAlertListenerService().startListening(
           userRole: 'patient',
           sitio: _currentUser!.sitio,
         );
+        SyncService()
+            .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
 
         notifyListeners();
         return null; // Success
@@ -335,13 +403,18 @@ class AuthRepository extends ChangeNotifier {
         _isLoading = false;
         // Start background listeners
         ChatListenerService().startListening(_currentUser!.id);
-        AnnouncementListenerService().startListening();
+        SystemLogService().startSession(_currentUser!.id);
         SystemAlertListenerService().startListening(
           userRole: 'patient',
           sitio: _currentUser!.sitio,
         );
 
         notifyListeners();
+
+        // Sync all family vitals for offline access
+        SyncService()
+            .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
+
         return null; // Navigation will trigger
       } else {
         _isLoading = false;
@@ -372,13 +445,15 @@ class AuthRepository extends ChangeNotifier {
 
       // Stop background listeners
       ChatListenerService().stopListening();
-      AnnouncementListenerService().stopListening();
       SystemAlertListenerService().stopListening();
 
       // Only stop sync listeners on mobile; Kiosk/Desktop should keep listening
       if (mode == AppMode.mobilePatient) {
         SyncService().stopListening();
       }
+
+      // Log session end
+      await SystemLogService().endSession();
     }
 
     _currentUser = null;
@@ -417,5 +492,12 @@ class AuthRepository extends ChangeNotifier {
     await DatabaseHelper.instance.markPatientAsSynced(userId);
     _users = await DatabaseHelper.instance.getPatients();
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _refreshDebounce?.cancel();
+    _patientSyncSub?.cancel();
+    super.dispose();
   }
 }

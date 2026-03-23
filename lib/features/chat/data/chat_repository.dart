@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:sqflite/sqflite.dart';
@@ -203,25 +204,46 @@ class ChatRepository extends ChangeNotifier {
 
   Future<void> sendMessage(ChatMessage message) async {
     // 1. Add locally first for instant feedback
-    _messages.add(message);
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index == -1) {
+      _messages.add(message);
+    } else {
+      _messages[index] = message;
+    }
+    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     notifyListeners();
 
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('chat_messages', message.toMap()..['is_synced'] = 0);
-
     try {
-      // 2. Upload to Supabase
-      await _supabase.from('chat_messages').insert(message.toSupabaseMap());
-
-      // 3. Mark as synced
-      await db.update(
-        'chat_messages',
-        {'is_synced': 1},
-        where: 'id = ?',
-        whereArgs: [message.id],
+      final db = await DatabaseHelper.instance.database;
+      await db.insert(
+        'chat_messages', 
+        message.toMap()..['is_synced'] = 0,
+        conflictAlgorithm: ConflictAlgorithm.replace,
       );
+
+      // 2. Upload to Supabase (Best effort)
+      try {
+        await _supabase.from('chat_messages').insert(message.toSupabaseMap());
+        
+        // 3. Mark as synced
+        await db.update(
+          'chat_messages',
+          {'is_synced': 1},
+          where: 'id = ?',
+          whereArgs: [message.id],
+        );
+        
+        final updatedIdx = _messages.indexWhere((m) => m.id == message.id);
+        if (updatedIdx != -1) {
+          _messages[updatedIdx] = message.copyWith(isSynced: true);
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint("⚠️ Chat Cloud Push failed: $e. Message saved locally for background sync.");
+        // We don't throw here, as it's saved locally and SyncService will pick it up.
+      }
     } catch (e) {
-      debugPrint("Chat Send Error: $e");
+      debugPrint("❌ Critical Chat Save Error: $e");
     }
   }
 
@@ -246,16 +268,38 @@ class ChatRepository extends ChangeNotifier {
       reactions[emoji] = reactors;
     }
 
-    // Optimistic update
-    _messages[index] = msg.copyWith(reactions: reactions);
+    // Optimistic local and DB update
+    final updatedMsg = msg.copyWith(reactions: reactions);
+    _messages[index] = updatedMsg;
     notifyListeners();
 
     try {
-      await _supabase.from('chat_messages').update({
-        'reactions': reactions,
-      }).eq('id', messageId);
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'chat_messages',
+        {'reactions': jsonEncode(reactions), 'is_synced': 0},
+        where: 'id = ?',
+        whereArgs: [messageId],
+      );
+
+      // Try Cloud push
+      try {
+        await _supabase.from('chat_messages').update({
+          'reactions': reactions,
+        }).eq('id', messageId);
+
+        // Mark as synced if successful
+        await db.update(
+          'chat_messages',
+          {'is_synced': 1},
+          where: 'id = ?',
+          whereArgs: [messageId],
+        );
+      } catch (e) {
+         debugPrint("⚠️ Reaction Cloud update failed: $e. Saved locally for background sync.");
+      }
     } catch (e) {
-      debugPrint("Reaction Error: $e");
+      debugPrint("❌ Reaction Error: $e");
     }
   }
 

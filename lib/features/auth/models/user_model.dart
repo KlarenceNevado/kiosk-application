@@ -15,6 +15,7 @@ class User {
   final DateTime? updatedAt;
   final bool isDeleted;
   final bool isActive; // NEW: Archiving support
+  final String? relation; // NEW: Relationship to parent
 
   User({
     required this.id,
@@ -31,10 +32,14 @@ class User {
     this.updatedAt,
     this.isDeleted = false,
     this.isActive = true, // Default to active
+    this.relation,
   });
 
-  String get fullName =>
-      "$firstName ${middleInitial.isNotEmpty ? '$middleInitial. ' : ''}$lastName";
+  String get fullName {
+    if (middleInitial.isEmpty) return "$firstName $lastName";
+    final mi = middleInitial.endsWith('.') ? middleInitial : '$middleInitial.';
+    return "$firstName $mi $lastName";
+  }
 
   // Helper to calculate age
   int get age {
@@ -63,6 +68,7 @@ class User {
       'updated_at': updatedAt?.toIso8601String(),
       'is_deleted': isDeleted ? 1 : 0, // Explicitly int for SQLite
       'isActive': isActive ? 1 : 0, // NEW
+      'relation': relation,
     };
   }
 
@@ -93,6 +99,7 @@ class User {
       updatedAt: DateTime.tryParse(map['updated_at'] ?? ''),
       isDeleted: parseBool(map['is_deleted'], false),
       isActive: parseBool(map['isActive'] ?? map['is_active'], true),
+      relation: map['relation'],
     );
   }
 
@@ -113,6 +120,7 @@ class User {
     DateTime? updatedAt,
     bool? isDeleted,
     bool? isActive,
+    String? relation,
   }) {
     return User(
       id: id ?? this.id,
@@ -129,6 +137,7 @@ class User {
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       isActive: isActive ?? this.isActive,
+      relation: relation ?? this.relation,
     );
   }
 

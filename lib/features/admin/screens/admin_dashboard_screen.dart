@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
@@ -54,9 +54,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // TAB STATE
   int _selectedIndex = 0;
 
-  // SUPABASE STREAM CHANNELS
-  RealtimeChannel? _patientsChannel;
-  RealtimeChannel? _vitalsChannel;
+  // SYNC STREAM SUBSCRIPTIONS
+  StreamSubscription? _patientSyncSub;
+  StreamSubscription? _vitalSyncSub;
+  StreamSubscription? _alertSyncSub;
+  StreamSubscription? _announcementSyncSub;
 
   @override
   void initState() {
@@ -72,52 +74,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo);
     });
 
-    _setupRealtimeStreams();
+    _setupSyncListeners();
   }
 
-  void _setupRealtimeStreams() {
-    try {
-      final supabase = Supabase.instance.client;
+  void _setupSyncListeners() {
+    final syncService = SyncService();
 
-      _patientsChannel = supabase
-          .channel('public:patients')
-          .onPostgresChanges(
-              event: PostgresChangeEvent.all,
-              schema: 'public',
-              table: 'patients',
-              callback: (payload) {
-                debugPrint(
-                    "🔄 RealTime: Patient Record Changed in Cloud = $payload");
-              })
-          .subscribe();
+    // 1. Patient Changes
+    _patientSyncSub = syncService.patientStream.listen((_) {
+      if (mounted) {
+        debugPrint("🔄 Dashboard: Patient data synced, refreshing UI.");
+        context.read<AuthRepository>().refreshUsers();
+      }
+    });
 
-      _vitalsChannel = supabase
-          .channel('public:vitals')
-          .onPostgresChanges(
-              event: PostgresChangeEvent.insert,
-              schema: 'public',
-              table: 'vitals',
-              callback: (payload) {
-                debugPrint("🔄 RealTime: New Vital Sign Uploaded from Kiosk!");
-                if (mounted) {
-                  context.read<HistoryRepository>().loadAllHistory();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text("New live reading received from Kiosk!"),
-                    backgroundColor: AppColors.brandGreen,
-                    duration: Duration(seconds: 4),
-                  ));
-                }
-              })
-          .subscribe();
-    } catch (e) {
-      debugPrint("⚠️ Supabase RealTime stream failed to start: $e");
-    }
+    // 2. New Vitals (Live Notifications)
+    _vitalSyncSub = syncService.newVitalStream.listen((data) {
+      debugPrint("🔄 Dashboard: New Vital Sign Sync Event!");
+      if (mounted) {
+        context.read<HistoryRepository>().loadAllHistory();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("New live reading received from Kiosk!"),
+          backgroundColor: AppColors.brandGreen,
+          duration: Duration(seconds: 4),
+        ));
+      }
+    });
+
+    // 3. New Alerts
+    _alertSyncSub = syncService.newAlertStream.listen((data) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("⚠️ ALERT: ${data['message'] ?? 'New system alert'}"),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 6),
+        ));
+      }
+    });
+
+    // 4. New Announcements
+    _announcementSyncSub = syncService.newAnnouncementStream.listen((data) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("📢 ANNOUNCEMENT: ${data['title'] ?? 'New update'}"),
+          backgroundColor: AppColors.brandDark,
+          duration: const Duration(seconds: 5),
+        ));
+      }
+    });
   }
+
+  // REPLACED: _setupRealtimeStreams is now handled centrally by SyncService.
 
   @override
   void dispose() {
-    _patientsChannel?.unsubscribe();
-    _vitalsChannel?.unsubscribe();
+    _patientSyncSub?.cancel();
+    _vitalSyncSub?.cancel();
+    _alertSyncSub?.cancel();
+    _announcementSyncSub?.cancel();
     _inactivityTimer?.cancel();
     super.dispose();
   }
@@ -276,12 +290,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (!mounted) return;
 
     final ipController = TextEditingController(text: ConfigService().serverIp);
-    final portController =
-        TextEditingController(text: ConfigService().printerPort);
     final activeCtrlNotifier =
         ValueNotifier<TextEditingController>(ipController);
     final ipFocusNode = FocusNode();
-    final portFocusNode = FocusNode();
 
     _showInputSheet(
       title: "System Configuration",
@@ -289,14 +300,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       fields: [
         _buildTapField(
             "Sync Server URL", ipController, activeCtrlNotifier, ipFocusNode),
-        const SizedBox(height: 16),
-        _buildTapField(
-            "Printer Port", portController, activeCtrlNotifier, portFocusNode),
       ],
       onSave: () async {
         await ConfigService().updateSettings(
           ip: ipController.text,
-          port: portController.text,
         );
         if (mounted) {
           Navigator.pop(context);

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/database/database_helper.dart';
 import '../../../core/services/database/sync_service.dart';
-import '../../health_check/models/vital_signs_model.dart';
+import '../../../features/health_check/models/vital_signs_model.dart';
+import '../../../core/services/system/file_storage_service.dart';
+import 'package:open_file/open_file.dart';
+import 'dart:io';
 
 class HistoryRepository extends ChangeNotifier {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -90,6 +93,59 @@ class HistoryRepository extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Error clearing history: $e");
+    }
+  }
+
+  Future<void> openReport(VitalSigns record) async {
+    if (record.reportPath != null && await File(record.reportPath!).exists()) {
+      await OpenFile.open(record.reportPath!);
+      return;
+    }
+
+    if (record.reportUrl != null) {
+      _isLoading = true;
+      notifyListeners();
+      try {
+        final file = await FileStorageService().getCachedFile(record.reportUrl!);
+        if (file != null) {
+          // Update record with local path
+          final updatedRecord = VitalSigns(
+            id: record.id,
+            userId: record.userId,
+            timestamp: record.timestamp,
+            heartRate: record.heartRate,
+            systolicBP: record.systolicBP,
+            diastolicBP: record.diastolicBP,
+            oxygen: record.oxygen,
+            temperature: record.temperature,
+            bmi: record.bmi,
+            bmiCategory: record.bmiCategory,
+            status: record.status,
+            remarks: record.remarks,
+            followUpAction: record.followUpAction,
+            reportUrl: record.reportUrl,
+            reportPath: file.path,
+          );
+          
+          await _dbHelper.updateRecordRaw(record.id, {
+            'report_path': file.path,
+          });
+          
+          final index = _records.indexWhere((r) => r.id == record.id);
+          if (index != -1) {
+            _records[index] = updatedRecord;
+          }
+          
+          await OpenFile.open(file.path);
+        }
+      } catch (e) {
+        debugPrint("Error opening remote report: $e");
+      } finally {
+        _isLoading = false;
+        notifyListeners();
+      }
+    } else {
+      debugPrint("No report available for this record.");
     }
   }
 }

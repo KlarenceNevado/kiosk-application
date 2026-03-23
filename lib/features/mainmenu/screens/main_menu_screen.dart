@@ -14,11 +14,86 @@ import '../../../core/widgets/kiosk_card.dart';
 import '../../../core/widgets/system_pill.dart';
 
 // STATE
-import '../../../../main_kiosk.dart'; // LanguageProvider
+import '../../../../core/providers/language_provider.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/models/user_model.dart';
 
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
+
+  void _showProfileDialog(BuildContext context, User? user) {
+    if (user == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircleAvatar(
+                radius: 40,
+                backgroundColor: AppColors.brandGreen,
+                child: Icon(Icons.person, color: Colors.white, size: 48),
+              ),
+              const SizedBox(height: 24),
+              Text(user.fullName,
+                  style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark)),
+              const SizedBox(height: 8),
+              Text("ID: ${user.id.substring(0, 10).toUpperCase()}...",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+              const Divider(height: 48),
+              _buildProfileRow(Icons.location_on_outlined, "Location", user.sitio),
+              const SizedBox(height: 16),
+              _buildProfileRow(Icons.phone_outlined, "Phone Number", user.phoneNumber),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("CLOSE",
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.brandGreen, size: 24),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandDark)),
+          ],
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +110,10 @@ class MainMenuScreen extends StatelessWidget {
         child: Column(
           children: [
             // --- TOP BEZEL ---
-            Expanded(
+            const Expanded(
               flex: 5,
               child: Center(
-                child: Icon(Icons.camera_alt,
-                    color: Colors.black.withValues(alpha: 0.1), size: 16),
+              child: SizedBox.shrink(),
               ),
             ),
 
@@ -80,9 +154,13 @@ class MainMenuScreen extends StatelessWidget {
                                   style: AppTextStyles.h1
                                       .copyWith(fontSize: c.maxHeight * 0.4),
                                 ),
-                                Icon(Icons.account_circle_outlined,
-                                    size: c.maxHeight * 0.7,
-                                    color: Colors.grey[600]),
+                                InkWell(
+                                  onTap: () => _showProfileDialog(context, currentUser),
+                                  borderRadius: BorderRadius.circular(c.maxHeight),
+                                  child: Icon(Icons.account_circle_outlined,
+                                      size: c.maxHeight * 0.7,
+                                      color: Colors.grey[600]),
+                                ),
                               ],
                             );
                           }),

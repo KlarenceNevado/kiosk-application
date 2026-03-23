@@ -11,6 +11,11 @@ class MobileNavigationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void reset() {
+    _currentIndex = 0;
+    notifyListeners();
+  }
+
   void goToInbox() {
     setIndex(2); // Inbox is at index 2
   }

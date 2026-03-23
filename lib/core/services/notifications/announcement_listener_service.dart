@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../security/notification_service.dart';
+import '../database/sync_service.dart';
 
 class AnnouncementListenerService {
   static final AnnouncementListenerService _instance =
@@ -8,37 +9,27 @@ class AnnouncementListenerService {
   factory AnnouncementListenerService() => _instance;
   AnnouncementListenerService._internal();
 
-  RealtimeChannel? _subscription;
+  StreamSubscription? _syncSubscription;
 
   void startListening() {
-    if (_subscription != null) return;
+    if (_syncSubscription != null) return;
 
-    debugPrint("📡 Starting Global Announcement Listener...");
+    debugPrint("📡 Starting Global Announcement Listener (via SyncService)...");
 
-    _subscription = Supabase.instance.client
-        .channel('public:global_announcements')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'announcements',
-          callback: (payload) {
-            final data = payload.newRecord;
-            final String title = data['title'] ?? 'New Announcement';
-            final String body =
-                data['content'] ?? 'Check your inbox for details.';
+    _syncSubscription = SyncService().newAnnouncementStream.listen((data) {
+      final String title = data['title'] ?? 'New Announcement';
+      final String body = data['content'] ?? 'Check your inbox for details.';
 
-            // Trigger local notification
-            NotificationService().showAnnouncementNotification(
-              title: title,
-              body: body,
-            );
-          },
-        )
-        .subscribe();
+      // Trigger local notification (Mobile/Tablet only handled by NotificationService)
+      NotificationService().showAnnouncementNotification(
+        title: title,
+        body: body,
+      );
+    });
   }
 
   void stopListening() {
-    _subscription?.unsubscribe();
-    _subscription = null;
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
   }
 }

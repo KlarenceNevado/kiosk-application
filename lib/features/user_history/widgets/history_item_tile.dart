@@ -113,35 +113,39 @@ class HistoryItemTile extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // Vitals Summary Grid
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildCompactVital(
-                        Icons.favorite_rounded,
-                        Colors.red,
-                        data.heartRate,
-                        "bpm",
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCompactVital(
-                        Icons.speed_rounded,
-                        Colors.blue,
-                        data.systolicBP,
-                        "mmHg",
-                        secondaryValue: data.diastolicBP,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCompactVital(
-                        Icons.air_rounded,
-                        Colors.cyan,
-                        data.oxygen,
-                        "%",
-                      ),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildCompactVital(
+                            Icons.favorite_rounded,
+                            Colors.red,
+                            data.heartRate,
+                            "bpm",
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildCompactVital(
+                            Icons.speed_rounded,
+                            Colors.blue,
+                            data.systolicBP,
+                            "mmHg",
+                            secondaryValue: data.diastolicBP,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildCompactVital(
+                            Icons.air_rounded,
+                            Colors.cyan,
+                            data.oxygen,
+                            "%",
+                          ),
+                        ),
+                      ],
+                    );
+                  }
                 ),
               ],
             ),
@@ -153,7 +157,7 @@ class HistoryItemTile extends StatelessWidget {
 
   Widget _buildCompactVital(IconData icon, Color color, int value, String unit,
       {int? secondaryValue}) {
-    String display = "--";
+    String display = "N/A";
     bool hasData = value > 0;
 
     if (hasData) {
@@ -165,22 +169,34 @@ class HistoryItemTile extends StatelessWidget {
     }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon,
             color: hasData ? color : Colors.grey.withValues(alpha: 0.3),
-            size: 20),
+            size: 18),
         const SizedBox(height: 4),
-        Text(
-          display,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            color: hasData
-                ? AppColors.brandDark
-                : Colors.grey.withValues(alpha: 0.5),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            display,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: hasData
+                  ? AppColors.brandDark
+                  : Colors.grey.withValues(alpha: 0.5),
+            ),
           ),
         ),
-        Text(unit, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+        Text(unit, 
+          style: TextStyle(
+            fontSize: 9, 
+            color: Colors.grey[500],
+            letterSpacing: -0.2,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }

@@ -58,11 +58,17 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: AppColors.brandDark),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: AppColors.brandDark),
+                onPressed: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                },
+              )
+            : null,
       ),
       body: _isLoading
           ? const Center(
@@ -151,10 +157,20 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  _metricBadge(Icons.favorite_rounded, "Pulse",
-                                      "${record.heartRate} bpm", Colors.red),
-                                  _metricBadge(Icons.water_drop_rounded, "SpO2",
-                                      "${record.oxygen}%", Colors.blue),
+                                  _metricBadge(
+                                      Icons.favorite_rounded,
+                                      "Pulse",
+                                      record.heartRate > 0
+                                          ? "${record.heartRate} bpm"
+                                          : "N/A",
+                                      Colors.red),
+                                  _metricBadge(
+                                      Icons.water_drop_rounded,
+                                      "SpO2",
+                                      record.oxygen > 0
+                                          ? "${record.oxygen}%"
+                                          : "N/A",
+                                      Colors.blue),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -166,12 +182,17 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                                   _metricBadge(
                                       Icons.speed_rounded,
                                       "BP",
-                                      "${record.systolicBP}/${record.diastolicBP}",
+                                      (record.systolicBP > 0 &&
+                                              record.diastolicBP > 0)
+                                          ? "${record.systolicBP}/${record.diastolicBP}"
+                                          : "N/A",
                                       Colors.orange),
                                   _metricBadge(
                                       Icons.thermostat_rounded,
                                       "Temp",
-                                      "${record.temperature} °C",
+                                      record.temperature > 0
+                                          ? "${record.temperature} °C"
+                                          : "N/A",
                                       Colors.orangeAccent),
                                 ],
                               ),
@@ -370,23 +391,33 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
   Widget _metricBadge(IconData icon, String label, String value, Color color) {
     return Expanded(
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
                   style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.grey,
-                      fontWeight: FontWeight.w500)),
-              Text(value,
+                      fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  value,
                   style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-            ],
+                      color: AppColors.brandDark),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),

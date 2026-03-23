@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/security/notification_service.dart';
+import '../../../../core/services/database/database_helper.dart';
+import '../../auth/data/auth_repository.dart';
 
 class PatientRemindersTab extends StatefulWidget {
   const PatientRemindersTab({super.key});
@@ -15,7 +17,30 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
   @override
   void initState() {
     super.initState();
-    // In a prod app, these would load from local SQLite storage linked to the user account
+    _loadReminders();
+  }
+
+  Future<void> _loadReminders() async {
+    final user = AuthRepository().currentUser;
+    if (user != null) {
+      final dbReminders = await DatabaseHelper.instance.getReminders(user.id);
+      if (mounted) {
+        setState(() {
+          _reminders.clear();
+          for (var r in dbReminders) {
+            final timeParts = (r['time'] as String).split(':');
+            final time = TimeOfDay(
+                hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+            _reminders.add({
+              'id': r['id'],
+              'title': r['title'],
+              'time': time,
+              'isActive': r['isActive'] == 1,
+            });
+          }
+        });
+      }
+    }
   }
 
   void _showAddReminderSheet() {
@@ -79,9 +104,18 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () async {
-                        if (titleCtrl.text.isNotEmpty) {
-                          // Standardize an ID based on list length
-                          final reminderId = _reminders.length + 1;
+                        final user = AuthRepository().currentUser;
+                        if (user != null) {
+                          final timeStr =
+                              "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}";
+
+                          final reminderId =
+                              await DatabaseHelper.instance.insertReminder({
+                            'title': titleCtrl.text,
+                            'time': timeStr,
+                            'isActive': 1,
+                            'userId': user.id,
+                          });
 
                           await NotificationService()
                               .scheduleDailyMedicationReminder(
@@ -194,8 +228,22 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                     trailing: Switch(
                       value: r['isActive'],
                       activeThumbColor: AppColors.brandGreen,
-                      onChanged: (val) {
+                      onChanged: (val) async {
                         setState(() => r['isActive'] = val);
+                        
+                        // Update SQLite
+                        final timeStr = "${(r['time'] as TimeOfDay).hour.toString().padLeft(2, '0')}:${(r['time'] as TimeOfDay).minute.toString().padLeft(2, '0')}";
+                        final user = AuthRepository().currentUser;
+                        if (user != null) {
+                          await DatabaseHelper.instance.updateReminder({
+                            'id': r['id'],
+                            'title': r['title'],
+                            'time': timeStr,
+                            'isActive': val ? 1 : 0,
+                            'userId': user.id,
+                          });
+                        }
+
                         if (!val) {
                           NotificationService()
                               .flutterLocalNotificationsPlugin

@@ -12,6 +12,7 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/user_model.dart';
 import '../../../health_check/models/vital_signs_model.dart';
 import '../../services/pdf_report_service.dart';
+import '../../../../core/services/security/encryption_service.dart';
 
 class AdminReportsTab extends StatefulWidget {
   const AdminReportsTab({super.key});
@@ -115,11 +116,13 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
       }
 
       String csv = const ListToCsvConverter().convert(rows);
+      final encryptedCsv = EncryptionService().encryptData(csv);
+      
       final directory = await getApplicationDocumentsDirectory();
       final String filePath =
-          '${directory.path}/kiosk_report_${DateTime.now().millisecondsSinceEpoch}.csv';
+          '${directory.path}/kiosk_report_${DateTime.now().millisecondsSinceEpoch}.csv.aes';
       final File file = File(filePath);
-      await file.writeAsString(csv);
+      await file.writeAsString(encryptedCsv);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

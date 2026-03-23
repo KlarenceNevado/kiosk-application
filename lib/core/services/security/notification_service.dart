@@ -1,9 +1,11 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,20 +15,21 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  bool get _isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
   Future<void> init() async {
     // Only initialize on supported mobile platforms
-    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+    if (!_isSupported) {
       debugPrint("📢 NotificationService: Skipping init on this platform.");
       return;
     }
 
     // Initialize Timezone Database for Scheduling
-    tz.initializeTimeZones();
-    // Use a try-catch for location setting as it might fail in some environments
     try {
+      tz_data.initializeTimeZones();
       tz.setLocalLocation(tz.getLocation('Asia/Manila'));
     } catch (e) {
-      debugPrint("Timezone initialization failed: $e");
+      debugPrint("📢 NotificationService: Timezone initialization failed: $e");
     }
 
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -45,25 +48,66 @@ class NotificationService {
       iOS: initializationSettingsIOS,
     );
 
-    await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
-    );
+    try {
+      await flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
+      );
+    } catch (e) {
+      debugPrint("📢 NotificationService: Plugin initialization failed: $e");
+    }
 
     // Request Permissions on Android 13+
-    _requestAndroidPermissions();
+    try {
+      await _requestAndroidPermissions();
+    } catch (e) {
+      debugPrint("📢 NotificationService: Android permission request failed: $e");
+    }
   }
 
-  void _requestAndroidPermissions() {
-    flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+  Future<bool> isNotificationsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('notifications_enabled') ?? true;
+  }
 
-    flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestExactAlarmsPermission();
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_enabled', enabled);
+    if (!enabled) {
+      await cancelAllReminders();
+    }
+  }
+
+  Future<void> requestPermissions() async {
+    if (!_isSupported) return;
+    
+    if (Platform.isAndroid) {
+      await _requestAndroidPermissions();
+    } else if (Platform.isIOS) {
+       await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+    }
+  }
+
+  Future<void> _requestAndroidPermissions() async {
+    try {
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestExactAlarmsPermission();
+    } catch (e) {
+       debugPrint("⚠️ NotificationService: Android platform channel error: $e");
+    }
   }
 
   void _onDidReceiveNotificationResponse(NotificationResponse details) {
@@ -82,21 +126,29 @@ class NotificationService {
       channelDescription: 'Emergency and status alerts for patients',
       importance: Importance.max,
       priority: Priority.high,
-      showWhen: false,
-      color: Color(0xFF2E7D32),
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+      color: Color(0xFF1B5E20), // Darker Green
+      ledColor: Color(0xFF1B5E20),
+      ledOnMs: 1000,
+      ledOffMs: 500,
       icon: 'ic_notification',
     );
 
     const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+        NotificationDetails(android: androidPlatformChannelSpecifics, iOS: DarwinNotificationDetails());
 
-    await flutterLocalNotificationsPlugin.show(
-      id,
-      title,
-      body,
-      platformChannelSpecifics,
-      payload: 'instant_alert',
-    );
+    if (!_isSupported) return;
+    if (await isNotificationsEnabled()) {
+      await flutterLocalNotificationsPlugin.show(
+        id,
+        title,
+        body,
+        platformChannelSpecifics,
+        payload: 'instant_alert',
+      );
+    }
   }
 
   Future<void> scheduleDailyMedicationReminder({
@@ -123,20 +175,23 @@ class NotificationService {
     );
 
     const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+        NotificationDetails(android: androidPlatformChannelSpecifics, iOS: DarwinNotificationDetails());
 
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      "Medication Reminder",
-      "Time to take your $medicationName.",
-      scheduledDate,
-      platformChannelSpecifics,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'medication_pill',
-    );
+    if (!_isSupported) return;
+    if (await isNotificationsEnabled()) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id,
+        "Medication Reminder",
+        "Time to take your $medicationName.",
+        scheduledDate,
+        platformChannelSpecifics,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+        payload: 'medication_pill',
+      );
+    }
   }
 
   Future<void> showAnnouncementNotification({
@@ -157,20 +212,23 @@ class NotificationService {
     const NotificationDetails platformDetails = NotificationDetails(
         android: androidDetails, iOS: DarwinNotificationDetails());
 
-    await flutterLocalNotificationsPlugin.show(
-      999, // Static ID for announcements to overwrite previous
-      title,
-      body,
-      platformDetails,
-      payload: 'announcement',
-    );
+    if (!_isSupported) return;
+    if (await isNotificationsEnabled()) {
+      await flutterLocalNotificationsPlugin.show(
+        999, // Static ID for announcements to overwrite previous
+        title,
+        body,
+        platformDetails,
+        payload: 'announcement',
+      );
+    }
   }
 
   Future<void> showSystemAlertNotification({
     required String title,
     required String body,
   }) async {
-    const AndroidNotificationDetails androidDetails =
+    final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'system_alerts_channel',
       'System Alerts',
@@ -179,19 +237,26 @@ class NotificationService {
       priority: Priority.max,
       color: Colors.red,
       icon: 'ic_notification',
-      styleInformation: BigTextStyleInformation(''),
+      fullScreenIntent: true, // Stronger
+      category: AndroidNotificationCategory.alarm,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
+      styleInformation: const BigTextStyleInformation(''),
     );
 
-    const NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails, iOS: DarwinNotificationDetails());
+    final NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails, iOS: const DarwinNotificationDetails());
 
-    await flutterLocalNotificationsPlugin.show(
-      777, // Unique ID to keep alerts visible as a distinct stack
-      title,
-      body,
-      platformDetails,
-      payload: 'system_alert',
-    );
+    if (!_isSupported) return;
+    if (await isNotificationsEnabled()) {
+      await flutterLocalNotificationsPlugin.show(
+        777, // Unique ID to keep alerts visible as a distinct stack
+        title,
+        body,
+        platformDetails,
+        payload: 'system_alert',
+      );
+    }
   }
 
   Future<void> showChatNotification({
@@ -213,16 +278,20 @@ class NotificationService {
     const NotificationDetails platformDetails = NotificationDetails(
         android: androidDetails, iOS: DarwinNotificationDetails());
 
-    await flutterLocalNotificationsPlugin.show(
-      888, // Static ID for chat
-      "New Message from $senderName",
-      message,
-      platformDetails,
-      payload: 'chat',
-    );
+    if (!_isSupported) return;
+    if (await isNotificationsEnabled()) {
+      await flutterLocalNotificationsPlugin.show(
+        888, // Static ID for chat
+        "New Message from $senderName",
+        message,
+        platformDetails,
+        payload: 'chat',
+      );
+    }
   }
 
   Future<void> cancelAllReminders() async {
+    if (!_isSupported) return;
     await flutterLocalNotificationsPlugin.cancelAll();
   }
 }

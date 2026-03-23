@@ -13,6 +13,8 @@ class ChatMessage {
   final DateTime updatedAt;
   final bool isForwarded;
   final bool isSynced;
+  final String? mediaUrl;
+  final String? mediaPath;
 
   ChatMessage({
     required this.id,
@@ -26,6 +28,8 @@ class ChatMessage {
     this.isForwarded = false,
     required this.updatedAt,
     this.isSynced = false,
+    this.mediaUrl,
+    this.mediaPath,
   });
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -73,6 +77,8 @@ class ChatMessage {
           DateTime.parse(map['updated_at'] ?? map['timestamp'].toString())
               .toLocal(),
       isSynced: map['is_synced'] == 1,
+      mediaUrl: map['media_url'],
+      mediaPath: map['media_path'],
     );
   }
 
@@ -99,17 +105,24 @@ class ChatMessage {
       'is_forwarded': isForwarded ? 1 : 0,
       'is_deleted': isDeleted ? 1 : 0,
       'updated_at': updatedAt.toIso8601String(),
+      'media_url': mediaUrl,
+      'media_path': mediaPath,
     };
   }
 
-  /// Map for Supabase (uses actual booleans)
+  /// Map for Supabase (uses actual booleans and handles UUID null/empty safety)
   Map<String, dynamic> toSupabaseMap() {
+    // Supabase requires valid UUIDs or non-empty strings for NOT NULL columns.
+    // Ensure we don't send empty strings for these fields.
+    final safeSenderId = senderId.isEmpty ? 'admin' : senderId;
+    final safeReceiverId = receiverId.isEmpty ? 'system' : receiverId;
+
     return {
       'id': id,
-      'sender_id': senderId,
-      'receiver_id': receiverId,
-      'sender': senderId,
-      'patient_id': senderId == 'admin' ? receiverId : senderId,
+      'sender_id': safeSenderId,
+      'receiver_id': safeReceiverId,
+      'sender': safeSenderId,
+      'patient_id': safeSenderId == 'admin' ? safeReceiverId : safeSenderId,
       'content': content,
       'message': content,
       'timestamp': timestamp.toUtc().toIso8601String(),

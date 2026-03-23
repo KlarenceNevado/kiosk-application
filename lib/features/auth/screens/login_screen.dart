@@ -9,8 +9,6 @@ import '../data/auth_repository.dart';
 import '../models/user_model.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'dart:convert';
 import '../../../core/services/system/app_environment.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -49,11 +47,21 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    
+    // Listen to repository changes to refresh filtered list instantly
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthRepository>().addListener(_onSearchChanged);
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
+    try {
+      context.read<AuthRepository>().removeListener(_onSearchChanged);
+    } catch (_) {}
     _phoneController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -64,6 +72,7 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
 
   // --- REAL-TIME FILTER LOGIC ---
   void _onSearchChanged() {
+    if (!mounted) return;
     final query = _searchController.text.toLowerCase().trim();
     final allUsers = context.read<AuthRepository>().users;
 
@@ -154,96 +163,6 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
     }
   }
 
-  void _showQRScanner(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              Container(
-                  width: 48,
-                  height: 6,
-                  decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(3))),
-              const SizedBox(height: 24),
-              const Text("Scan Mobile QR",
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              const SizedBox(height: 8),
-              const Text("Hold your Patient Mobile App QR code here",
-                  style: TextStyle(color: Colors.grey, fontSize: 16)),
-              const SizedBox(height: 32),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: MobileScanner(
-                      onDetect: (capture) async {
-                        final List<Barcode> barcodes = capture.barcodes;
-                        for (final barcode in barcodes) {
-                          if (barcode.rawValue != null) {
-                            try {
-                              final data = jsonDecode(barcode.rawValue!);
-                              if (data['action'] == 'login' &&
-                                  data['userId'] != null) {
-                                Navigator.pop(ctx); // Close scanner
-
-                                final authRepo = context.read<AuthRepository>();
-                                final error =
-                                    await authRepo.loginWithId(data['userId']);
-
-                                if (!context.mounted) return;
-
-                                if (error == null) {
-                                  context.go(AppRoutes.patientDashboard);
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content: Text(error),
-                                          backgroundColor: Colors.red));
-                                }
-                                return;
-                              }
-                            } catch (_) {
-                              // Ignore invalid QR codes
-                            }
-                          }
-                        }
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Cancel",
-                    style: TextStyle(fontSize: 18, color: Colors.grey)),
-              ),
-              const SizedBox(height: 48),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   void _showHelpDialog() {
     showDialog(
@@ -347,44 +266,6 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
 
                       const SizedBox(height: 24),
 
-                      // QR Scan Quick Action
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showQRScanner(context),
-                          icon: const Icon(Icons.qr_code_scanner_rounded,
-                              size: 28, color: Colors.white),
-                          label: const Text("Scan Mobile App QR",
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandDark,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            elevation: 8,
-                            shadowColor:
-                                AppColors.brandDark.withValues(alpha: 0.3),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Row(
-                        children: [
-                          Expanded(child: Divider()),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: Text("OR",
-                                style: TextStyle(
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                          Expanded(child: Divider()),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
 
                       // --- MAIN CARD (STACKED FOR DROPDOWN) ---
                       Container(

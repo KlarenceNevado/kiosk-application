@@ -176,7 +176,6 @@ class _AdminHardwareTabState extends State<AdminHardwareTab> {
         _buildSensorCard("BP Monitor", Icons.monitor_heart, "v3.0.4"),
         _buildSensorCard("Pulse Oximeter", Icons.bloodtype, "v1.2.9"),
         _buildSensorCard("Weighing Scale", Icons.scale, "v2.2.0"),
-        _buildSensorCard("Label Printer", Icons.print, "Online"),
       ],
     );
   }

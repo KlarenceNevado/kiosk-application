@@ -7,18 +7,15 @@ class ConfigService {
 
   // Keys
   static const String _keyServerIp = 'config_server_ip';
-  static const String _keyPrinterPort = 'config_printer_port';
   static const String _keyFacilityName = 'config_facility_name';
 
   // Defaults
   String _serverIp =
       "https://127.0.0.1:8090"; // Localhost default for Windows testing
-  String _printerPort = "COM3";
   String _facilityName = "Isla Verde Health Station";
 
   // Getters
   String get serverIp => _serverIp;
-  String get printerPort => _printerPort;
   String get facilityName => _facilityName;
 
   /// Helper to enforce https on IPs
@@ -48,21 +45,16 @@ class ConfigService {
     // Attempt to persist the auto-fixes if any happened
     await prefs.setString(_keyServerIp, _serverIp);
 
-    _printerPort = prefs.getString(_keyPrinterPort) ?? _printerPort;
     _facilityName = prefs.getString(_keyFacilityName) ?? _facilityName;
   }
 
   /// Save new settings
-  Future<void> updateSettings({String? ip, String? port, String? name}) async {
+  Future<void> updateSettings({String? ip, String? name}) async {
     final prefs = await SharedPreferences.getInstance();
     if (ip != null) {
       final secureIp = _enforceHttps(ip);
       _serverIp = secureIp;
       await prefs.setString(_keyServerIp, secureIp);
-    }
-    if (port != null) {
-      _printerPort = port;
-      await prefs.setString(_keyPrinterPort, port);
     }
     if (name != null) {
       _facilityName = name;

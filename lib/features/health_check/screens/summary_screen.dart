@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
 
 // CORE
@@ -15,7 +14,6 @@ import '../../../core/utils/vital_validator.dart';
 // DATA & SERVICES
 import '../../health_check/models/vital_signs_model.dart';
 import '../../user_history/data/history_repository.dart';
-import '../../../core/services/printer/thermal_printer_service.dart';
 import '../../../core/services/system/pdf_report_service.dart';
 
 class SummaryScreen extends StatefulWidget {
@@ -32,7 +30,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   void initState() {
     super.initState();
-    ThermalPrinterService().init('COM3');
     _startAutoRedirect();
   }
 
@@ -63,13 +60,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
     if (mounted) context.go(AppRoutes.home);
   }
 
-  void _handlePrint(VitalSigns data) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Printing Clinical Report..."),
-        duration: Duration(seconds: 2)));
-    await ThermalPrinterService().printReceipt(data);
-  }
-
   void _handlePdf(VitalSigns data) async {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text("Generating PDF Report..."),
@@ -77,56 +67,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
     await PdfReportService().generateAndOpenReport(data);
   }
 
-  void _handleQrCode(VitalSigns data) {
-    final String qrData = '''ISLAND HEALTH REPORT
-ID: ${data.id.substring(0, 6)}
-DATE: ${DateFormat('MM-dd HH:mm').format(data.timestamp)}
-
-HR: ${data.heartRate} (${VitalValidator.evaluateHR(data.heartRate).label})
-BP: ${data.systolicBP}/${data.diastolicBP} (${VitalValidator.evaluateBP(data.systolicBP, data.diastolicBP).label})
-O2: ${data.oxygen}% (${VitalValidator.evaluateSpO2(data.oxygen).label})
-Temp: ${data.temperature} (${VitalValidator.evaluateTemp(data.temperature).label})
-
-Use for reference only.''';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text("Digital Record",
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: QrImageView(
-                    data: qrData,
-                    version: QrVersions.auto,
-                    backgroundColor: Colors.white,
-                    gapless: false),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandGreen,
-                    foregroundColor: Colors.white),
-                child: const Text("Done"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -272,28 +212,16 @@ Use for reference only.''';
                     children: [
                       Expanded(
                           child: FlowAnimatedButton(
-                              child: _buildActionButton(Icons.print_rounded,
-                                  "Print", () => _handlePrint(latestRecord),
-                                  isPrimary: false))),
-                      const SizedBox(width: 16),
-                      Expanded(
-                          child: FlowAnimatedButton(
                               child: _buildActionButton(
                                   Icons.picture_as_pdf_rounded,
-                                  "PDF",
+                                  "Download PDF Report",
                                   () => _handlePdf(latestRecord),
                                   isPrimary: false))),
                       const SizedBox(width: 16),
                       Expanded(
                           child: FlowAnimatedButton(
-                              child: _buildActionButton(Icons.qr_code_rounded,
-                                  "QR", () => _handleQrCode(latestRecord),
-                                  isPrimary: false))),
-                      const SizedBox(width: 16),
-                      Expanded(
-                          child: FlowAnimatedButton(
                               child: _buildActionButton(
-                                  Icons.home_rounded, "Finish", _goHome,
+                                  Icons.home_rounded, "Finish Check-up", _goHome,
                                   isPrimary: true))),
                     ],
                   ),

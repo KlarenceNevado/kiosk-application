@@ -7,6 +7,8 @@ class EncryptionService {
   factory EncryptionService() => _instance;
   EncryptionService._internal();
 
+  /// AES-256 (Advanced Encryption Standard) implementation
+  /// This ensures that biometric and health data are encrypted at rest.
   late encrypt.Key _key;
   encrypt.Encrypter? _encrypter;
   final _storage = const FlutterSecureStorage();
@@ -58,6 +60,7 @@ class EncryptionService {
       final iv = encrypt.IV.fromSecureRandom(16);
       final encrypted = _encrypter!.encrypt(plainText, iv: iv);
       // Format: iv_base64:ciphertext_base64
+      // This implementation follows the standard AES block cipher encryption protocol.
       return '${iv.base64}:${encrypted.base64}';
     } catch (e) {
       debugPrint("Encryption Error: $e");

@@ -3,15 +3,20 @@ import 'dart:math';
 import 'sensor_service_interface.dart';
 
 class MockSensorService implements ISensorService {
-  final _heartRateController = StreamController<int>.broadcast();
+  @override
+  final SensorType type;
+  
+  final _dataController = StreamController<dynamic>.broadcast();
   final _statusController = StreamController<SensorStatus>.broadcast();
 
   Timer? _timer;
   final Random _random = Random();
   SensorStatus _status = SensorStatus.disconnected;
 
+  MockSensorService(this.type);
+
   @override
-  Stream<int> get heartRateStream => _heartRateController.stream;
+  Stream<dynamic> get dataStream => _dataController.stream;
 
   @override
   Stream<SensorStatus> get statusStream => _statusController.stream;
@@ -25,23 +30,28 @@ class MockSensorService implements ISensorService {
       return;
     }
 
-    // 1. Simulate Connection Delay
     _updateStatus(SensorStatus.connecting);
-    await Future.delayed(const Duration(seconds: 2)); // Fake hardware handshake
+    await Future.delayed(const Duration(seconds: 1)); // Faster for testing
 
-    // 2. Start Data Stream
     _updateStatus(SensorStatus.reading);
 
-    // 3. Generate Realistic Heartbeat (Sine wave + noise)
-    int tick = 0;
     _timer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
-      tick++;
-      // Sine wave base (60-100) + Random noise
-      double base = 80 + (10 * sin(tick * 0.5));
-      int noise = _random.nextInt(5) - 2;
-      int value = (base + noise).round();
-
-      _heartRateController.add(value);
+      dynamic value;
+      switch (type) {
+        case SensorType.weight:
+          value = 70.0 + _random.nextDouble() * 2;
+          break;
+        case SensorType.oximeter:
+          value = { 'spo2': 95 + _random.nextInt(5), 'bpm': 70 + _random.nextInt(20) };
+          break;
+        case SensorType.thermometer:
+          value = 36.5 + _random.nextDouble();
+          break;
+        case SensorType.bloodPressure:
+          value = { 'sys': 110 + _random.nextInt(20), 'dia': 70 + _random.nextInt(15) };
+          break;
+      }
+      _dataController.add(value);
     });
   }
 
@@ -57,7 +67,7 @@ class MockSensorService implements ISensorService {
   }
 
   void dispose() {
-    _heartRateController.close();
+    _dataController.close();
     _statusController.close();
   }
 }

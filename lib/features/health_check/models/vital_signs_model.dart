@@ -28,6 +28,9 @@ class VitalSigns {
     }
   }
 
+  final String? reportUrl;
+  final String? reportPath;
+
   VitalSigns({
     required this.id,
     required this.userId,
@@ -42,6 +45,8 @@ class VitalSigns {
     this.status = 'pending',
     this.remarks,
     this.followUpAction,
+    this.reportUrl,
+    this.reportPath,
   });
 
   Map<String, dynamic> toMap() {
@@ -59,6 +64,8 @@ class VitalSigns {
       'status': status,
       'remarks': remarks,
       'followUpAction': followUpAction,
+      'report_url': reportUrl,
+      'report_path': reportPath,
     };
   }
 
