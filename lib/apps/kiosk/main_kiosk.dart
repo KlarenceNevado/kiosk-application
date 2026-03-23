@@ -3,25 +3,25 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 // CORE
-import 'core/config/routes.dart';
-import 'core/config/theme.dart';
-import 'core/errors/error_handler.dart';
+import 'package:kiosk_application/core/config/routes.dart';
+import 'package:kiosk_application/core/config/theme.dart';
+import 'package:kiosk_application/core/errors/error_handler.dart';
 
-import 'core/services/system/app_environment.dart';
-import 'core/services/system/initialization_service.dart';
-import 'core/services/system/session_timer_service.dart';
-import 'core/services/hardware/sensor_manager.dart';
+import 'package:kiosk_application/core/services/system/app_environment.dart';
+import 'package:kiosk_application/core/services/system/initialization_service.dart';
+import 'package:kiosk_application/core/services/system/session_timer_service.dart';
+import 'package:kiosk_application/core/services/hardware/sensor_manager.dart';
 
 // FEATURES
-import 'features/auth/data/auth_repository.dart';
-import 'features/health_check/logic/health_wizard_provider.dart';
-import 'features/user_history/data/history_repository.dart';
-import 'features/admin/data/admin_repository.dart';
-import 'features/patient/data/mobile_navigation_provider.dart';
-import 'features/chat/data/chat_repository.dart';
+import 'package:kiosk_application/features/auth/data/auth_repository.dart';
+import 'package:kiosk_application/features/health_check/logic/health_wizard_provider.dart';
+import 'package:kiosk_application/features/user_history/data/history_repository.dart';
+import 'package:kiosk_application/features/admin/data/admin_repository.dart';
+import 'package:kiosk_application/features/patient/data/mobile_navigation_provider.dart';
+import 'package:kiosk_application/features/chat/data/chat_repository.dart';
 
-import 'core/providers/language_provider.dart';
-import 'l10n/app_localizations.dart';
+import 'package:kiosk_application/core/providers/language_provider.dart';
+import 'package:kiosk_application/l10n/app_localizations.dart';
 
 // FIXED: Renamed back to 'main()' so VS Code debugger can find it
 void main() async {

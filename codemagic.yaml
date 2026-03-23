@@ -30,7 +30,7 @@ workflows:
         script: |
           flutter build linux \
             --release \
-            --target=lib/main_kiosk.dart
+            --target=lib/apps/kiosk/main_kiosk.dart
       - name: Bundle output into zip
         script: |
           cd build/linux/x64/release/bundle
@@ -66,7 +66,7 @@ workflows:
         script: |
           flutter build ipa \
             --release \
-            --target=lib/main_patient_mobile.dart \
+            --target=lib/apps/patient/main_patient.dart \
             --no-codesign
     artifacts:
       - build/ios/ipa/*.ipa
@@ -102,7 +102,7 @@ workflows:
         script: |
           flutter build apk \
             --release \
-            --target=lib/main_patient_mobile.dart
+            --target=lib/apps/patient/main_patient.dart
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
     publishing:
@@ -118,4 +118,4 @@ workflows:
   # ─────────────────────────────────────────────
   # Note: Windows .exe builds require a Windows instance which Codemagic
   # doesn't provide — build locally with:
-  #   flutter build windows -t lib/main_admin_desktop.dart --release
+  #   flutter build windows -t lib/apps/admin/main_admin.dart --release

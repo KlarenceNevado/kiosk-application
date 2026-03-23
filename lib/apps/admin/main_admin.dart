@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
-import 'core/services/system/app_environment.dart';
+import 'package:kiosk_application/core/services/system/app_environment.dart';
 
 // CONFIG
-import 'core/config/routes.dart';
-import 'core/config/theme.dart';
+import 'package:kiosk_application/core/config/routes.dart';
+import 'package:kiosk_application/core/config/theme.dart';
 
 // DATA & LOGIC
-import 'features/auth/data/auth_repository.dart';
-import 'features/user_history/data/history_repository.dart';
-import 'core/services/hardware/sensor_manager.dart';
-import 'features/health_check/logic/health_wizard_provider.dart';
-import 'features/admin/data/admin_repository.dart';
-import 'features/patient/data/mobile_navigation_provider.dart';
-import 'features/chat/data/chat_repository.dart';
+import 'package:kiosk_application/features/auth/data/auth_repository.dart';
+import 'package:kiosk_application/features/user_history/data/history_repository.dart';
+import 'package:kiosk_application/core/services/hardware/sensor_manager.dart';
+import 'package:kiosk_application/features/health_check/logic/health_wizard_provider.dart';
+import 'package:kiosk_application/features/admin/data/admin_repository.dart';
+import 'package:kiosk_application/features/patient/data/mobile_navigation_provider.dart';
+import 'package:kiosk_application/features/chat/data/chat_repository.dart';
 
-import 'core/providers/language_provider.dart';
+import 'package:kiosk_application/core/providers/language_provider.dart';
 
-import 'core/services/system/initialization_service.dart';
+import 'package:kiosk_application/core/services/system/initialization_service.dart';
 
 // Entry point for the Desktop Admin App
 void main() async {
