@@ -1437,15 +1437,16 @@ class SyncService with WidgetsBindingObserver {
   // Push new Vitals to Supabase
   Future<void> createVitalSign(VitalSigns vital) async {
     try {
+      final dbHelper = DatabaseHelper.instance;
       final Map<String, dynamic> supabaseData = {
         'id': vital.id,
         'user_id': vital.userId,
         'timestamp': vital.timestamp.toIso8601String(),
-        'heart_rate': vital.heartRate,
-        'systolic_bp': vital.systolicBP,
-        'diastolic_bp': vital.diastolicBP,
-        'oxygen': vital.oxygen,
-        'temperature': vital.temperature,
+        'heart_rate': dbHelper.encrypt(vital.heartRate),
+        'systolic_bp': dbHelper.encrypt(vital.systolicBP),
+        'diastolic_bp': dbHelper.encrypt(vital.diastolicBP),
+        'oxygen': dbHelper.encrypt(vital.oxygen),
+        'temperature': dbHelper.encrypt(vital.temperature),
         'bmi': vital.bmi,
         'status': vital.status,
         'remarks': vital.remarks,
@@ -1462,7 +1463,14 @@ class SyncService with WidgetsBindingObserver {
   // Push Updated Vitals Status/Remarks to Supabase
   Future<void> updateVitalSign(VitalSigns vital) async {
     try {
+      final dbHelper = DatabaseHelper.instance;
       final Map<String, dynamic> supabaseData = {
+        'heart_rate': dbHelper.encrypt(vital.heartRate),
+        'systolic_bp': dbHelper.encrypt(vital.systolicBP),
+        'diastolic_bp': dbHelper.encrypt(vital.diastolicBP),
+        'oxygen': dbHelper.encrypt(vital.oxygen),
+        'temperature': dbHelper.encrypt(vital.temperature),
+        'bmi': vital.bmi,
         'status': vital.status,
         'remarks': vital.remarks,
         'follow_up_action': vital.followUpAction,

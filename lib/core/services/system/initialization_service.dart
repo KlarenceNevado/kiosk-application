@@ -105,14 +105,13 @@ class InitializationService {
 
   Future<void> _initSupabase() async {
     try {
-      // Hardcoded fallbacks to ensure interconnection if .env fails
-      final supabaseUrl = dotenv.isInitialized && (dotenv.env['SUPABASE_URL']?.isNotEmpty ?? false)
-          ? dotenv.env['SUPABASE_URL']!
-          : 'https://zumghuyvofohqbxgnnmf.supabase.co';
-      
-      final supabaseAnonKey = dotenv.isInitialized && (dotenv.env['SUPABASE_ANON_KEY']?.isNotEmpty ?? false)
-          ? dotenv.env['SUPABASE_ANON_KEY']!
-          : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bWdodXl2b2ZvaHFieGdubm1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjQ0MTc1MiwiZXhwIjoyMDg4MDE3NzUyfQ.cbKgwov-rIlUEHq0vPa01_h2khYf0--Tt4TWNIUnChs';
+      final supabaseUrl = dotenv.env['SUPABASE_URL'];
+      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+      if (supabaseUrl == null || supabaseUrl.isEmpty || 
+          supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env");
+      }
 
       await Supabase.initialize(
         url: supabaseUrl,
@@ -120,7 +119,9 @@ class InitializationService {
       ).timeout(const Duration(seconds: 5));
       debugPrint("✅ InitializationService: Supabase initialized");
     } catch (e) {
-      debugPrint("⚠️ InitializationService (Supabase): $e");
+      debugPrint("❌ InitializationService (Supabase Critical): $e");
+      // Re-throw or handle as fatal depending on app policy
+      rethrow;
     }
   }
 

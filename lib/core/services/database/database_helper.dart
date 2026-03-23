@@ -5,17 +5,19 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../features/health_check/models/vital_signs_model.dart';
-import '../../services/security/encryption_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
+
+import '../../../features/health_check/models/vital_signs_model.dart';
 import '../../../features/auth/models/user_model.dart';
 import '../../models/system_log_model.dart';
+import '../../services/security/encryption_service.dart';
+import 'migration_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
-  bool _sanityCheckPerformed = false; // Singleton flag to prevent redundant checks
+ // Singleton flag to prevent redundant checks
 
   DatabaseHelper._init();
   static Completer<Database>? _dbInitCompleter;
@@ -62,9 +64,10 @@ class DatabaseHelper {
       onUpgrade: _onUpgrade,
     );
 
-    // CRITICAL: Perform a manual sanity check on Windows/Desktop to ensure columns exist
-    // even if migrations were skipped or failed silently.
-    await performSchemaSanityCheck(db);
+    // 3. Centralized Migration & Sanity Checks
+    final migrationService = MigrationService();
+    await migrationService.runMigrations(db);
+    await migrationService.performSanityCheck(db);
 
     return db;
   }
@@ -388,92 +391,21 @@ class DatabaseHelper {
           "🚀 Database Upgraded to Version 11 (Chat Forwarding & Icons)");
     }
 
+    // Legacy version handling - delegating structural checks to MigrationService
+    debugPrint("📂 [DatabaseHelper] Performing upgrade check from v$oldVersion to v$newVersion");
+    
+    // We keep historical execute blocks if they are critical and not covered by sanityCheck
     if (oldVersion < 12) {
-      // Hardened check for is_forwarded to fix Admin Desktop crash
+      // Chat Indexes
       try {
-        final List<Map<String, dynamic>> columns =
-            await db.rawQuery('PRAGMA table_info(chat_messages)');
-        final bool hasIsForwarded =
-            columns.any((c) => c['name'] == 'is_forwarded');
-
-        if (!hasIsForwarded) {
-          await db.execute(
-              'ALTER TABLE chat_messages ADD COLUMN is_forwarded INTEGER DEFAULT 0');
-          debugPrint("✅ Added is_forwarded column to chat_messages");
-        }
-      } catch (e) {
-        debugPrint("⚠️ Error checking/adding is_forwarded: $e");
-      }
-
-      // Ensure indexes exist
-      try {
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id)');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id)');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_chat_timestamp ON chat_messages(timestamp)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_timestamp ON chat_messages(timestamp)');
       } catch (_) {}
-
-      debugPrint("🚀 Database Upgraded to Version 12 (Critical Crash Fix)");
     }
 
-    if (oldVersion < 13) {
-      try {
-        await _addColumnIfNotExists(db, 'patients', 'isActive', 'INTEGER DEFAULT 1');
-        await _addColumnIfNotExists(db, 'announcements', 'isActive', 'INTEGER DEFAULT 1');
-        await _addColumnIfNotExists(db, 'alerts', 'isActive', 'INTEGER DEFAULT 1');
-        debugPrint("✅ Added isActive column to patients, announcements, and alerts");
-      } catch (e) {
-        debugPrint("⚠️ Error adding isActive: $e");
-      }
-      debugPrint("🚀 Database Upgraded to Version 13 (Archiving)");
-    }
-
-    if (oldVersion < 14) {
-      final tables = [
-        'patients',
-        'vitals',
-        'announcements',
-        'schedules',
-        'alerts',
-        'chat_messages'
-      ];
-      for (final table in tables) {
-        await _addColumnIfNotExists(db, table, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
-        await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT DEFAULT "1970-01-01T00:00:00Z"');
-        await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
-      }
-    }
-
-    if (oldVersion < 15) {
-      await _addColumnIfNotExists(db, 'patients', 'parentId', 'TEXT');
-      await _addColumnIfNotExists(db, 'patients', 'relation', 'TEXT');
-      debugPrint("🚀 Database Upgraded to Version 15 (Dependent Links)");
-    }
-
-    if (oldVersion < 16) {
-      await db.execute('''
-      CREATE TABLE IF NOT EXISTS reminders (
-        id INTEGER PRIMARY KEY,
-        title TEXT NOT NULL,
-        time TEXT NOT NULL,
-        isActive INTEGER NOT NULL DEFAULT 1,
-        userId TEXT NOT NULL
-      )
-      ''');
-      debugPrint("🚀 Database Upgraded to Version 16 (Reminders Table)");
-    }
-
-    if (oldVersion < 17) {
-      await _addColumnIfNotExists(db, 'vitals', 'report_url', 'TEXT');
-      await _addColumnIfNotExists(db, 'vitals', 'report_path', 'TEXT');
-      await _addColumnIfNotExists(db, 'announcements', 'media_url', 'TEXT');
-      await _addColumnIfNotExists(db, 'announcements', 'media_path', 'TEXT');
-      await _addColumnIfNotExists(db, 'chat_messages', 'media_url', 'TEXT');
-      await _addColumnIfNotExists(db, 'chat_messages', 'media_path', 'TEXT');
-      debugPrint("🚀 Database Upgraded to Version 17 (File Cache Support)");
-    }
+    // Modern structural integrity is now handled by MigrationService.performSanityCheck(db)
+    // called in _initDB after openDatabase.
 
     if (oldVersion < 18) {
       await db.execute('''
@@ -492,158 +424,6 @@ class DatabaseHelper {
       )
       ''');
       debugPrint("🚀 Database Upgraded to Version 18 (System Logs Table)");
-    }
-  }
-
-  /// Forces a check on all core tables to ensure sync columns exist.
-  /// This is a fallback for when ALTER TABLE in onUpgrade fails or is skipped.
-  Future<void> performSchemaSanityCheck(Database db) async {
-    if (_sanityCheckPerformed) return; 
-    
-    debugPrint("🔍 [Sanity Check] Verifying database schema integrity...");
-
-    // 1. Rename Patients columns if they are still using camelCase (LEGACY MIGRATION)
-    await _renameColumnIfExists(db, 'patients', 'firstName', 'first_name');
-    await _renameColumnIfExists(db, 'patients', 'lastName', 'last_name');
-    await _renameColumnIfExists(db, 'patients', 'middleInitial', 'middle_initial');
-    await _renameColumnIfExists(db, 'patients', 'phoneNumber', 'phone_number');
-    await _renameColumnIfExists(db, 'patients', 'pinCode', 'pin_code');
-    await _renameColumnIfExists(db, 'patients', 'parentId', 'parent_id');
-    await _renameColumnIfExists(db, 'patients', 'dateOfBirth', 'date_of_birth');
-    await _renameColumnIfExists(db, 'patients', 'isActive', 'is_active');
-
-    // Rename Vitals columns
-    await _renameColumnIfExists(db, 'vitals', 'userId', 'user_id');
-    await _renameColumnIfExists(db, 'vitals', 'heartRate', 'heart_rate');
-    await _renameColumnIfExists(db, 'vitals', 'systolicBP', 'systolic_bp');
-    await _renameColumnIfExists(db, 'vitals', 'diastolicBP', 'diastolic_bp');
-    await _renameColumnIfExists(db, 'vitals', 'bmiCategory', 'bmi_category');
-    await _renameColumnIfExists(db, 'vitals', 'followUpAction', 'follow_up_action');
-
-    // Rename Announcements columns
-    await _renameColumnIfExists(db, 'announcements', 'targetGroup', 'target_group');
-    await _renameColumnIfExists(db, 'announcements', 'isActive', 'is_active');
-
-    // Rename Schedules columns
-    await _renameColumnIfExists(db, 'schedules', 'colorValue', 'color_value');
-
-    // Rename Alerts columns
-    await _renameColumnIfExists(db, 'alerts', 'targetGroup', 'target_group');
-    await _renameColumnIfExists(db, 'alerts', 'isEmergency', 'is_emergency');
-    await _renameColumnIfExists(db, 'alerts', 'isActive', 'is_active');
-
-    // Rename Reminders columns
-    await _renameColumnIfExists(db, 'reminders', 'isActive', 'is_active');
-    await _renameColumnIfExists(db, 'reminders', 'userId', 'user_id');
-
-    // 2. Core Tables and Columns Cleanup
-    final tables = [
-      'patients',
-      'vitals',
-      'announcements',
-      'schedules',
-      'alerts',
-      'chat_messages',
-      'reminders'
-    ];
-    
-    for (final table in tables) {
-      await _addColumnIfNotExists(db, table, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
-      await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT DEFAULT "1970-01-01T00:00:00Z"');
-      await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
-      
-      if (['patients', 'announcements', 'alerts', 'reminders'].contains(table)) {
-        await _addColumnIfNotExists(db, table, 'is_active', 'INTEGER NOT NULL DEFAULT 1');
-      }
-    }
-
-    // 3. Vitals Specifics (File Cache Support)
-    await _addColumnIfNotExists(db, 'vitals', 'report_url', 'TEXT');
-    await _addColumnIfNotExists(db, 'vitals', 'report_path', 'TEXT');
-    await _addColumnIfNotExists(db, 'vitals', 'user_id', 'TEXT NOT NULL DEFAULT "unknown"');
-    
-    // Rename userId to user_id in vitals if needed
-    await _renameColumnIfExists(db, 'vitals', 'userId', 'user_id');
-
-    // 4. Detailed Patient Checks
-    await _addColumnIfNotExists(db, 'patients', 'created_at', 'TEXT');
-    await _addColumnIfNotExists(db, 'patients', 'parent_id', 'TEXT');
-    await _addColumnIfNotExists(db, 'patients', 'relation', 'TEXT');
-
-    // 5. Build Reminders If Missing
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS reminders (
-      id INTEGER PRIMARY KEY,
-      title TEXT NOT NULL,
-      time TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      userId TEXT NOT NULL
-    )
-    ''');
-
-    // 6. Sync Metadata (NEW)
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS sync_metadata (
-      table_name TEXT NOT NULL,
-      record_id TEXT NOT NULL,
-      last_error TEXT,
-      retry_count INTEGER DEFAULT 0,
-      last_attempt TEXT,
-      is_blocked INTEGER DEFAULT 0,
-      PRIMARY KEY (table_name, record_id)
-    )
-    ''');
-
-    // 7. System Logs (NEW in v18)
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS system_logs (
-      id TEXT PRIMARY KEY,
-      user_id TEXT,
-      session_id TEXT,
-      action TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
-      duration_seconds INTEGER DEFAULT 0,
-      sensor_failures TEXT,
-      severity TEXT NOT NULL,
-      module TEXT NOT NULL,
-      is_synced INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT DEFAULT (datetime('now'))
-    )
-    ''');
-    
-    _sanityCheckPerformed = true;
-    debugPrint("✅ [Sanity Check] Schema verification complete.");
-  }
-
-  /// Helper to safely rename a column if it exists (SQLite 3.25.0+)
-  Future<void> _renameColumnIfExists(Database db, String tableName, String oldColumn, String newColumn) async {
-    try {
-      final List<Map<String, dynamic>> columns = await db.rawQuery('PRAGMA table_info($tableName)');
-      final bool oldExists = columns.any((c) => c['name'] == oldColumn);
-      final bool newExists = columns.any((c) => c['name'] == newColumn);
-
-      if (oldExists && !newExists) {
-        await db.execute('ALTER TABLE $tableName RENAME COLUMN $oldColumn TO $newColumn');
-        debugPrint("✅ Renamed '$oldColumn' to '$newColumn' in table '$tableName'");
-      }
-    } catch (e) {
-      debugPrint("⚠️ Error renaming column: $e");
-    }
-  }
-
-  /// Helper to safely add a column only if it doesn't already exist
-  Future<void> _addColumnIfNotExists(Database db, String tableName, String columnName, String columnDefinition) async {
-    try {
-      // Check if column exists by querying table info
-      final List<Map<String, dynamic>> columns = await db.rawQuery('PRAGMA table_info($tableName)');
-      final bool columnExists = columns.any((column) => column['name'] == columnName);
-
-      if (!columnExists) {
-        await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition');
-        debugPrint("✅ Added column '$columnName' to table '$tableName'");
-      }
-    } catch (e) {
-      debugPrint("⚠️ Error adding column '$columnName' to '$tableName': $e");
     }
   }
 
