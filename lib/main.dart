@@ -1,5 +1,5 @@
-import 'main_kiosk.dart' as kiosk;
+import 'package:kiosk_application/apps/kiosk/main_kiosk.dart' as kiosk;
 
-void main() {
+void main() async {
   kiosk.main();
 }
