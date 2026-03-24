@@ -2,25 +2,40 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "🟢 1. RUN KIOSK (Patient)",
+            "name": "🟢 1. RUN KIOSK (Windows)",
             "request": "launch",
             "type": "dart",
-            "program": "lib/main_kiosk.dart",
+            "program": "lib/apps/kiosk/main_kiosk.dart",
             "flutterMode": "debug"
         },
         {
-            "name": "🔵 2. RUN ADMIN DESKTOP (Doctor)",
+            "name": "🔵 2. RUN ADMIN DESKTOP (Windows)",
             "request": "launch",
             "type": "dart",
-            "program": "lib/main_admin_desktop.dart",
+            "program": "lib/apps/admin/main_admin.dart",
             "flutterMode": "debug"
         },
         {
-            "name": "🟠 3. RUN PATIENT MOBILE (Android Emulator)",
+            "name": "🟠 3. RUN PATIENT MOBILE (Android)",
             "request": "launch",
             "type": "dart",
-            "program": "lib/main_mobile.dart",
-            "deviceId": "emulator-5554"
+            "program": "lib/apps/patient/main_patient.dart",
+            "flutterMode": "debug"
+        },
+        {
+            "name": "🌐 4. RUN PATIENT PWA (Web/Chrome)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/apps/patient/main_patient_web.dart",
+            "flutterMode": "debug",
+            "deviceId": "chrome"
+        },
+        {
+            "name": "🐧 5. RUN KIOSK (Linux)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/apps/kiosk/main_kiosk.dart",
+            "flutterMode": "debug"
         }
     ]
 }

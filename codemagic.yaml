@@ -39,16 +39,14 @@ workflows:
       - dist/App1_HealthKiosk_Linux.zip
 
   # ─────────────────────────────────────────────
-  # APP 3: Patient Mobile — iOS IPA
+  # APP 3: Patient Mobile — Web PWA (FREE iOS Alternative)
   # ─────────────────────────────────────────────
-  patient-mobile-ios:
-    name: "App 3 · Patient Mobile · iOS"
+  patient-mobile-web:
+    name: "App 3 · Patient Mobile · Web PWA"
     max_build_duration: 60
-    instance_type: mac_mini_m2  # Codemagic Mac instance (free tier available)
+    instance_type: linux_x2
     environment:
       flutter: stable
-      xcode: latest
-      cocoapods: default
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
@@ -59,18 +57,23 @@ workflows:
           echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
       - name: Get dependencies
         script: flutter pub get
-      - name: Install pods
+      - name: Build Web PWA
         script: |
-          cd ios && pod install
-      - name: Build iOS IPA (no-codesign for ad-hoc testing)
-        script: |
-          flutter build ipa \
+          flutter build web \
             --release \
-            --target=lib/apps/patient/main_patient.dart \
-            --no-codesign
+            --target=lib/apps/patient/main_patient_web.dart \
+            --base-href "/kiosk-application/"
+      - name: Deploy to GitHub Pages
+        script: |
+          cd build/web
+          git init
+          git checkout -b gh-pages
+          git add .
+          git commit -m "Deploy Patient PWA"
+          git remote add origin https://x-access-token:$GITHUB_TOKEN@github.com/KlarenceNevado/kiosk-application.git
+          git push -f origin gh-pages
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - build/web/**
     publishing:
       email:
         recipients:
@@ -80,7 +83,7 @@ workflows:
           failure: true
 
   # ─────────────────────────────────────────────
-  # APP 3: Patient Mobile — Android APK (bonus)
+  # APP 3: Patient Mobile — Android APK
   # ─────────────────────────────────────────────
   patient-mobile-android:
     name: "App 3 · Patient Mobile · Android"
