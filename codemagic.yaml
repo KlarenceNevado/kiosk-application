@@ -39,8 +39,10 @@ workflows:
             --target=lib/apps/kiosk/main_kiosk.dart
       - name: Bundle output into zip
         script: |
+          mkdir -p dist web/dist
           cd build/linux/x64/release/bundle
           zip -r ../../../../../dist/App1_HealthKiosk_Linux.zip .
+          cp ../../../../../dist/App1_HealthKiosk_Linux.zip ../../../../../web/dist/
     artifacts:
       - dist/App1_HealthKiosk_Linux.zip
 
@@ -69,6 +71,10 @@ workflows:
           echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
       - name: Get dependencies
         script: flutter pub get
+      - name: Update version registry
+        script: |
+          VERSION=$(grep 'version: ' pubspec.yaml | sed 's/version: //')
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" web/version.json
       - name: Build Web PWA
         script: |
           flutter build web \

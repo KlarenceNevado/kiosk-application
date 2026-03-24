@@ -1,0 +1,6 @@
+{
+  "version": "1.0.0+1",
+  "kiosk_linux_url": "https://klarencenevado.github.io/kiosk-application/dist/App1_HealthKiosk_Linux.zip",
+  "admin_windows_url": "https://klarencenevado.github.io/kiosk-application/dist/App2_Admin_Windows.zip",
+  "release_notes": "Initial release with Universal Auto-Update support."
+}
