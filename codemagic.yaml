@@ -52,7 +52,7 @@ workflows:
   patient-mobile-web:
     name: "App 3 · Patient Mobile · Web PWA"
     max_build_duration: 60
-    instance_type: linux_x2
+    instance_type: linux
     environment:
       flutter: stable
       groups:
@@ -106,7 +106,7 @@ workflows:
   patient-mobile-android:
     name: "App 3 · Patient Mobile · Android"
     max_build_duration: 60
-    instance_type: linux_x2
+    instance_type: linux
     environment:
       flutter: stable
       groups:
