@@ -9,6 +9,8 @@ workflows:
     instance_type: linux_x2  # Codemagic Linux instance
     environment:
       flutter: stable
+      groups:
+        - supabase
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
@@ -54,6 +56,8 @@ workflows:
     instance_type: linux_x2
     environment:
       flutter: stable
+      groups:
+        - supabase
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
@@ -105,6 +109,8 @@ workflows:
     instance_type: linux_x2
     environment:
       flutter: stable
+      groups:
+        - supabase
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
