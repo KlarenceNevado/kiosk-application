@@ -41,8 +41,8 @@ workflows:
         script: flutter pub get
       - name: Update version registry
         script: |
-          VERSION=$(grep 'version: ' pubspec.yaml | sed 's/version: //')
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" web/version.json
+          VERSION=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" web/version.json || sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" web/version.json
       - name: Build Web PWA
         script: |
           flutter build web \
