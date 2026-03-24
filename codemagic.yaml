@@ -3,48 +3,16 @@ workflows:
   # ─────────────────────────────────────────────
   # APP 1: Kiosk — Linux ARM64 (Raspberry Pi 5)
   # ─────────────────────────────────────────────
-  kiosk-linux:
-    name: "App 1 · Kiosk · Linux ARM64 (Raspberry Pi)"
-    max_build_duration: 60
-    instance_type: linux  # Codemagic Linux instance
-    environment:
-      flutter: stable
-      groups:
-        - supabase
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'master'
-          include: true
-          source: true
-    scripts:
-      - name: Install Linux build dependencies
-        script: |
-          sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build pkg-config \
-            libgtk-3-dev libblkid-dev liblzma-dev clang
-      - name: Write .env from CI secrets
-        script: |
-          echo "SUPABASE_URL=$SUPABASE_URL" > assets/.env
-          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> assets/.env
-      - name: Enable Linux desktop
-        script: flutter config --enable-linux-desktop
-      - name: Get dependencies
-        script: flutter pub get
-      - name: Build Kiosk Linux release
-        script: |
-          flutter build linux \
-            --release \
-            --target=lib/apps/kiosk/main_kiosk.dart
-      - name: Bundle output into zip
-        script: |
-          mkdir -p dist web/dist
-          cd build/linux/x64/release/bundle
-          zip -r ../../../../../dist/App1_HealthKiosk_Linux.zip .
-          cp ../../../../../dist/App1_HealthKiosk_Linux.zip ../../../../../web/dist/
-    artifacts:
-      - dist/App1_HealthKiosk_Linux.zip
+  # Note: Linux builds require a Linux instance. Codemagic Linux
+  # instances (linux_x2) are paid ($0.045/min). Free tier only provides
+  # macOS (mac_mini_m2). 
+  # Furthermore, building for Raspberry Pi (ARM64) is best done natively
+  # on the Pi itself rather than cross-compiling on x86 CI runners.
+  # Compile directly on the Raspberry Pi:
+  #   flutter build linux --release -t lib/apps/kiosk/main_kiosk.dart
+  # 
+  # kiosk-linux:
+  #   ... (Disabled to preserve free tier billing) ...
 
   # ─────────────────────────────────────────────
   # APP 3: Patient Mobile — Web PWA (FREE iOS Alternative)
@@ -52,7 +20,7 @@ workflows:
   patient-mobile-web:
     name: "App 3 · Patient Mobile · Web PWA"
     max_build_duration: 60
-    instance_type: linux
+    instance_type: mac_mini_m2  # Codemagic Free Tier macOS instance
     environment:
       flutter: stable
       groups:
@@ -106,7 +74,7 @@ workflows:
   patient-mobile-android:
     name: "App 3 · Patient Mobile · Android"
     max_build_duration: 60
-    instance_type: linux
+    instance_type: mac_mini_m2  # Codemagic Free Tier macOS instance
     environment:
       flutter: stable
       groups:
