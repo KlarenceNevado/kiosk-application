@@ -96,5 +96,30 @@ class MigrationService {
     if (!patientCols.any((c) => c['name'] == 'created_at')) {
        await db.execute('ALTER TABLE patients ADD COLUMN created_at TEXT');
     }
+
+    // Vitals missing columns
+    final vitalsCols = await db.rawQuery('PRAGMA table_info(vitals)');
+    final vitalsColNames = vitalsCols.map((c) => c['name'].toString()).toList();
+    if (!vitalsColNames.contains('created_at')) {
+       await db.execute('ALTER TABLE vitals ADD COLUMN created_at TEXT DEFAULT (datetime(''now''))');
+    }
+    if (!vitalsColNames.contains('report_path')) {
+       await db.execute('ALTER TABLE vitals ADD COLUMN report_path TEXT');
+    }
+    if (!vitalsColNames.contains('report_url')) {
+       await db.execute('ALTER TABLE vitals ADD COLUMN report_url TEXT');
+    }
+
+    // Announcements missing columns
+    final annCols = await db.rawQuery('PRAGMA table_info(announcements)');
+    if (!annCols.any((c) => c['name'] == 'created_at')) {
+       await db.execute('ALTER TABLE announcements ADD COLUMN created_at TEXT DEFAULT (datetime(''now''))');
+    }
+
+    // Alerts missing columns
+    final alertsCols = await db.rawQuery('PRAGMA table_info(alerts)');
+    if (!alertsCols.any((c) => c['name'] == 'created_at')) {
+       await db.execute('ALTER TABLE alerts ADD COLUMN created_at TEXT DEFAULT (datetime(''now''))');
+    }
   }
 }

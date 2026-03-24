@@ -62,7 +62,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 18, // BUMPED TO 18 FOR SYSTEM_LOGS TABLE
+      version: 19, // BUMPED TO 19 FOR MISSING SYNC COLUMNS
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -90,7 +90,7 @@ class DatabaseHelper {
       middle_initial TEXT,
       sitio TEXT NOT NULL,
       phone_number TEXT NOT NULL,
-      pin_code TEXT NOT NULL,
+      pin_code TEXT,
       gender TEXT NOT NULL,
       date_of_birth TEXT NOT NULL,
       parent_id TEXT,
@@ -119,6 +119,9 @@ class DatabaseHelper {
       status TEXT NOT NULL DEFAULT 'pending',
       remarks TEXT,
       follow_up_action TEXT,
+      report_url TEXT,
+      report_path TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       is_deleted INTEGER DEFAULT 0,
       is_synced INTEGER NOT NULL DEFAULT 0 
@@ -168,6 +171,7 @@ class DatabaseHelper {
       timestamp TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
       reactions TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       is_deleted INTEGER DEFAULT 0,
       is_synced INTEGER NOT NULL DEFAULT 0
@@ -198,6 +202,7 @@ class DatabaseHelper {
       is_emergency INTEGER NOT NULL DEFAULT 0,
       timestamp TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       is_deleted INTEGER DEFAULT 0,
       is_synced INTEGER NOT NULL DEFAULT 0
@@ -298,6 +303,9 @@ class DatabaseHelper {
         status TEXT NOT NULL DEFAULT 'pending',
         remarks TEXT,
         followUpAction TEXT,
+        report_url TEXT,
+        report_path TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
         is_synced INTEGER NOT NULL DEFAULT 0 
       )
       ''');
@@ -334,7 +342,7 @@ class DatabaseHelper {
         middle_initial TEXT,
         sitio TEXT NOT NULL,
         phone_number TEXT NOT NULL,
-        pin_code TEXT NOT NULL,
+        pin_code TEXT,
         gender TEXT NOT NULL,
         date_of_birth TEXT NOT NULL,
         parent_id TEXT,
