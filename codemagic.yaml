@@ -12,6 +12,13 @@ workflows:
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'master'
+          include: true
+          source: true
     scripts:
       - name: Install Linux build dependencies
         script: |
@@ -50,6 +57,13 @@ workflows:
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'master'
+          include: true
+          source: true
     scripts:
       - name: Write .env from CI secrets
         script: |
@@ -94,6 +108,13 @@ workflows:
       vars:
         SUPABASE_URL: Encrypted(add_in_codemagic_dashboard)
         SUPABASE_ANON_KEY: Encrypted(add_in_codemagic_dashboard)
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'master'
+          include: true
+          source: true
     scripts:
       - name: Write .env from CI secrets
         script: |
