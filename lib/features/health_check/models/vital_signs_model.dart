@@ -16,6 +16,9 @@ class VitalSigns {
   final String status; // pending, verified, rejected
   final String? remarks;
   final String? followUpAction;
+  final DateTime? updatedAt;
+  final bool isDeleted;
+  final bool isSynced;
   // height/weight could be added here if needed for permanent record
 
   /// Returns the timestamp specifically in Asia/Manila (PHT) for UI display
@@ -47,6 +50,9 @@ class VitalSigns {
     this.followUpAction,
     this.reportUrl,
     this.reportPath,
+    this.updatedAt,
+    this.isDeleted = false,
+    this.isSynced = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -66,6 +72,9 @@ class VitalSigns {
       'followUpAction': followUpAction,
       'report_url': reportUrl,
       'report_path': reportPath,
+      'updated_at': updatedAt?.toIso8601String(),
+      'is_deleted': isDeleted ? 1 : 0,
+      'is_synced': isSynced ? 1 : 0,
     };
   }
 
@@ -86,6 +95,9 @@ class VitalSigns {
       status: map['status'] ?? 'pending',
       remarks: map['remarks'],
       followUpAction: map['followUpAction'] ?? map['follow_up_action'],
+      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
+      isDeleted: map['is_deleted'] == 1 || map['is_deleted'] == true,
+      isSynced: map['is_synced'] == 1 || map['is_synced'] == true,
     );
   }
 
@@ -106,6 +118,9 @@ class VitalSigns {
     String? status,
     String? remarks,
     String? followUpAction,
+    DateTime? updatedAt,
+    bool? isDeleted,
+    bool? isSynced,
   }) {
     return VitalSigns(
       id: id ?? this.id,
@@ -121,6 +136,9 @@ class VitalSigns {
       status: status ?? this.status,
       remarks: remarks ?? this.remarks,
       followUpAction: followUpAction ?? this.followUpAction,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 }

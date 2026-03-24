@@ -1,26 +1,29 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
-import 'package:crypto/crypto.dart';
 
 import '../../../features/health_check/models/vital_signs_model.dart';
 import '../../../features/auth/models/user_model.dart';
 import '../../models/system_log_model.dart';
 import '../../services/security/encryption_service.dart';
 import 'migration_service.dart';
+import 'dao/patient_dao.dart';
+import 'dao/vitals_dao.dart';
+import 'dao/system_dao.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
- // Singleton flag to prevent redundant checks
 
   DatabaseHelper._init();
   static Completer<Database>? _dbInitCompleter;
+
+  late final PatientDao patientDao;
+  late final VitalsDao vitalsDao;
+  late final SystemDao systemDao;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -68,6 +71,11 @@ class DatabaseHelper {
     final migrationService = MigrationService();
     await migrationService.runMigrations(db);
     await migrationService.performSanityCheck(db);
+
+    // 4. Initialize DAOs
+    patientDao = PatientDao(db);
+    vitalsDao = VitalsDao(db);
+    systemDao = SystemDao(db);
 
     return db;
   }
@@ -459,97 +467,16 @@ class DatabaseHelper {
     return double.tryParse(val) ?? 0.0;
   }
 
-  Future<void> createRecord(VitalSigns record) async {
-    final db = await instance.database;
-    final map = record.toMap();
-
-    // ENCRYPT SENSITIVE FIELDS
-    final encryptedMap = <String, dynamic>{
-      'id': map['id'],
-      'user_id': map['userId'],
-      'timestamp': map['timestamp'],
-      'heart_rate': _encrypt(map['heartRate']),
-      'systolic_bp': _encrypt(map['systolicBP']),
-      'diastolic_bp': _encrypt(map['diastolicBP']),
-      'oxygen': _encrypt(map['oxygen']),
-      'temperature': _encrypt(map['temperature']),
-      'bmi': map['bmi'],
-      'bmi_category': map['bmiCategory'],
-      'status': map['status'],
-      'remarks': map['remarks'],
-      'follow_up_action': map['followUpAction'],
-      'updated_at': map['updated_at'] ?? DateTime.now().toIso8601String(),
-      'is_deleted': 0,
-      'is_synced': 0,
-      'report_url': map['report_url'],
-      'report_path': map['report_path']
-    };
-
-    await db.insert('vitals', encryptedMap,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  Future<void> createRecord(VitalSigns record) => vitalsDao.createRecord(record);
 
   // Same as createRecord, but forces is_synced based on the incoming valid map (from sync service)
-  Future<void> insertVitalSign(Map<String, dynamic> map) async {
-    final db = await instance.database;
+  Future<void> insertVitalSign(Map<String, dynamic> map) => vitalsDao.insertVitalSign(map);
 
-    // ENCRYPT SENSITIVE FIELDS
-    final encryptedMap = <String, dynamic>{
-      'id': map['id'],
-      'user_id': map['user_id'] ?? map['userId'], // Prioritize snake_case, fallback to camelCase
-      'timestamp': map['timestamp'],
-      'heart_rate': _encrypt(map['heart_rate'] ?? map['heartRate']),
-      'systolic_bp': _encrypt(map['systolic_bp'] ?? map['systolicBP']),
-      'diastolic_bp': _encrypt(map['diastolic_bp'] ?? map['diastolicBP']),
-      'oxygen': _encrypt(map['oxygen']),
-      'temperature': _encrypt(map['temperature']),
-      'bmi': map['bmi'],
-      'bmi_category': map['bmi_category'] ?? map['bmiCategory'],
-      'status': map['status'],
-      'remarks': map['remarks'],
-      'follow_up_action': map['follow_up_action'] ?? map['followUpAction'],
-      'updated_at': map['updated_at'] ?? DateTime.now().toIso8601String(),
-      'is_deleted': (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
-      'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
-      'report_url': map['report_url'],
-      'report_path': map['report_path']
-    };
-
-    await db.insert('vitals', encryptedMap,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<void> updateRecord(VitalSigns record) async {
-    final db = await instance.database;
-    final map = record.toMap();
-
-    // ENCRYPT SENSITIVE FIELDS for update
-    final encryptedMap = <String, dynamic>{
-      'id': map['id'],
-      'user_id': map['user_id'] ?? map['userId'],
-      'timestamp': map['timestamp'],
-      'heart_rate': _encrypt(map['heart_rate'] ?? map['heartRate']),
-      'systolic_bp': _encrypt(map['systolic_bp'] ?? map['systolicBP']),
-      'diastolic_bp': _encrypt(map['diastolic_bp'] ?? map['diastolicBP']),
-      'oxygen': _encrypt(map['oxygen']),
-      'temperature': _encrypt(map['temperature']),
-      'bmi': map['bmi'],
-      'bmi_category': map['bmi_category'] ?? map['bmiCategory'],
-      'status': map['status'],
-      'remarks': map['remarks'],
-      'follow_up_action': map['follow_up_action'] ?? map['followUpAction'],
-      'updated_at': DateTime.now().toIso8601String(),
-      'is_deleted': 0,
-      'is_synced': 0 // Need to sync changes
-    };
-
-    await db.update('vitals', encryptedMap,
-        where: 'id = ?', whereArgs: [record.id]);
-  }
+  Future<void> updateRecord(VitalSigns record) => vitalsDao.updateRecord(record);
 
   /// Partial update for specific fields (e.g. file paths during sync)
   Future<int> updateRecordRaw(String id, Map<String, dynamic> data) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.update(
       'vitals',
       data,
@@ -607,7 +534,7 @@ class DatabaseHelper {
   }
 
   Future<List<VitalSigns>> getRecordsByUserId(String userId) async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query('vitals',
         where: 'user_id = ? AND is_deleted = 0',
         whereArgs: [userId],
@@ -616,67 +543,29 @@ class DatabaseHelper {
   }
 
   Future<List<VitalSigns>> getAllRecords() async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query('vitals',
         where: 'is_deleted = ?', whereArgs: [0], orderBy: 'timestamp DESC');
     return result.map((json) => _parseVitalSigns(json)).toList();
   }
 
   Future<Map<String, dynamic>?> getVitalRecordById(String id) async {
-    final db = await instance.database;
+    final db = await database;
     final results = await db.query('vitals', where: 'id = ?', whereArgs: [id]);
     return results.isNotEmpty ? results.first : null;
   }
 
   // --- SYNC SUPPORT MODULES ---
-  Future<List<User>> getUnsyncedPatients() async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'patients',
-      where: 'is_synced = ?',
-      whereArgs: [0],
-    );
-    return maps.map((map) {
-      final decrypted = Map<String, dynamic>.from(map);
-      decrypted['phoneNumber'] = _decrypt(map['phone_number'] as String);
-      decrypted['pinCode'] = _decrypt(map['pin_code'] as String);
-      return User.fromMap(decrypted);
-    }).toList();
-  }
+  Future<List<User>> getUnsyncedPatients() => patientDao.getUnsyncedPatients();
 
-  Future<void> markPatientAsSynced(String id) async {
-    final db = await instance.database;
-    await db.update(
-      'patients',
-      {'is_synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
+  Future<void> markPatientAsSynced(String id) => patientDao.markPatientAsSynced(id);
 
-  Future<List<VitalSigns>> getUnsyncedRecords() async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'vitals',
-      where: 'is_synced = ?',
-      whereArgs: [0], // 0 = False
-      orderBy: 'timestamp ASC', // oldest first
-    );
-    return maps.map((map) => _parseVitalSigns(map)).toList();
-  }
+  Future<List<VitalSigns>> getUnsyncedRecords() => vitalsDao.getUnsyncedRecords();
 
-  Future<void> markRecordAsSynced(String id) async {
-    final db = await instance.database;
-    await db.update(
-      'vitals',
-      {'is_synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
+  Future<void> markRecordAsSynced(String id) => vitalsDao.markRecordAsSynced(id);
 
   Future<void> markAnnouncementAsSynced(String id) async {
-    final db = await instance.database;
+    final db = await database;
     await db.update(
       'announcements',
       {'is_synced': 1},
@@ -686,7 +575,7 @@ class DatabaseHelper {
   }
 
   Future<void> markAlertAsSynced(String id) async {
-    final db = await instance.database;
+    final db = await database;
     await db.update(
       'alerts',
       {'is_synced': 1},
@@ -696,7 +585,7 @@ class DatabaseHelper {
   }
 
   Future<void> markScheduleAsSynced(String id) async {
-    final db = await instance.database;
+    final db = await database;
     await db.update(
       'schedules',
       {'is_synced': 1},
@@ -708,7 +597,7 @@ class DatabaseHelper {
   /// Batch update for sync status - much more efficient for bulk operations
   Future<void> markBatchAsSynced(String table, List<String> ids) async {
     if (ids.isEmpty) return;
-    final db = await instance.database;
+    final db = await database;
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (final id in ids) {
@@ -722,75 +611,14 @@ class DatabaseHelper {
 
   // --- SECURITY METHODS ---
   Future<void> logSecurityEvent(String action, String description,
-      {String severity = 'LOW', String? userId}) async {
-    final db = await instance.database;
+          {String severity = 'LOW', String? userId}) =>
+      systemDao.logSecurityEvent(action, description,
+          severity: severity, userId: userId);
 
-    // 1. Get previous hash for chaining
-    final lastLogs = await db.query('audit_logs', orderBy: 'id DESC', limit: 1);
-    final previousHash =
-        lastLogs.isNotEmpty ? lastLogs.first['hash'] as String? : 'GENESIS';
+  Future<bool> verifyAuditIntegrity() => systemDao.verifyAuditIntegrity();
 
-    final timestamp = DateTime.now().toIso8601String();
-    final deviceInfo =
-        "${Platform.operatingSystem} (${Platform.localHostname})";
-
-    final normalizedUserId = userId ?? 'SYSTEM';
-    final normalizedSeverity = severity.toUpperCase();
-
-    // 2. Create data string for hashing (HMAC-style using encryption key)
-    final dataToHash =
-        "$timestamp|$action|$description|$normalizedSeverity|$normalizedUserId|$deviceInfo|$previousHash";
-    final key = utf8.encode(EncryptionService().getSecureKey());
-    final hmacSha256 = Hmac(sha256, key);
-    final hash = hmacSha256.convert(utf8.encode(dataToHash)).toString();
-
-    await db.insert('audit_logs', {
-      'timestamp': timestamp,
-      'action': action,
-      'description': description,
-      'severity': normalizedSeverity,
-      'user_id': normalizedUserId,
-      'ip_address': 'LOCALHOST',
-      'device_info': deviceInfo,
-      'hash': hash,
-      'previous_hash': previousHash
-    });
-  }
-
-  Future<bool> verifyAuditIntegrity() async {
-    final db = await instance.database;
-    final logs = await db.query('audit_logs', orderBy: 'id ASC');
-
-    String expectedPreviousHash = 'GENESIS';
-
-    for (var log in logs) {
-      final actualPreviousHash = log['previous_hash'] as String? ?? 'GENESIS';
-      if (actualPreviousHash != expectedPreviousHash) {
-        debugPrint(
-            "❌ Integrity Violation: Hash chain broken at Log ID ${log['id']} (Expected: $expectedPreviousHash, Actual: $actualPreviousHash)");
-        return false;
-      }
-
-      // Re-calculate hash to verify content (HMAC-style)
-      final dataToHash =
-          "${log['timestamp']}|${log['action']}|${log['description']}|${log['severity']}|${log['user_id']}|${log['device_info']}|$actualPreviousHash";
-      final key = utf8.encode(EncryptionService().getSecureKey());
-      final hmacSha256 = Hmac(sha256, key);
-      final calculatedHash =
-          hmacSha256.convert(utf8.encode(dataToHash)).toString();
-
-      if (calculatedHash != log['hash']) {
-        debugPrint(
-            "❌ Integrity Violation: Content tampered at Log ID ${log['id']}");
-        return false;
-      }
-
-      expectedPreviousHash = log['hash'] as String;
-    }
-
-    debugPrint("🛡️ Audit Integrity Verified: All logs are secure.");
-    return true;
-  }
+  Future<Map<String, dynamic>> getSecurityPulse() =>
+      systemDao.getSecurityPulse();
 
   // --- SYNC METADATA HELPERS ---
   Future<void> updateSyncMetadata({
@@ -799,102 +627,28 @@ class DatabaseHelper {
     String? error,
     bool incrementRetry = false,
     bool block = false,
-  }) async {
-    final db = await instance.database;
-    final now = DateTime.now().toIso8601String();
-    
-    // Check if exists
-    final existing = await db.query(
-      'sync_metadata',
-      where: 'table_name = ? AND record_id = ?',
-      whereArgs: [tableName, recordId],
-    );
+  }) =>
+      systemDao.updateSyncMetadata(
+          tableName: tableName,
+          recordId: recordId,
+          error: error,
+          incrementRetry: incrementRetry,
+          block: block);
 
-    if (existing.isEmpty) {
-      await db.insert('sync_metadata', {
-        'table_name': tableName,
-        'record_id': recordId,
-        'last_error': error,
-        'retry_count': incrementRetry ? 1 : 0,
-        'last_attempt': now,
-        'is_blocked': block ? 1 : 0,
-      });
-    } else {
-      final currentRetry = existing.first['retry_count'] as int;
-      await db.update(
-        'sync_metadata',
-        {
-          'last_error': error,
-          'retry_count': incrementRetry ? currentRetry + 1 : currentRetry,
-          'last_attempt': now,
-          'is_blocked': block ? 1 : (existing.first['is_blocked']),
-        },
-        where: 'table_name = ? AND record_id = ?',
-        whereArgs: [tableName, recordId],
-      );
-    }
-  }
+  Future<void> clearSyncMetadata(String tableName, String recordId) =>
+      systemDao.clearSyncMetadata(tableName, recordId);
 
-  Future<void> clearSyncMetadata(String tableName, String recordId) async {
-    final db = await instance.database;
-    await db.delete(
-      'sync_metadata',
-      where: 'table_name = ? AND record_id = ?',
-      whereArgs: [tableName, recordId],
-    );
-  }
+  Future<List<String>> getBlockedRecords(String tableName) =>
+      systemDao.getBlockedRecords(tableName);
 
-  Future<List<String>> getBlockedRecords(String tableName) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'sync_metadata',
-      columns: ['record_id'],
-      where: 'table_name = ? AND is_blocked = 1',
-      whereArgs: [tableName],
-    );
-    return result.map((e) => e['record_id'] as String).toList();
-  }
+  Future<Map<String, dynamic>?> getSyncMetadata(
+          String tableName, String recordId) =>
+      systemDao.getSyncMetadata(tableName, recordId);
 
-  Future<Map<String, dynamic>?> getSyncMetadata(String tableName, String recordId) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'sync_metadata',
-      where: 'table_name = ? AND record_id = ?',
-      whereArgs: [tableName, recordId],
-    );
-    return result.isNotEmpty ? result.first : null;
-  }
-
-  Future<List<Map<String, dynamic>>> getAuditLogs() async {
-    final db = await instance.database;
-    return await db.query('audit_logs', orderBy: 'id DESC', limit: 200);
-  }
-
-  Future<Map<String, dynamic>> getSecurityPulse() async {
-    final db = await instance.database;
-    final totalEvents = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM audit_logs')) ??
-        0;
-    final highRiskCount = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM audit_logs WHERE severity IN ("CRITICAL", "HIGH")')) ??
-        0;
-    final lastAttack = await db.query('audit_logs',
-        where: 'severity = ?',
-        whereArgs: ['CRITICAL'],
-        orderBy: 'id DESC',
-        limit: 1);
-
-    return {
-      'total': totalEvents,
-      'highRisk': highRiskCount,
-      'lastCritical':
-          lastAttack.isNotEmpty ? lastAttack.first['timestamp'] : null,
-      'status': highRiskCount > 0 ? 'WARNING' : 'SECURE',
-    };
-  }
+  Future<List<Map<String, dynamic>>> getAuditLogs() => systemDao.getAuditLogs();
 
   Future<void> clearHistory() async {
-    final db = await instance.database;
+    final db = await database;
     await db.transaction((txn) async {
       await txn.delete('vitals');
       await txn.execute('VACUUM');
@@ -907,7 +661,7 @@ class DatabaseHelper {
   // --- PATIENT MODULE CRUD ---
 
   Future<void> insertPatient(User user) async {
-    final db = await instance.database;
+    final db = await database;
     final map = user.toMap();
 
     // Encrypt sensitive fields before saving to SQLite
@@ -960,7 +714,7 @@ class DatabaseHelper {
   }
 
   Future<void> updatePatient(User user) async {
-    final db = await instance.database;
+    final db = await database;
     final map = user.toMap();
     final encryptedMap = <String, dynamic>{
       'id': map['id'],
@@ -985,7 +739,7 @@ class DatabaseHelper {
   }
 
   Future<void> deletePatient(String id) async {
-    final db = await instance.database;
+    final db = await database;
     await db.update(
         'patients',
         {
@@ -1013,253 +767,88 @@ class DatabaseHelper {
     }
   }
 
-  // --- ADMIN EXTENSION MODULES CRUD ---
+  // --- SYSTEM MODULE DELEGATION ---
 
-  Future<void> insertAnnouncement(Map<String, dynamic> row) async {
-    final db = await database;
-    final Map<String, dynamic> dbRow = Map.from(row);
-    if (dbRow['reactions'] is Map) {
-      dbRow['reactions'] = json.encode(dbRow['reactions']);
-    }
-    // Defensive bool-to-int conversion
-    dbRow['is_active'] =
-        (dbRow['is_active'] == true || dbRow['is_active'] == 1 || dbRow['isActive'] == true || dbRow['isActive'] == 1) ? 1 : 0;
-    dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
-    dbRow['is_deleted'] =
-        (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
-    dbRow['is_synced'] =
-        (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
+  Future<void> insertAnnouncement(Map<String, dynamic> row) =>
+      systemDao.insertAnnouncement(row);
 
-    // Remove legacy camelCase if present
-    dbRow.remove('targetGroup');
+  Future<List<Map<String, dynamic>>> getAnnouncements() =>
+      systemDao.getAnnouncements();
 
-    await db.insert('announcements', dbRow,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  Future<Map<String, dynamic>?> getAnnouncementById(String id) =>
+      systemDao.getAnnouncementById(id);
 
-  Future<List<Map<String, dynamic>>> getAnnouncements() async {
-    final db = await database;
+  Future<void> updateAnnouncement(Map<String, dynamic> row) =>
+      systemDao.updateAnnouncement(row);
 
-    return await db.query('announcements',
-        where: 'is_deleted = ?', whereArgs: [0], orderBy: 'timestamp DESC');
-  }
+  Future<void> deleteAnnouncement(String id) =>
+      systemDao.deleteAnnouncement(id);
 
-  Future<Map<String, dynamic>?> getAnnouncementById(String id) async {
-    final db = await database;
-    final results =
-        await db.query('announcements', where: 'id = ?', whereArgs: [id]);
-    return results.isNotEmpty ? results.first : null;
-  }
+  // --- SCHEDULES ---
+  Future<void> insertSchedule(Map<String, dynamic> row) =>
+      systemDao.insertSchedule(row);
 
-  Future<void> updateAnnouncement(Map<String, dynamic> row) async {
-    final db = await database;
-    final Map<String, dynamic> dbRow = Map.from(row);
-    if (dbRow['reactions'] is Map) {
-      dbRow['reactions'] = json.encode(dbRow['reactions']);
-    }
-    await db.update('announcements', dbRow,
-        where: 'id = ?', whereArgs: [dbRow['id']]);
-  }
+  Future<List<Map<String, dynamic>>> getSchedules() => systemDao.getSchedules();
 
-  Future<void> deleteAnnouncement(String id) async {
-    final db = await database;
-    await db.update(
-        'announcements',
-        {
-          'is_deleted': 1,
-          'is_synced': 0,
-          'updated_at': DateTime.now().toIso8601String()
-        },
-        where: 'id = ?',
-        whereArgs: [id]);
-  }
+  Future<void> deleteSchedule(String id) => systemDao.deleteSchedule(id);
 
-  Future<void> insertSchedule(Map<String, dynamic> row) async {
-    final db = await database;
-    final Map<String, dynamic> dbRow = Map.from(row);
-    // Defensive bool-to-int conversion
-    dbRow['is_deleted'] =
-        (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
-    dbRow['is_synced'] =
-        (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
-    dbRow['color_value'] = dbRow['color_value'] ?? dbRow['colorValue'];
-    
-    // Remove legacy camelCase
-    dbRow.remove('colorValue');
+  Future<Map<String, dynamic>?> getScheduleById(String id) =>
+      systemDao.getScheduleById(id);
 
-    await db.insert('schedules', dbRow,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  // --- ALERTS ---
+  Future<void> insertAlert(Map<String, dynamic> row) =>
+      systemDao.insertAlert(row);
 
-  Future<List<Map<String, dynamic>>> getSchedules() async {
-    final db = await database;
-    return await db.query('schedules',
-        where: 'is_deleted = ?', whereArgs: [0], orderBy: 'date ASC');
-  }
+  Future<List<Map<String, dynamic>>> getAlerts() => systemDao.getAlerts();
 
-  Future<void> deleteSchedule(String id) async {
-    final db = await database;
-    await db.update(
-        'schedules',
-        {
-          'is_deleted': 1,
-          'is_synced': 0,
-          'updated_at': DateTime.now().toIso8601String()
-        },
-        where: 'id = ?',
-        whereArgs: [id]);
-  }
+  Future<Map<String, dynamic>?> getAlertById(String id) =>
+      systemDao.getAlertById(id);
 
-  Future<Map<String, dynamic>?> getScheduleById(String id) async {
-    final db = await database;
-    final maps = await db.query('schedules', where: 'id = ?', whereArgs: [id]);
-    if (maps.isNotEmpty) return maps.first;
-    return null;
-  }
+  Future<void> updateAlert(Map<String, dynamic> row) =>
+      systemDao.updateAlert(row);
 
-  Future<void> insertAlert(Map<String, dynamic> row) async {
-    final db = await database;
-    final Map<String, dynamic> dbRow = Map.from(row);
-    // Defensive bool-to-int conversion
-    dbRow['is_emergency'] =
-        (dbRow['is_emergency'] == true || dbRow['is_emergency'] == 1 || dbRow['isEmergency'] == true || dbRow['isEmergency'] == 1) ? 1 : 0;
-    dbRow['is_deleted'] =
-        (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
-    dbRow['is_synced'] =
-        (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
-    dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
+  Future<void> deleteAlert(String id) => systemDao.deleteAlert(id);
 
-    // Remove legacy camelCase
-    dbRow.remove('isEmergency');
-    dbRow.remove('targetGroup');
+  // --- UNSYNCED FETCHERS ---
+  Future<List<Map<String, dynamic>>> getUnsyncedAnnouncements() =>
+      systemDao.getUnsyncedAnnouncements();
 
-    await db.insert('alerts', dbRow,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  Future<List<Map<String, dynamic>>> getUnsyncedAlerts() =>
+      systemDao.getUnsyncedAlerts();
 
-  Future<List<Map<String, dynamic>>> getAlerts() async {
-    final db = await database;
-    return await db.query('alerts',
-        where: 'is_deleted = ?', whereArgs: [0], orderBy: 'timestamp DESC');
-  }
+  Future<List<Map<String, dynamic>>> getUnsyncedSchedules() =>
+      systemDao.getUnsyncedSchedules();
 
-  Future<Map<String, dynamic>?> getAlertById(String id) async {
-    final db = await database;
-    final results = await db.query('alerts', where: 'id = ?', whereArgs: [id]);
-    return results.isNotEmpty ? results.first : null;
-  }
+  Future<List<Map<String, dynamic>>> getUnsyncedChatMessages() =>
+      systemDao.getUnsyncedChatMessages();
 
-  Future<void> updateAlert(Map<String, dynamic> row) async {
-    final db = await database;
-    final id = row['id'];
-    await db.update('alerts', row, where: 'id = ?', whereArgs: [id]);
-  }
+  Future<Map<String, dynamic>?> getVitalSignById(String id) => 
+      vitalsDao.getVitalSignById(id);
 
-  Future<void> deleteAlert(String id) async {
-    final db = await database;
-    await db.update(
-        'alerts',
-        {
-          'is_deleted': 1,
-          'is_synced': 0,
-          'updated_at': DateTime.now().toIso8601String()
-        },
-        where: 'id = ?',
-        whereArgs: [id]);
-  }
+  // --- REMINDERS ---
+  Future<int> insertReminder(Map<String, dynamic> row) =>
+      systemDao.insertReminder(row);
 
-  Future<List<Map<String, dynamic>>> getUnsyncedAnnouncements() async {
-    final db = await database;
-    return await db
-        .query('announcements', where: 'is_synced = ?', whereArgs: [0]);
-  }
+  Future<List<Map<String, dynamic>>> getReminders(String userId) =>
+      systemDao.getReminders(userId);
 
-  Future<List<Map<String, dynamic>>> getUnsyncedAlerts() async {
-    final db = await database;
-    return await db.query('alerts', where: 'is_synced = ?', whereArgs: [0]);
-  }
+  Future<int> updateReminder(Map<String, dynamic> row) =>
+      systemDao.updateReminder(row);
 
-  Future<List<Map<String, dynamic>>> getUnsyncedSchedules() async {
-    final db = await database;
-    return await db.query('schedules', where: 'is_synced = ?', whereArgs: [0]);
-  }
+  Future<int> deleteReminder(int id) => systemDao.deleteReminder(id);
 
-  Future<List<Map<String, dynamic>>> getUnsyncedChatMessages() async {
-    final db = await database;
-    return await db.query('chat_messages', where: 'is_synced = ?', whereArgs: [0]);
-  }
+  Future<int> deleteAllReminders(String userId) =>
+      systemDao.deleteAllReminders(userId);
 
-  Future<Map<String, dynamic>?> getVitalSignById(String id) async {
-    final db = await database;
-    final maps = await db.query('vitals', where: 'id = ?', whereArgs: [id]);
-    return maps.isNotEmpty ? maps.first : null;
-  }
+  // --- SYSTEM LOGS ---
+  Future<void> createSystemLog(SystemLog log) => systemDao.createSystemLog(log);
 
-  // --- REMINDERS (NEW) ---
-  Future<int> insertReminder(Map<String, dynamic> row) async {
-    final db = await database;
-    return await db.insert('reminders', row,
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  Future<List<SystemLog>> getSystemLogs({int limit = 100}) =>
+      systemDao.getSystemLogs(limit: limit);
 
-  Future<List<Map<String, dynamic>>> getReminders(String userId) async {
-    final db = await database;
-    return await db.query('reminders',
-        where: 'user_id = ?', whereArgs: [userId], orderBy: 'time ASC');
-  }
+  Future<List<SystemLog>> getUnsyncedSystemLogs() =>
+      systemDao.getUnsyncedSystemLogs();
 
-  Future<int> updateReminder(Map<String, dynamic> row) async {
-    final db = await database;
-    final id = row['id'];
-    final Map<String, dynamic> dbRow = Map.from(row);
-    if (dbRow.containsKey('userId')) {
-      dbRow['user_id'] = dbRow['userId'];
-      dbRow.remove('userId');
-    }
-    return await db.update('reminders', dbRow, where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<int> deleteReminder(int id) async {
-    final db = await database;
-    return await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<int> deleteAllReminders(String userId) async {
-    final db = await database;
-    return await db.delete('reminders', where: 'user_id = ?', whereArgs: [userId]);
-  }
-
-  // --- SYSTEM LOGS MODULE ---
-  Future<void> createSystemLog(SystemLog log) async {
-    final db = await instance.database;
-    await db.insert('system_logs', log.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<List<SystemLog>> getSystemLogs({int limit = 100}) async {
-    final db = await instance.database;
-    final result = await db.query('system_logs',
-        orderBy: 'timestamp DESC', limit: limit);
-    return result.map((json) => SystemLog.fromMap(json)).toList();
-  }
-
-  Future<List<SystemLog>> getUnsyncedSystemLogs() async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'system_logs',
-      where: 'is_synced = ?',
-      whereArgs: [0],
-    );
-    return maps.map((map) => SystemLog.fromMap(map)).toList();
-  }
-
-  Future<void> markSystemLogAsSynced(String id) async {
-    final db = await instance.database;
-    await db.update(
-      'system_logs',
-      {'is_synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
+  Future<void> markSystemLogAsSynced(String id) =>
+      systemDao.markSystemLogAsSynced(id);
 }
