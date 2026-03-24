@@ -54,12 +54,17 @@ class WebInitializationService {
 
   Future<void> _initSupabase() async {
     try {
-      final supabaseUrl = dotenv.env['SUPABASE_URL'];
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+      final supabaseUrl = const String.fromEnvironment('SUPABASE_URL', defaultValue: '').isNotEmpty 
+          ? const String.fromEnvironment('SUPABASE_URL') 
+          : dotenv.env['SUPABASE_URL'];
+          
+      final supabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '').isNotEmpty 
+          ? const String.fromEnvironment('SUPABASE_ANON_KEY') 
+          : dotenv.env['SUPABASE_ANON_KEY'];
 
       if (supabaseUrl == null || supabaseUrl.isEmpty ||
           supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env");
+        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY dynamically injected");
       }
 
       await Supabase.initialize(

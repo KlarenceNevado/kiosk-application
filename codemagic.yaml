@@ -48,7 +48,9 @@ workflows:
           flutter build web \
             --release \
             --target=lib/apps/patient/main_patient_web.dart \
-            --base-href "/kiosk-application/"
+            --base-href "/kiosk-application/" \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
       - name: Deploy to GitHub Pages
         script: |
           cd build/web
