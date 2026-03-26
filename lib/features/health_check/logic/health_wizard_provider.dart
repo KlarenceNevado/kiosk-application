@@ -72,6 +72,7 @@ class HealthWizardProvider extends ChangeNotifier {
 
   void startHealthCheck() {
     SystemLogService().logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
+
     _sensorSubscription?.cancel();
     _sensorSubscription = _sensorManager.allDataStream.listen((event) {
       _status = event.status;
@@ -102,9 +103,9 @@ class HealthWizardProvider extends ChangeNotifier {
       _status = SensorStatus.error;
       notifyListeners();
     });
-
-    _sensorManager.startAll();
   }
+
+
 
   void stopHealthCheck() {
     SystemLogService().logAction(action: 'HEALTH_CHECK_STOP', module: 'HEALTH_CHECK');
@@ -139,6 +140,14 @@ class HealthWizardProvider extends ChangeNotifier {
     );
   }
 
+  void startSensor(SensorType type) {
+    _sensorManager.startSensor(type);
+  }
+
+  void stopSensor(SensorType type) {
+    _sensorManager.stopSensor(type);
+  }
+
   @override
   void dispose() {
     _sensorSubscription?.cancel();
@@ -146,3 +155,4 @@ class HealthWizardProvider extends ChangeNotifier {
     super.dispose();
   }
 }
+

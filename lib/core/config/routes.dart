@@ -12,8 +12,9 @@ import '../../features/health_check/screens/summary_screen.dart';
 
 // --- INDIVIDUAL TESTS ---
 import '../../features/health_check/screens/individual_tests/individual_tests_menu.dart';
-import '../../features/health_check/screens/individual_tests/single_sensor_test_screen.dart';
+import 'package:kiosk_application/features/health_check/screens/individual_tests/single_sensor_test_screen.dart';
 import '../../features/health_check/screens/individual_tests/bmi_test_screen.dart';
+
 
 // --- HISTORY & HELP ---
 import '../../features/user_history/screens/history_list_screen.dart';
@@ -34,37 +35,9 @@ import '../../features/patient/screens/patient_nav_shell.dart';
 import '../../features/mobile/screens/mobile_login_screen.dart';
 import '../../features/mobile/screens/mobile_splash_screen.dart';
 
-class AppRoutes {
-  static const String login = '/login';
-  static const String register = '/register';
-  static const String home = '/';
+import 'route_names.dart';
+export 'route_names.dart';
 
-  static const String healthWizard = '/health-check';
-  static const String summary = '/summary';
-
-  static const String individualTests = '/tests';
-  static const String testTemperature = '/tests/temp';
-  static const String testBloodPressure = '/tests/bp';
-  static const String testHeartRate = '/tests/hr';
-  static const String testOxygen = '/tests/spo2';
-  static const String testBmi = '/tests/bmi';
-
-  static const String history = '/history';
-  static const String help = '/help';
-  static const String healthTips = '/health-tips';
-
-  static const String adminLogin = '/admin/login';
-  static const String adminDashboard = '/admin/dashboard';
-  static const String adminLogs = '/admin/logs';
-  static const String adminUsers = '/admin/users';
-  static const String adminSystemInfo = '/admin/info';
-  static const String adminSettings = '/admin/settings';
-
-  static const String patientLogin = '/patient/login';
-  static const String patientDashboard = '/patient/dashboard';
-  static const String patientHome = '/patient/home';
-  static const String patientSplash = '/patient/splash';
-}
 
 // Shared Route List with Fluid Transitions
 List<GoRoute> _sharedRoutes = [
@@ -78,13 +51,14 @@ List<GoRoute> _sharedRoutes = [
   _fluidRoute(AppRoutes.summary, const SummaryScreen()),
   _fluidRoute(AppRoutes.individualTests, const IndividualTestsMenu()),
   _fluidRoute(AppRoutes.testTemperature,
-      const SingleSensorTestScreen(type: SensorType.temperature)),
+      const SingleSensorTestScreen(type: TestSensorType.temperature)),
   _fluidRoute(AppRoutes.testBloodPressure,
-      const SingleSensorTestScreen(type: SensorType.bloodPressure)),
+      const SingleSensorTestScreen(type: TestSensorType.bloodPressure)),
   _fluidRoute(AppRoutes.testHeartRate,
-      const SingleSensorTestScreen(type: SensorType.heartRate)),
+      const SingleSensorTestScreen(type: TestSensorType.heartRate)),
   _fluidRoute(AppRoutes.testOxygen,
-      const SingleSensorTestScreen(type: SensorType.oxygen)),
+      const SingleSensorTestScreen(type: TestSensorType.oxygen)),
+
   _fluidRoute(AppRoutes.testBmi, const BmiTestScreen()),
   _fluidRoute(AppRoutes.history, const HistoryListScreen()),
   _fluidRoute(AppRoutes.help, const HelpInfoScreen()),

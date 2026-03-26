@@ -84,10 +84,39 @@ class KioskApp extends StatelessWidget {
       builder: (context, child) {
         ErrorWidget.builder = ErrorHandler.errorWidgetBuilder;
         return SessionTimeoutManager(
-          duration: const Duration(minutes: 2),
+          duration: const Duration(seconds: 45),
+          onTimeout: () {
+            // Check if already at login to prevent redundant redirects
+            final String location = appRouter.routerDelegate.currentConfiguration.uri.toString();
+            if (location == AppRoutes.login) {
+              debugPrint("ℹ️ Inactivity Timeout: Already at login.");
+              return;
+            }
+
+            debugPrint("⚠️ Inactivity Timeout: Logging out and redirecting...");
+            
+            // 1. Hard logout
+            context.read<IAuthRepository>().logout();
+            
+            // 2. Redirect using Global Router (Safe from context issues)
+            appRouter.go(AppRoutes.login);
+
+            // 3. Inform the user
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            messenger?.clearSnackBars();
+            messenger?.showSnackBar(
+              const SnackBar(
+                content: Text("Logged out due to inactivity."),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          },
           child: child,
         );
+
       },
+
     );
   }
 }

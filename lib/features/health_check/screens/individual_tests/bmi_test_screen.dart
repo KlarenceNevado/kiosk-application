@@ -6,6 +6,8 @@ import '../../../../core/widgets/kiosk_scaffold.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../../../core/widgets/virtual_keyboard.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
+
 
 // DATA & REPO
 import '../../../user_history/domain/i_history_repository.dart';
@@ -186,7 +188,9 @@ class _BmiTestScreenState extends State<BmiTestScreen> {
               onPressed: () {
                 int? height = int.tryParse(_heightController.text);
                 if (height != null && height > 50 && height < 250) {
-                  context.read<HealthWizardProvider>().setHeight(height);
+                  final provider = context.read<HealthWizardProvider>();
+                  provider.setHeight(height);
+                  provider.startSensor(SensorType.weight);
                   setState(() => _stage = 1);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

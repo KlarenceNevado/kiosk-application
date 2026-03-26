@@ -7,16 +7,18 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/kiosk_scaffold.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart' as hw;
 
 // DATA & REPO
 import '../../../user_history/domain/i_history_repository.dart';
 import '../../../auth/domain/i_auth_repository.dart';
 import '../../models/vital_signs_model.dart';
 
-enum SensorType { temperature, bloodPressure, heartRate, oxygen }
+enum TestSensorType { temperature, bloodPressure, heartRate, oxygen }
+
 
 class SingleSensorTestScreen extends StatefulWidget {
-  final SensorType type;
+  final TestSensorType type;
 
   const SingleSensorTestScreen({super.key, required this.type});
 
@@ -32,7 +34,24 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
 
   void _startScan() {
     setState(() => _viewState = 1);
-    context.read<HealthWizardProvider>().startHealthCheck();
+    final provider = context.read<HealthWizardProvider>();
+    provider.startHealthCheck();
+
+    // Map local type to hardware type and start laziness
+    switch (widget.type) {
+      case TestSensorType.temperature:
+        provider.startSensor(hw.SensorType.thermometer);
+        break;
+      case TestSensorType.bloodPressure:
+        provider.startSensor(hw.SensorType.bloodPressure);
+        break;
+      case TestSensorType.heartRate:
+      case TestSensorType.oxygen:
+        provider.startSensor(hw.SensorType.oximeter);
+        break;
+    }
+
+
 
     // SIMULATE LIVE READING FLUCTUATION
     int ticks = 0;
@@ -41,17 +60,18 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
       if (mounted) {
         setState(() {
           // Generate realistic fluctuations based on sensor type
-          if (widget.type == SensorType.temperature) {
+          if (widget.type == TestSensorType.temperature) {
             _liveDisplay =
                 (34.0 + Random().nextDouble() * 3).toStringAsFixed(1);
-          } else if (widget.type == SensorType.heartRate) {
+          } else if (widget.type == TestSensorType.heartRate) {
             _liveDisplay = (60 + Random().nextInt(40)).toString();
-          } else if (widget.type == SensorType.oxygen) {
+          } else if (widget.type == TestSensorType.oxygen) {
             _liveDisplay = (90 + Random().nextInt(9)).toString();
-          } else if (widget.type == SensorType.bloodPressure) {
+          } else if (widget.type == TestSensorType.bloodPressure) {
             _liveDisplay =
                 "${90 + Random().nextInt(50)}"; // Just Systolic for animation
           }
+
         });
       }
 
@@ -84,16 +104,17 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
       userId: authRepo.currentUser!.id,
       timestamp: DateTime.now(),
       heartRate:
-          widget.type == SensorType.heartRate ? provider.currentHeartRate : 0,
-      systolicBP: widget.type == SensorType.bloodPressure
+          widget.type == TestSensorType.heartRate ? provider.currentHeartRate : 0,
+      systolicBP: widget.type == TestSensorType.bloodPressure
           ? provider.currentSystolic
           : 0,
-      diastolicBP: widget.type == SensorType.bloodPressure
+      diastolicBP: widget.type == TestSensorType.bloodPressure
           ? provider.currentDiastolic
           : 0,
-      oxygen: widget.type == SensorType.oxygen ? provider.currentSpO2 : 0,
+      oxygen: widget.type == TestSensorType.oxygen ? provider.currentSpO2 : 0,
       temperature:
-          widget.type == SensorType.temperature ? provider.currentTemp : 0.0,
+          widget.type == TestSensorType.temperature ? provider.currentTemp : 0.0,
+
     );
 
     await historyRepo.addRecord(record);
@@ -130,7 +151,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
     IconData icon = Icons.help;
 
     switch (widget.type) {
-      case SensorType.temperature:
+      case TestSensorType.temperature:
         title = "Body Temperature";
         instruction = "Position forehead 5cm from sensor.";
         info = "Detects fever or hypothermia.";
@@ -142,7 +163,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
           statusColor = Colors.orange;
         }
         break;
-      case SensorType.bloodPressure:
+      case TestSensorType.bloodPressure:
         title = "Blood Pressure";
         instruction = "Keep arm steady at heart level.";
         info = "Measures heart workload.";
@@ -155,7 +176,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
           statusColor = Colors.red;
         }
         break;
-      case SensorType.heartRate:
+      case TestSensorType.heartRate:
         title = "Heart Rate";
         instruction = "Place finger on the sensor.";
         info = "Measures pulse speed.";
@@ -167,7 +188,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
           statusColor = Colors.orange;
         }
         break;
-      case SensorType.oxygen:
+      case TestSensorType.oxygen:
         title = "Oxygen Saturation";
         instruction = "Keep finger still in the clip.";
         info = "Measures lung efficiency.";
@@ -180,6 +201,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
         }
         break;
     }
+
 
     return KioskScaffold(
       title: title,

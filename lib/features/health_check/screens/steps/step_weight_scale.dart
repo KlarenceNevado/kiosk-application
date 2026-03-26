@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
+
 
 class StepWeightScale extends StatefulWidget {
   final VoidCallback onNext;
@@ -21,6 +23,7 @@ class _StepWeightScaleState extends State<StepWeightScale> {
 
   void _startMeasurement() {
     setState(() => _state = 1);
+    context.read<HealthWizardProvider>().startSensor(SensorType.weight);
 
     // Simulation
     double currentSimWeight = 40.0;

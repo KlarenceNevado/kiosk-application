@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
+
 
 class Step3SensorScan extends StatefulWidget {
   final VoidCallback onNext;
@@ -22,6 +24,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> {
 
   void _startMeasurement() {
     setState(() => _state = 1);
+    context.read<HealthWizardProvider>().startSensor(SensorType.thermometer);
 
     // Simulate finding the temp
     double currentSimTemp = 34.0;

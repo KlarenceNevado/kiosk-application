@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
+
 
 class StepPulseOx extends StatefulWidget {
   final VoidCallback onNext;
@@ -22,6 +24,7 @@ class _StepPulseOxState extends State<StepPulseOx> {
 
   void _startMeasurement() {
     setState(() => _state = 1);
+    context.read<HealthWizardProvider>().startSensor(SensorType.oximeter);
 
     int ticks = 0;
     _simTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {

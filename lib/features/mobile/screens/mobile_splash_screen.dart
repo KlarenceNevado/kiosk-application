@@ -4,7 +4,8 @@ import 'dart:async';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../core/config/routes.dart';
+import '../../../../core/config/route_names.dart';
+
 
 class MobileSplashScreen extends StatefulWidget {
   const MobileSplashScreen({super.key});

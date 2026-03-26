@@ -35,18 +35,33 @@ class SerialSensorService implements ISensorService {
   @override
   SensorStatus get currentStatus => _status;
 
+  static List<String>? _availablePortsCache;
+  static DateTime? _lastCacheUpdate;
+
   @override
   void startReading() async {
+    // YIELD IMMEDIATELY: Ensure the UI/event loop can respond to the tap action 
+    // before the potentially heavy serial port operations begin.
+    await Future.delayed(Duration.zero);
+
     if (_status == SensorStatus.reading || _status == SensorStatus.connecting) {
       return;
     }
 
     _updateStatus(SensorStatus.connecting);
+
     
     try {
-      // Check if port exists before attempting to open
-      final availablePorts = SerialPort.availablePorts;
-      if (!availablePorts.contains(portName)) {
+      // SMART CACHE: Check if port exists before attempting to open
+      // Use a 5-second cache to avoid redundant bus scans across multiple sensors.
+      if (_availablePortsCache == null || 
+          _lastCacheUpdate == null || 
+          DateTime.now().difference(_lastCacheUpdate!).inSeconds > 5) {
+        _availablePortsCache = SerialPort.availablePorts;
+        _lastCacheUpdate = DateTime.now();
+      }
+
+      if (!_availablePortsCache!.contains(portName)) {
         _updateStatus(SensorStatus.disconnected);
         debugPrint("ℹ️ [SerialSensorService] Port $portName not found. Hardware is likely disconnected.");
         return; 

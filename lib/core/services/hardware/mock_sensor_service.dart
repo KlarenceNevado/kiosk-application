@@ -35,22 +35,32 @@ class MockSensorService implements ISensorService {
 
     _updateStatus(SensorStatus.reading);
 
-    _timer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
       dynamic value;
       switch (type) {
         case SensorType.weight:
-          value = 70.0 + _random.nextDouble() * 2;
+          // Smooth increment until ~70kg
+          double baseWeight = 70.0;
+          value = baseWeight + (_random.nextDouble() * 0.5);
           break;
         case SensorType.oximeter:
-          value = { 'spo2': 95 + _random.nextInt(5), 'bpm': 70 + _random.nextInt(20) };
+          value = { 
+            'spo2': 97 + _random.nextInt(3), 
+            'bpm': 72 + _random.nextInt(10) 
+          };
           break;
         case SensorType.thermometer:
-          value = 36.5 + _random.nextDouble();
+          value = 36.6 + (_random.nextDouble() * 0.4);
           break;
         case SensorType.bloodPressure:
-          value = { 'sys': 110 + _random.nextInt(20), 'dia': 70 + _random.nextInt(15) };
+          // Simulate the "pumping" feel or just fluctuating final values
+          value = { 
+            'sys': 115 + _random.nextInt(10), 
+            'dia': 75 + _random.nextInt(10) 
+          };
           break;
       }
+
       _dataController.add(value);
     });
   }

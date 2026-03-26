@@ -25,7 +25,9 @@ class SensorManager {
     // For now, we initialize all as Mock services in "standby" mode
     // These can be replaced with SerialSensorService when real hardware is defined
     for (var type in SensorType.values) {
-      if (AppEnvironment().isKiosk && (Platform.isWindows || Platform.isLinux)) {
+      if (AppEnvironment().isKiosk && 
+          !AppEnvironment().useSimulation && 
+          (Platform.isWindows || Platform.isLinux)) {
         // Real Serial Ports for Desktop Kiosk
         // Use unique COM ports to avoid "Access is denied"
         final portMap = {
@@ -39,6 +41,7 @@ class SensorManager {
       } else {
         _sensors[type] = MockSensorService(type);
       }
+
       
       // Listen to each sensor and pipe to the unified controller
       _sensors[type]!.dataStream.listen((data) {
@@ -85,11 +88,15 @@ class SensorManager {
   ISensorService get thermometerSensor => _sensors[SensorType.thermometer]!;
   ISensorService get bpSensor => _sensors[SensorType.bloodPressure]!;
 
-  void startAll() {
+  Future<void> startAll() async {
     for (var s in _sensors.values) {
       s.startReading();
+      // STAGGERED START: Introduce a small delay between each sensor open
+      // to spread out CPU/Bus load and avoid UI micro-stutters.
+      await Future.delayed(const Duration(milliseconds: 150));
     }
   }
+
 
   void stopAll() {
     for (var s in _sensors.values) {
@@ -97,8 +104,17 @@ class SensorManager {
     }
   }
 
+  void startSensor(SensorType type) {
+    _sensors[type]?.startReading();
+  }
+
+  void stopSensor(SensorType type) {
+    _sensors[type]?.stopReading();
+  }
+
   void dispose() {
     stopAll();
     _allDataController.close();
   }
 }
+

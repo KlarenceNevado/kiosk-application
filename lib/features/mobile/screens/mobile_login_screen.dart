@@ -7,7 +7,8 @@ import '../../../../core/widgets/flow_animated_button.dart';
 import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/config/routes.dart';
+import '../../../../core/config/route_names.dart';
+
 
 class MobileLoginScreen extends StatefulWidget {
   const MobileLoginScreen({super.key});

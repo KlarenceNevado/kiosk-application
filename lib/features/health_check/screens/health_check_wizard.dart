@@ -32,11 +32,14 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
     super.initState();
     _pageController = PageController();
 
-    // Initialize Hardware
+    // Prepare listener, but DO NOT start sensors yet to avoid UI lag on entry.
+    // Sensors will be started lazily as the user progresses through steps.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<HealthWizardProvider>().startHealthCheck();
+      final provider = context.read<HealthWizardProvider>();
+      provider.startHealthCheck(); // This now just sets up the listener but doesn't call startAll internally if we change it
     });
   }
+
 
   @override
   void dispose() {

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
+
 
 class StepBpConnect extends StatefulWidget {
   final VoidCallback onNext;
@@ -20,6 +22,7 @@ class _StepBpConnectState extends State<StepBpConnect> {
 
   void _startMeasurement() {
     setState(() => _state = 1);
+    context.read<HealthWizardProvider>().startSensor(SensorType.bloodPressure);
 
     // Simulate Inflation (0 -> 160)
     _simTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {

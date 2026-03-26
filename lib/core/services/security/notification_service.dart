@@ -2,10 +2,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter/material.dart';
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Use conditional imports to avoid dart:io on Web
+import 'notification_platform_helper.dart'
+    if (dart.library.io) 'notification_platform_helper_native.dart'
+    if (dart.library.html) 'notification_platform_helper_web.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -15,7 +19,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  bool get _isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get _isSupported => !kIsWeb && isNativeSupported;
+
 
   Future<void> init() async {
     // Only initialize on supported mobile platforms
@@ -67,7 +72,7 @@ class NotificationService {
   }
 
   Future<void> _createNotificationChannels() async {
-    if (!Platform.isAndroid) return;
+    if (!isNativeAndroid) return;
 
     final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
         flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
@@ -128,9 +133,9 @@ class NotificationService {
   Future<void> requestPermissions() async {
     if (!_isSupported) return;
     
-    if (Platform.isAndroid) {
+    if (isNativeAndroid) {
       await _requestAndroidPermissions();
-    } else if (Platform.isIOS) {
+    } else if (isNativeIOS) {
        await flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(
