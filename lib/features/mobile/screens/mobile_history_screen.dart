@@ -1,10 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/services/database/sync_service.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../services/patient_pdf_service.dart';
 
@@ -23,17 +24,24 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchHistory();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchHistory();
+    });
   }
 
   Future<void> _fetchHistory() async {
     try {
-      final user = context.read<AuthRepository>().currentUser;
+      final authRepo = context.read<IAuthRepository>();
+      final user = authRepo.currentUser;
       if (user == null) {
         setState(() => _isLoading = false);
         return;
       }
-      final records = await SyncService().fetchPatientVitals(user.id);
+      
+      final historyRepo = context.read<IHistoryRepository>();
+      await historyRepo.loadUserHistory(user.id);
+      final records = historyRepo.records;
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -81,229 +89,221 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                   itemCount: _records.length,
                   itemBuilder: (context, index) {
                     final record = _records[index];
-                    final date = record.timestamp;
 
-                    return GestureDetector(
-                      onTap: () async {
-                        final authRepo =
-                            Provider.of<AuthRepository>(context, listen: false);
-                        final currentUser = authRepo.currentUser;
-                        if (currentUser != null) {
-                          await PatientPdfService.generateAndPrintRecord(
-                            patient: currentUser,
-                            record: record,
-                          );
-                        }
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              )
-                            ]),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // DATE HEADER
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.brandGreenLight,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(
-                                        Icons.calendar_month_rounded,
-                                        color: AppColors.brandGreenDark,
-                                        size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      DateFormat('MMMM dd, yyyy').format(date),
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: AppColors.brandDark),
-                                    ),
-                                  ),
-                                  Text(
-                                    DateFormat('hh:mm a').format(date),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                        color: AppColors.textSecondary),
-                                  ),
-                                ],
-                              ),
-
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Divider(
-                                    height: 1, color: Color(0xFFEEEEEE)),
-                              ),
-
-                              // METRICS ROW 1
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  _metricBadge(
-                                      Icons.favorite_rounded,
-                                      "Pulse",
-                                      record.heartRate > 0
-                                          ? "${record.heartRate} bpm"
-                                          : "N/A",
-                                      Colors.red),
-                                  _metricBadge(
-                                      Icons.water_drop_rounded,
-                                      "SpO2",
-                                      record.oxygen > 0
-                                          ? "${record.oxygen}%"
-                                          : "N/A",
-                                      Colors.blue),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              // METRICS ROW 2
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  _metricBadge(
-                                      Icons.speed_rounded,
-                                      "BP",
-                                      (record.systolicBP > 0 &&
-                                              record.diastolicBP > 0)
-                                          ? "${record.systolicBP}/${record.diastolicBP}"
-                                          : "N/A",
-                                      Colors.orange),
-                                  _metricBadge(
-                                      Icons.thermostat_rounded,
-                                      "Temp",
-                                      record.temperature > 0
-                                          ? "${record.temperature} °C"
-                                          : "N/A",
-                                      Colors.orangeAccent),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              // METRICS ROW 3
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  _metricBadge(
-                                      Icons.monitor_weight_rounded,
-                                      "BMI",
-                                      record.bmi != null
-                                          ? "${record.bmi!.toStringAsFixed(1)} (${record.bmiCategory ?? 'N/A'})"
-                                          : "N/A",
-                                      Colors.purple),
-                                  const Expanded(child: SizedBox.shrink()),
-                                ],
-                              ),
-
-                              // BHW REMARKS SECTION
-                              if (record.remarks != null &&
-                                  record.remarks!.isNotEmpty) ...[
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  child: Divider(
-                                      height: 1, color: Color(0xFFEEEEEE)),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandGreen
-                                        .withValues(alpha: 0.05),
-                                    borderRadius: BorderRadius.circular(15),
-                                    border: Border.all(
-                                        color: AppColors.brandGreen
-                                            .withValues(alpha: 0.1)),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.note_alt_rounded,
-                                              size: 18,
-                                              color: AppColors.brandGreen),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            "BHW Remarks",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.brandGreenDark,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          _buildStatusBadge(record.status),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        record.remarks!,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: AppColors.brandDark,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                      if (record.followUpAction != null &&
-                                          record.followUpAction != 'none') ...[
-                                        const SizedBox(height: 12),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.orange
-                                                .withValues(alpha: 0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.info_outline,
-                                                  size: 14,
-                                                  color: Colors.orange),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                "Action: ${_formatAction(record.followUpAction!)}",
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.orange,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
+                    return _buildHistoryCard(record);
                   },
                 ),
+    );
+  }
+
+  Widget _buildHistoryCard(VitalSigns record) {
+    final date = record.timestamp;
+    final dateStr = DateFormat('MMM dd, yyyy').format(date);
+    final timeStr = DateFormat('hh:mm a').format(date);
+    final recordId = record.id.substring(0, 8).toUpperCase();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Date & ID
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dateStr,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    Text(
+                      timeStr,
+                      style: TextStyle(fontSize: 13, color: Colors.blueGrey.shade400),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.brandGreen.withValues(alpha: 0.2)),
+                  ),
+                  child: Text(
+                    "ID: $recordId",
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandGreen,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1),
+            ),
+
+            // Metrics Grid
+            Wrap(
+              spacing: 24,
+              runSpacing: 20,
+              children: [
+                _clinicalMetric(
+                  "Pulse Rate",
+                  record.heartRate > 0 ? "${record.heartRate}" : "--",
+                  "bpm",
+                  CupertinoIcons.heart_fill,
+                  Colors.red.shade600,
+                ),
+                _clinicalMetric(
+                  "Oxygen",
+                  record.oxygen > 0 ? "${record.oxygen}" : "--",
+                  "%",
+                  CupertinoIcons.wind,
+                  Colors.blue.shade600,
+                ),
+                _clinicalMetric(
+                  "Blood Pressure",
+                  (record.systolicBP > 0 && record.diastolicBP > 0)
+                      ? "${record.systolicBP}/${record.diastolicBP}"
+                      : "--",
+                  "mmHg",
+                  CupertinoIcons.gauge,
+                  Colors.orange.shade700,
+                ),
+                _clinicalMetric(
+                  "Temperature",
+                  record.temperature > 0 ? "${record.temperature}" : "--",
+                  "°C",
+                  CupertinoIcons.thermometer,
+                  Colors.amber.shade800,
+                ),
+              ],
+            ),
+
+            if (record.remarks != null && record.remarks!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blueGrey.shade100),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(CupertinoIcons.chat_bubble_text_fill, size: 14, color: Colors.blueGrey.shade400),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "MEDICAL REMARKS",
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                        ),
+                        const Spacer(),
+                        _buildStatusBadge(record.status),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      record.remarks!,
+                      style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xFF334155)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final authRepo = Provider.of<IAuthRepository>(context, listen: false);
+                  await PatientPdfService.generateAndPrintRecord(
+                    patient: authRepo.currentUser!,
+                    record: record,
+                  );
+                },
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text("ACCESS CLINICAL PDF"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brandGreen,
+                  side: BorderSide(color: AppColors.brandGreen.withValues(alpha: 0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _clinicalMetric(String label, String value, String unit, IconData icon, Color color) {
+    return SizedBox(
+      width: 145,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey.shade300,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.blueGrey.shade300,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -336,18 +336,6 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
     );
   }
 
-  String _formatAction(String action) {
-    switch (action) {
-      case 'advise_clinic':
-        return "Advise Clinic Visit";
-      case 'home_visit':
-        return "Schedule Home Visit";
-      case 'refer_municipal':
-        return "Refer to Municipal Office";
-      default:
-        return "No Action Needed";
-    }
-  }
 
   Widget _buildEmptyState() {
     return Center(
@@ -388,39 +376,4 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
     );
   }
 
-  Widget _metricBadge(IconData icon, String label, String value, Color color) {
-    return Expanded(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

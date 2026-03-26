@@ -15,6 +15,9 @@ import '../security/notification_service.dart';
 import '../database/sync_service.dart';
 import '../../errors/error_handler.dart';
 import '../database/connection_manager.dart';
+import '../system/system_log_service.dart';
+import '../hardware/sensor_manager.dart';
+import '../hardware/sensor_service_interface.dart';
 
 class InitializationService {
   static final InitializationService _instance = InitializationService._internal();
@@ -34,13 +37,13 @@ class InitializationService {
       _initDesktopDatabase();
     }
 
-    // 3. Core Logic & Security Services
-    ErrorHandler.init();
-    await ConfigService().loadSettings();
-    await EncryptionService().init();
-
-    // 4. Load Environment Variables (.env)
+    // 3. Environment & Config
     await _initDotEnv();
+    await ConfigService().loadSettings();
+
+    // 4. Core Logic & Security Services
+    ErrorHandler.init();
+    await EncryptionService().init();
 
     // 5. Initialize Supabase (Offline-First Cloud Sync)
     await _initSupabase();
@@ -66,7 +69,33 @@ class InitializationService {
       SyncService().startSyncLoop();
     }
 
+    // 10. Initial Uptime & Health Log (H2 Validation)
+    if (mode == AppMode.kiosk) {
+      _logInitialHealth();
+    }
+
     debugPrint("✅ [InitializationService] Initialization complete.");
+  }
+
+  Future<void> _logInitialHealth() async {
+    try {
+      final sensorManager = SensorManager();
+      // We wait a bit for sensors to report their initial status
+      await Future.delayed(const Duration(seconds: 2));
+      
+      final sensors = {
+        'Weight': sensorManager.getSensor(SensorType.weight).currentStatus.toString(),
+        'Oximeter': sensorManager.getSensor(SensorType.oximeter).currentStatus.toString(),
+        'Thermometer': sensorManager.getSensor(SensorType.thermometer).currentStatus.toString(),
+        'BP': sensorManager.getSensor(SensorType.bloodPressure).currentStatus.toString(),
+      };
+
+      await SystemLogService().logUptimeHealth(
+        availableSensors: sensors,
+      );
+    } catch (e) {
+      debugPrint("⚠️ InitializationService (Health Log): $e");
+    }
   }
 
   void _initTimezone() {
@@ -105,12 +134,18 @@ class InitializationService {
 
   Future<void> _initSupabase() async {
     try {
-      final supabaseUrl = dotenv.env['SUPABASE_URL'];
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+      // Prioritize --dart-define (injected during build) over .env file
+      final supabaseUrl = const String.fromEnvironment('SUPABASE_URL').isNotEmpty 
+          ? const String.fromEnvironment('SUPABASE_URL') 
+          : dotenv.env['SUPABASE_URL'];
+          
+      final supabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY').isNotEmpty 
+          ? const String.fromEnvironment('SUPABASE_ANON_KEY') 
+          : dotenv.env['SUPABASE_ANON_KEY'];
 
       if (supabaseUrl == null || supabaseUrl.isEmpty || 
           supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env");
+        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env or --dart-define");
       }
 
       await Supabase.initialize(

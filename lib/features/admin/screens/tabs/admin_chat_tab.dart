@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 import '../../../auth/models/user_model.dart';
-import '../../../chat/data/chat_repository.dart';
+import '../../../chat/domain/i_chat_repository.dart';
 import '../../../chat/models/chat_message.dart';
 
 class AdminChatTab extends StatefulWidget {
@@ -61,14 +61,14 @@ class _AdminChatTabState extends State<AdminChatTab> {
   @override
   Widget build(BuildContext context) {
     final patients = context
-        .watch<AuthRepository>()
+        .watch<IAuthRepository>()
         .users
         .where((u) => u.parentId == null)
         .where((u) =>
             u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             u.phoneNumber.contains(_searchQuery))
         .toList();
-    final chatRepo = context.watch<ChatRepository>();
+    final chatRepo = context.watch<IChatRepository>();
     final User? activePatient =
         chatRepo.selectedPatient ?? _internalSelectedPatient;
 
@@ -273,7 +273,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                   CircleAvatar(
                       radius: 4,
                       backgroundColor: context
-                                  .watch<ChatRepository>()
+                                  .watch<IChatRepository>()
                                   .onlineStatus[activePatient.id] ==
                               true
                           ? AppColors.brandGreen
@@ -281,7 +281,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                   const SizedBox(width: 6),
                   Text(
                       context
-                                  .watch<ChatRepository>()
+                                  .watch<IChatRepository>()
                                   .onlineStatus[activePatient.id] ==
                               true
                           ? "Online"
@@ -316,7 +316,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
 
   Widget _buildMessageBubble(ChatMessage msg, bool isMe) {
     final repliedMsg = msg.replyTo != null
-        ? context.read<ChatRepository>().messages.firstWhere(
+        ? context.read<IChatRepository>().messages.firstWhere(
             (m) => m.id == msg.replyTo,
             orElse: () => ChatMessage(
                 id: '',
@@ -426,7 +426,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
     );
   }
 
-  Widget _buildReplyPreview(ChatRepository repo) {
+  Widget _buildReplyPreview(IChatRepository repo) {
     final msg = repo.messages.firstWhere((m) => m.id == _replyingToId!);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
@@ -514,13 +514,13 @@ class _AdminChatTabState extends State<AdminChatTab> {
   }
 
   void _sendMessage() {
-    final activePatient = context.read<ChatRepository>().selectedPatient ??
+    final activePatient = context.read<IChatRepository>().selectedPatient ??
         _internalSelectedPatient;
     if (_messageController.text.trim().isEmpty || activePatient == null) {
       return;
     }
 
-    final chatRepo = context.read<ChatRepository>();
+    final chatRepo = context.read<IChatRepository>();
     final message = ChatMessage(
       id: const Uuid().v4(),
       senderId: 'admin',
@@ -586,7 +586,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                 title:
                     const Text("Delete", style: TextStyle(color: Colors.red)),
                 onTap: () {
-                  context.read<ChatRepository>().deleteMessage(msg.id);
+                  context.read<IChatRepository>().deleteMessage(msg.id);
                   Navigator.pop(context);
                 },
               ),
@@ -634,7 +634,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
             SizedBox(width: 12),
             Text("Delete", style: TextStyle(color: Colors.red))
           ]),
-          onTap: () => context.read<ChatRepository>().deleteMessage(msg.id),
+          onTap: () => context.read<IChatRepository>().deleteMessage(msg.id),
         ),
       ],
     );
@@ -659,7 +659,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
               return GestureDetector(
                 onTap: () {
                   context
-                      .read<ChatRepository>()
+                      .read<IChatRepository>()
                       .toggleReaction(msg.id, 'admin', emoji);
                   Navigator.pop(context);
                 },
@@ -674,7 +674,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
 
   void _showForwardPicker(ChatMessage msg) {
     final patients = context
-        .read<AuthRepository>()
+        .read<IAuthRepository>()
         .users
         .where((u) => u.parentId == null)
         .toList();
@@ -704,7 +704,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                       title: Text(p.fullName),
                       onTap: () {
                         context
-                            .read<ChatRepository>()
+                            .read<IChatRepository>()
                             .forwardMessage(msg, p.id);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

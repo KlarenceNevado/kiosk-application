@@ -16,8 +16,8 @@ import '../../../core/config/routes.dart';
 import '../../../core/utils/vital_validator.dart';
 
 // DATA
-import '../../../features/auth/data/auth_repository.dart';
-import '../data/history_repository.dart';
+import '../../../features/auth/domain/i_auth_repository.dart';
+import '../domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 // NEW: Import Security
 import '../../../core/services/security/encryption_service.dart';
@@ -48,9 +48,9 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final user = context.read<AuthRepository>().currentUser;
+        final user = context.read<IAuthRepository>().currentUser;
         if (user != null) {
-          context.read<HistoryRepository>().loadUserHistory(user.id);
+          context.read<IHistoryRepository>().loadUserHistory(user.id);
         }
       }
     });
@@ -78,7 +78,7 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final historyRepo = context.watch<HistoryRepository>();
+    final historyRepo = context.watch<IHistoryRepository>();
     final records = historyRepo.records;
     final isLoading = historyRepo.isLoading;
 
@@ -106,9 +106,9 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
             onPressed: () {
-              final user = context.read<AuthRepository>().currentUser;
+              final user = context.read<IAuthRepository>().currentUser;
               if (user != null) {
-                context.read<HistoryRepository>().loadUserHistory(user.id);
+                context.read<IHistoryRepository>().loadUserHistory(user.id);
               }
             },
           ),

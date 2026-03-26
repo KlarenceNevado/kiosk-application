@@ -6,18 +6,23 @@ import '../../../core/services/system/file_storage_service.dart';
 import 'package:open_file/open_file.dart';
 import 'dart:io';
 
-class HistoryRepository extends ChangeNotifier {
+import '../domain/i_history_repository.dart';
+
+class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   List<VitalSigns> _records = [];
   bool _isLoading = false;
 
+  @override
   List<VitalSigns> get records => List.unmodifiable(_records);
+  @override
   bool get isLoading => _isLoading;
 
   /// Loads data ONLY for the specific user
+  @override
   Future<void> loadUserHistory(String userId) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       _records = await _dbHelper.getRecordsByUserId(userId);
@@ -30,9 +35,10 @@ class HistoryRepository extends ChangeNotifier {
   }
 
   /// Loads ALL data regardless of user
+  @override
   Future<void> loadAllHistory() async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       _records = await _dbHelper.getAllRecords();
@@ -44,9 +50,10 @@ class HistoryRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> addRecord(VitalSigns record) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       await _dbHelper.createRecord(record);
@@ -64,9 +71,10 @@ class HistoryRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> updateRecord(VitalSigns updatedRecord) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       await _dbHelper.updateRecord(updatedRecord);
@@ -86,6 +94,7 @@ class HistoryRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> clearHistory() async {
     try {
       await _dbHelper.clearHistory();
@@ -96,6 +105,7 @@ class HistoryRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> openReport(VitalSigns record) async {
     if (record.reportPath != null && await File(record.reportPath!).exists()) {
       await OpenFile.open(record.reportPath!);
@@ -104,7 +114,7 @@ class HistoryRepository extends ChangeNotifier {
 
     if (record.reportUrl != null) {
       _isLoading = true;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
       try {
         final file = await FileStorageService().getCachedFile(record.reportUrl!);
         if (file != null) {

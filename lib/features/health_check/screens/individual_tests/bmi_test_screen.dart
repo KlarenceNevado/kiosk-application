@@ -8,8 +8,8 @@ import '../../../../core/widgets/virtual_keyboard.dart';
 import '../../logic/health_wizard_provider.dart';
 
 // DATA & REPO
-import '../../../user_history/data/history_repository.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../user_history/domain/i_history_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 import '../../models/vital_signs_model.dart';
 
 class BmiTestScreen extends StatefulWidget {
@@ -38,8 +38,8 @@ class _BmiTestScreenState extends State<BmiTestScreen> {
   // SAVE LOGIC
   Future<void> _saveAndFinish() async {
     final provider = context.read<HealthWizardProvider>();
-    final historyRepo = context.read<HistoryRepository>();
-    final authRepo = context.read<AuthRepository>();
+    final historyRepo = context.read<IHistoryRepository>();
+    final authRepo = context.read<IAuthRepository>();
 
     // 1. Check if user is logged in
     if (authRepo.currentUser == null) {

@@ -1,8 +1,10 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'sync_handler.dart';
 import '../../../../features/chat/models/chat_message.dart';
+import '../../security/notification_service.dart';
 
 class ChatSyncHandler extends SyncHandler {
   ChatSyncHandler(super.supabase);
@@ -41,7 +43,7 @@ class ChatSyncHandler extends SyncHandler {
           supabaseData['message'] = supabaseData['content']; // Redundant column support
           
           await supabase.from('chat_messages').upsert(supabaseData);
-          syncedIds.add(row['id'] as String);
+          syncedIds.add(row['id']?.toString() ?? '');
           await dbHelper.systemDao.clearSyncMetadata('chat_messages', row['id']);
         } catch (e) {
           await dbHelper.updateSyncMetadata(
@@ -63,8 +65,68 @@ class ChatSyncHandler extends SyncHandler {
 
   @override
   Future<void> pull() async {
-    // Chat messages are usually pulled via Realtime or deliberate Fetch, 
-    // but we can implement a delta-pull if needed for history sync.
-    debugPrint("ℹ️ ChatSyncHandler: Pull (History Sync) not yet implemented.");
+    try {
+      final lastSync = await _getLastSync();
+      var query = supabase.from('chat_messages').select();
+      if (lastSync != null) {
+        query = query.gt('updated_at', lastSync);
+      }
+
+      final cloudData = await query.order('updated_at', ascending: true);
+      String? latestTimestamp;
+
+      for (var row in cloudData) {
+        // Decrypt content from Supabase
+        if (row['content'] != null && row['content'].toString().contains(':')) {
+           row['content'] = dbHelper.decrypt(row['content']);
+        }
+
+        final exists = await dbHelper.systemDao.getChatMessageById(row['id']);
+        if (exists == null) {
+          NotificationService().showChatNotification(
+            senderName: "Health Worker", // or join with sender name if available
+            message: row['content'] ?? "New message",
+          );
+        }
+
+        await dbHelper.systemDao.upsertChatMessage(row);
+        latestTimestamp = row['updated_at'];
+      }
+
+      if (latestTimestamp != null) {
+        await _updateLastSync(latestTimestamp);
+      }
+    } catch (e) {
+      debugPrint("❌ ChatSyncHandler: Pull Error: $e");
+    }
+  }
+
+  Future<String?> _getLastSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('last_sync_chat_messages');
+  }
+
+  Future<void> _updateLastSync(String? timestamp) async {
+    if (timestamp == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_sync_chat_messages', timestamp);
+  }
+
+  RealtimeChannel? _channel;
+  void subscribe() {
+    if (_channel != null) return;
+    _channel = supabase.channel('public:chat_messages_realtime').onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'chat_messages',
+      callback: (payload) {
+        pull(); // Trigger a pull to fetch and notify
+      },
+    ).subscribe();
+  }
+
+  void unsubscribe() {
+    _channel?.unsubscribe();
+    _channel = null;
   }
 }

@@ -60,8 +60,55 @@ class NotificationService {
     // Request Permissions on Android 13+
     try {
       await _requestAndroidPermissions();
+      await _createNotificationChannels(); 
     } catch (e) {
-      debugPrint("📢 NotificationService: Android permission request failed: $e");
+      debugPrint("📢 NotificationService: Android setup failed: $e");
+    }
+  }
+
+  Future<void> _createNotificationChannels() async {
+    if (!Platform.isAndroid) return;
+
+    final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidPlugin != null) {
+      const List<AndroidNotificationChannel> channels = [
+        AndroidNotificationChannel(
+          'patient_alerts_channel',
+          'Patient Alerts',
+          description: 'Emergency and status alerts for patients',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+        AndroidNotificationChannel(
+          'announcements_channel',
+          'Announcements',
+          description: 'Official barangay announcements',
+          importance: Importance.max,
+          playSound: true,
+        ),
+        AndroidNotificationChannel(
+          'chat_messages_channel',
+          'Direct Messages',
+          description: 'Messages from Health Workers',
+          importance: Importance.max,
+          playSound: true,
+        ),
+        AndroidNotificationChannel(
+          'system_alerts_channel',
+          'System Alerts',
+          description: 'High-priority emergency broadcasting',
+          importance: Importance.max,
+          playSound: true,
+        ),
+      ];
+
+      for (var channel in channels) {
+        await androidPlugin.createNotificationChannel(channel);
+      }
     }
   }
 

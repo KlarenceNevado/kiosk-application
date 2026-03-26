@@ -255,6 +255,14 @@ class PatientSyncHandler extends SyncHandler {
         prepared[key] = value ? 1 : 0;
       }
     });
+
+    if (prepared['phone_number'] != null) {
+      prepared['phone_number'] = dbHelper.decrypt(prepared['phone_number']);
+    }
+    if (prepared['pin_code'] != null) {
+      prepared['pin_code'] = dbHelper.decrypt(prepared['pin_code']);
+    }
+
     return prepared;
   }
 }

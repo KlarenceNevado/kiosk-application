@@ -2,25 +2,47 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../../auth/models/user_model.dart';
+import '../domain/i_auth_repository.dart';
 
 /// Web-safe AuthRepository that uses Supabase directly.
 /// No DatabaseHelper, SyncService, EncryptionService, or dart:io.
-class AuthRepository extends ChangeNotifier {
+class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   User? _currentUser;
   List<User> _users = [];
   bool _isLoading = false;
 
   final _supabase = Supabase.instance.client;
 
+  @override
   User? get currentUser => _currentUser;
+  @override
   List<User> get users => _users;
+  @override
   bool get isLoading => _isLoading;
 
-  AuthRepository() {
+  WebAuthRepository() {
     // No auto-load on web; user must log in explicitly.
   }
 
+  @override
+  Future<List<User>> searchPatients(String query) async {
+    try {
+      final response = await _supabase
+          .from('patients')
+          .select()
+          .ilike('full_name', '%$query%')
+          .eq('role', 'patient')
+          .eq('is_deleted', false)
+          .limit(10);
+      
+      return (response as List).map((json) => User.fromJson(json)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Mobile Companion Login (Phone + PIN) — Cloud only
+  @override
   Future<String?> loginPatientDevice(String phone, String pin) async {
     _isLoading = true;
     notifyListeners();
@@ -67,6 +89,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   /// Login by Name + Phone (for Kiosk-style login on web)
+  @override
   Future<String?> login(String firstName, String phoneNumber) async {
     _isLoading = true;
     notifyListeners();
@@ -118,12 +141,14 @@ class AuthRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> logout() async {
     _currentUser = null;
     _users.clear();
     notifyListeners();
   }
 
+  @override
   void switchUser(User user) {
     if (_users.any((u) => u.id == user.id)) {
       _currentUser = user;
@@ -131,6 +156,7 @@ class AuthRepository extends ChangeNotifier {
     }
   }
 
+  @override
   List<User> getLinkedAccounts() {
     if (_currentUser == null) {
       return [];
@@ -142,12 +168,36 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // Stubs for methods that may be called from shared UI but are no-ops on web
+  @override
   Future<void> refreshUsers() async {}
+  @override
   Future<String?> registerUser(User newUser) async => "Registration is only available at the Kiosk.";
+  @override
   Future<void> updateUser(User updatedUser) async {}
+  @override
   Future<void> deleteUser(String userId) async {}
+  @override
   Future<void> toggleUserStatus(User user, bool isActive) async {}
+  @override
   Future<String?> loginWithId(String userId) async => "QR Login is only available at the Kiosk.";
   List<User> getUnsyncedUsers() => [];
   Future<void> markUserAsSynced(String userId) async {}
+
+  @override
+  Future<bool> verifyAdminAccess(String pin) async => false;
+
+  @override
+  Future<bool> setPinCode(String newPin) async => false;
+
+  @override
+  Future<bool> verifyPatientPin(String enteredPin) async => false;
+
+  @override
+  User? getUserById(String uid) {
+    try {
+      return _users.firstWhere((u) => u.id == uid);
+    } catch (_) {
+      return null;
+    }
+  }
 }

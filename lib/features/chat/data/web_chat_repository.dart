@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../../auth/models/user_model.dart';
 import '../models/chat_message.dart';
 
+import '../domain/i_chat_repository.dart';
+
 /// Web-safe ChatRepository that uses Supabase directly.
 /// No DatabaseHelper, sqflite, dart:io.
-class ChatRepository extends ChangeNotifier {
+class WebChatRepository extends ChangeNotifier implements IChatRepository {
   final _supabase = Supabase.instance.client;
   final List<ChatMessage> _messages = [];
   final Map<String, bool> _onlineStatus = {};
@@ -14,10 +16,14 @@ class ChatRepository extends ChangeNotifier {
   RealtimeChannel? _presenceChannel;
   User? _selectedPatient;
 
+  @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+  @override
   Map<String, bool> get onlineStatus => Map.unmodifiable(_onlineStatus);
+  @override
   User? get selectedPatient => _selectedPatient;
 
+  @override
   void setSelectedPatient(User? patient) {
     _selectedPatient = patient;
     if (patient != null) {
@@ -27,6 +33,7 @@ class ChatRepository extends ChangeNotifier {
   }
 
   /// Initialize real-time listener for a specific chat between two users
+  @override
   void initChat(String currentUserId, String otherUserId) {
     _messages.clear();
     _syncDownCloudMessages(currentUserId, otherUserId);
@@ -146,6 +153,7 @@ class ChatRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   Future<void> sendMessage(ChatMessage message) async {
     // Optimistic local add
     final index = _messages.indexWhere((m) => m.id == message.id);
@@ -164,6 +172,7 @@ class ChatRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> toggleReaction(
       String messageId, String userId, String emoji) async {
     final index = _messages.indexWhere((m) => m.id == messageId);
@@ -200,6 +209,7 @@ class ChatRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> forwardMessage(ChatMessage original, String targetUserId) async {
     final forwarded = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -213,6 +223,7 @@ class ChatRepository extends ChangeNotifier {
     await sendMessage(forwarded);
   }
 
+  @override
   Future<void> deleteMessage(String messageId) async {
     try {
       await _supabase.from('chat_messages').delete().eq('id', messageId);

@@ -97,6 +97,10 @@ class HealthWizardProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+    }, onError: (e) {
+      debugPrint("❌ HealthWizardProvider: Sensor Error Observed: $e");
+      _status = SensorStatus.error;
+      notifyListeners();
     });
 
     _sensorManager.startAll();

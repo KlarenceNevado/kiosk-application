@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import '../sensor_service_interface.dart';
 import '../parsers/weight_parser.dart';
@@ -44,6 +44,14 @@ class SerialSensorService implements ISensorService {
     _updateStatus(SensorStatus.connecting);
     
     try {
+      // Check if port exists before attempting to open
+      final availablePorts = SerialPort.availablePorts;
+      if (!availablePorts.contains(portName)) {
+        _updateStatus(SensorStatus.disconnected);
+        debugPrint("ℹ️ [SerialSensorService] Port $portName not found. Hardware is likely disconnected.");
+        return; 
+      }
+
       _port = SerialPort(portName);
       
       if (!_port!.openReadWrite()) {

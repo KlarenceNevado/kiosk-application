@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
 
 // --- CORE SCREENS ---
 import '../../features/auth/screens/login_screen.dart';
@@ -65,116 +66,75 @@ class AppRoutes {
   static const String patientSplash = '/patient/splash';
 }
 
-// Shared Route List
+// Shared Route List with Fluid Transitions
 List<GoRoute> _sharedRoutes = [
-  GoRoute(
-    path: AppRoutes.login,
-    builder: (context, state) => const LoginScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.register,
-    builder: (context, state) {
-      final isAdmin = state.uri.queryParameters['admin'] == 'true';
-      return RegisterScreen(isAdmin: isAdmin);
-    },
-  ),
-  GoRoute(
-    path: AppRoutes.home,
-    builder: (context, state) => const MainMenuScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.healthWizard,
-    builder: (context, state) => const HealthCheckWizard(),
-  ),
-  GoRoute(
-    path: AppRoutes.summary,
-    builder: (context, state) => const SummaryScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.individualTests,
-    builder: (context, state) => const IndividualTestsMenu(),
-  ),
-  GoRoute(
-    path: AppRoutes.testTemperature,
-    builder: (context, state) =>
-        const SingleSensorTestScreen(type: SensorType.temperature),
-  ),
-  GoRoute(
-    path: AppRoutes.testBloodPressure,
-    builder: (context, state) =>
-        const SingleSensorTestScreen(type: SensorType.bloodPressure),
-  ),
-  GoRoute(
-    path: AppRoutes.testHeartRate,
-    builder: (context, state) =>
-        const SingleSensorTestScreen(type: SensorType.heartRate),
-  ),
-  GoRoute(
-    path: AppRoutes.testOxygen,
-    builder: (context, state) =>
-        const SingleSensorTestScreen(type: SensorType.oxygen),
-  ),
-  GoRoute(
-    path: AppRoutes.testBmi,
-    builder: (context, state) => const BmiTestScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.history,
-    builder: (context, state) => const HistoryListScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.help,
-    builder: (context, state) => const HelpInfoScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.healthTips,
-    builder: (context, state) => const HealthTipsScreen(),
-  ),
-
-  // ADMIN ROUTES
-  GoRoute(
-    path: AppRoutes.adminLogin,
-    builder: (context, state) => const AdminLoginScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.adminDashboard,
-    builder: (context, state) => const AdminDashboardScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.adminLogs,
-    builder: (context, state) => const SecurityLogsScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.adminUsers,
-    builder: (context, state) => const AdminUserManagementScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.adminSystemInfo,
-    builder: (context, state) => const SystemInfoScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.adminSettings,
-    builder: (context, state) => const AdminSettingsScreen(),
-  ),
-
-  // PATIENT MOBILE ROUTES
-  GoRoute(
-    path: AppRoutes.patientSplash,
-    builder: (context, state) => const MobileSplashScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.patientLogin,
-    builder: (context, state) => const MobileLoginScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.patientDashboard,
-    builder: (context, state) => const PatientDashboardScreen(),
-  ),
-  GoRoute(
-    path: AppRoutes.patientHome,
-    builder: (context, state) => const PatientNavShell(),
-  ),
+  _fluidRoute(AppRoutes.login, const LoginScreen()),
+  _fluidRoute(AppRoutes.register, (context, state) {
+    final isAdmin = state.uri.queryParameters['admin'] == 'true';
+    return RegisterScreen(isAdmin: isAdmin);
+  }),
+  _fluidRoute(AppRoutes.home, const MainMenuScreen()),
+  _fluidRoute(AppRoutes.healthWizard, const HealthCheckWizard()),
+  _fluidRoute(AppRoutes.summary, const SummaryScreen()),
+  _fluidRoute(AppRoutes.individualTests, const IndividualTestsMenu()),
+  _fluidRoute(AppRoutes.testTemperature,
+      const SingleSensorTestScreen(type: SensorType.temperature)),
+  _fluidRoute(AppRoutes.testBloodPressure,
+      const SingleSensorTestScreen(type: SensorType.bloodPressure)),
+  _fluidRoute(AppRoutes.testHeartRate,
+      const SingleSensorTestScreen(type: SensorType.heartRate)),
+  _fluidRoute(AppRoutes.testOxygen,
+      const SingleSensorTestScreen(type: SensorType.oxygen)),
+  _fluidRoute(AppRoutes.testBmi, const BmiTestScreen()),
+  _fluidRoute(AppRoutes.history, const HistoryListScreen()),
+  _fluidRoute(AppRoutes.help, const HelpInfoScreen()),
+  _fluidRoute(AppRoutes.healthTips, const HealthTipsScreen()),
+  _fluidRoute(AppRoutes.adminLogin, const AdminLoginScreen()),
+  _fluidRoute(AppRoutes.adminDashboard, const AdminDashboardScreen()),
+  _fluidRoute(AppRoutes.adminLogs, const SecurityLogsScreen()),
+  _fluidRoute(AppRoutes.adminUsers, const AdminUserManagementScreen()),
+  _fluidRoute(AppRoutes.adminSystemInfo, const SystemInfoScreen()),
+  _fluidRoute(AppRoutes.adminSettings, const AdminSettingsScreen()),
+  _fluidRoute(AppRoutes.patientSplash, const MobileSplashScreen()),
+  _fluidRoute(AppRoutes.patientLogin, const MobileLoginScreen()),
+  _fluidRoute(AppRoutes.patientDashboard, const PatientDashboardScreen()),
+  _fluidRoute(AppRoutes.patientHome, const PatientNavShell()),
 ];
+
+/// Helper for high-end fluid page transitions
+GoRoute _fluidRoute(String path, dynamic builderOrWidget) {
+  return GoRoute(
+    path: path,
+    pageBuilder: (context, state) {
+      final widget = builderOrWidget is Widget
+          ? builderOrWidget
+          : (builderOrWidget as Widget Function(BuildContext, GoRouterState))(
+              context, state);
+
+      return CustomTransitionPage(
+        key: state.pageKey,
+        child: widget,
+        transitionDuration: const Duration(milliseconds: 350),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.05, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCirc,
+              )),
+              child: child,
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
 // 1. KIOSK ROUTER (Starts at Patient Login)
 final GoRouter appRouter = GoRouter(

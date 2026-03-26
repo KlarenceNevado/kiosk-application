@@ -5,9 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
-import '../../../../core/services/database/sync_service.dart';
+import '../../../../core/services/system/sync_event_bus.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import 'mobile_history_screen.dart';
 import 'mobile_login_screen.dart';
 import '../../../../core/widgets/alert_banner.dart';
@@ -42,7 +43,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   }
 
   void _subscribeToAlerts() {
-    _alertSub = SyncService().alertStream.listen((alert) {
+    _alertSub = SyncEventBus.instance.newAlertStream.listen((alert) {
       if (mounted) {
         final target = alert['target_group']?.toString().toUpperCase() ?? 'ALL';
         if (target == 'ALL' ||
@@ -62,7 +63,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
 
   Future<void> _loadData() async {
     try {
-      final records = await SyncService().fetchPatientVitals(widget.userId);
+      final historyRepo = context.read<IHistoryRepository>();
+      await historyRepo.loadUserHistory(widget.userId);
+      final records = historyRepo.records;
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -80,7 +84,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   }
 
   Future<void> _logout() async {
-    await context.read<AuthRepository>().logout();
+    await context.read<IAuthRepository>().logout();
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,

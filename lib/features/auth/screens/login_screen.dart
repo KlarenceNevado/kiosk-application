@@ -5,7 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/widgets/flow_animated_button.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
-import '../data/auth_repository.dart';
+import '../domain/i_auth_repository.dart';
 import '../models/user_model.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
@@ -51,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
     // Listen to repository changes to refresh filtered list instantly
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<AuthRepository>().addListener(_onSearchChanged);
+        context.read<IAuthRepository>().addListener(_onSearchChanged);
       }
     });
   }
@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     try {
-      context.read<AuthRepository>().removeListener(_onSearchChanged);
+      context.read<IAuthRepository>().removeListener(_onSearchChanged);
     } catch (_) {}
     _phoneController.dispose();
     _searchController.dispose();
@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   void _onSearchChanged() {
     if (!mounted) return;
     final query = _searchController.text.toLowerCase().trim();
-    final allUsers = context.read<AuthRepository>().users;
+    final allUsers = context.read<IAuthRepository>().users;
 
     // Reset selection if text doesn't match selected user
     if (_selectedUser != null &&
@@ -149,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
     if (isKeyboardVisible) Navigator.pop(context);
 
     final error = await context
-        .read<AuthRepository>()
+        .read<IAuthRepository>()
         .login(_selectedUser!.firstName, phoneInput);
 
     if (error == null && mounted) {
@@ -181,8 +181,8 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
 
   @override
   Widget build(BuildContext context) {
-    final users = context.watch<AuthRepository>().users;
-    final isLoading = context.watch<AuthRepository>().isLoading;
+    final users = context.watch<IAuthRepository>().users;
+    final isLoading = context.watch<IAuthRepository>().isLoading;
 
     return GestureDetector(
       onTap: () {

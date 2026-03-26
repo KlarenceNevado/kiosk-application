@@ -236,6 +236,17 @@ class VitalsSyncHandler extends SyncHandler {
         prepared[key] = value ? 1 : 0;
       }
     });
+
+    // Decrypt fields if they are strings (it means they were pulled from cloud as ciphertext)
+    // The BaseDao.encrypt handles the check to avoid double-processing.
+    final fieldsToDecrypt = ['heart_rate', 'systolic_bp', 'diastolic_bp', 'oxygen', 'temperature'];
+    for (final field in fieldsToDecrypt) {
+      if (prepared[field] != null && prepared[field] is String) {
+        // We set it back to the map; the DAO's _parseVitalSigns will handle further conversion to int/double
+        prepared[field] = dbHelper.decrypt(prepared[field]);
+      }
+    }
+
     return prepared;
   }
 }

@@ -17,6 +17,12 @@ import 'package:kiosk_application/features/chat/data/web_chat_repository.dart';
 import 'package:kiosk_application/core/services/system/app_environment.dart';
 import 'package:kiosk_application/core/services/system/web_initialization_service.dart';
 
+import 'package:kiosk_application/features/auth/domain/i_auth_repository.dart';
+import 'package:kiosk_application/features/user_history/domain/i_history_repository.dart';
+import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
+import 'package:kiosk_application/core/domain/i_system_repository.dart';
+import 'package:kiosk_application/core/repositories/web_system_repository.dart';
+
 /// Web PWA entry point for the Patient Mobile app.
 /// Uses web-safe repositories and initialization to avoid all native dependencies.
 void main() {
@@ -32,11 +38,12 @@ void main() {
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => AuthRepository()),
-          ChangeNotifierProvider(create: (_) => HistoryRepository()),
+          ChangeNotifierProvider<IAuthRepository>(create: (_) => WebAuthRepository()),
+          ChangeNotifierProvider<IHistoryRepository>(create: (_) => WebHistoryRepository()),
           ChangeNotifierProvider(create: (_) => LanguageProvider()),
           ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-          ChangeNotifierProvider(create: (_) => ChatRepository()),
+          ChangeNotifierProvider<IChatRepository>(create: (_) => WebChatRepository()),
+          Provider<ISystemRepository>(create: (_) => WebSystemRepository()),
         ],
         child: const PatientWebApp(),
       ),

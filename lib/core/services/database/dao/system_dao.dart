@@ -56,7 +56,7 @@ class SystemDao extends BaseDao {
       final calculatedHash = hmacSha256.convert(utf8.encode(dataToHash)).toString();
 
       if (calculatedHash != log['hash']) return false;
-      expectedPreviousHash = log['hash'] as String;
+      expectedPreviousHash = log['hash']?.toString() ?? '';
     }
     return true;
   }
@@ -132,7 +132,7 @@ class SystemDao extends BaseDao {
       where: 'table_name = ? AND is_blocked = 1',
       whereArgs: [tableName],
     );
-    return result.map((e) => e['record_id'] as String).toList();
+    return result.map((e) => e['record_id']?.toString() ?? '').toList();
   }
 
   Future<Map<String, dynamic>?> getSyncMetadata(String tableName, String recordId) async {
@@ -246,6 +246,21 @@ class SystemDao extends BaseDao {
 
   Future<List<Map<String, dynamic>>> getUnsyncedChatMessages() async {
     return await db.query('chat_messages', where: 'is_synced = ?', whereArgs: [0]);
+  }
+
+  Future<Map<String, dynamic>?> getChatMessageById(String id) async {
+    final results = await db.query('chat_messages', where: 'id = ?', whereArgs: [id]);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<void> upsertChatMessage(Map<String, dynamic> data) async {
+    final prepared = Map<String, dynamic>.from(data);
+    prepared.forEach((key, value) {
+      if (value is bool) {
+        prepared[key] = value ? 1 : 0;
+      }
+    });
+    await db.insert('chat_messages', prepared, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // --- REMINDERS ---

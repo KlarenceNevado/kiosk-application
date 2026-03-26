@@ -14,9 +14,9 @@ import '../../../core/services/system/config_service.dart';
 import '../../../core/services/system/app_environment.dart';
 import '../../../core/services/security/admin_security_service.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../data/admin_repository.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/services/database/sync_service.dart';
@@ -67,8 +67,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _checkSystemHealth();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final authRepo = context.read<AuthRepository>();
-      final historyRepo = context.read<HistoryRepository>();
+      final authRepo = context.read<IAuthRepository>();
+      final historyRepo = context.read<IHistoryRepository>();
 
       // Force a manual cloud sweep as soon as the Admin Desktop starts up
       await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo);
@@ -84,7 +84,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _patientSyncSub = syncService.patientStream.listen((_) {
       if (mounted) {
         debugPrint("🔄 Dashboard: Patient data synced, refreshing UI.");
-        context.read<AuthRepository>().refreshUsers();
+        context.read<IAuthRepository>().refreshUsers();
       }
     });
 
@@ -92,7 +92,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _vitalSyncSub = syncService.newVitalStream.listen((data) {
       debugPrint("🔄 Dashboard: New Vital Sign Sync Event!");
       if (mounted) {
-        context.read<HistoryRepository>().loadAllHistory();
+        context.read<IHistoryRepository>().loadAllHistory();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("New live reading received from Kiosk!"),
           backgroundColor: AppColors.brandGreen,
@@ -366,8 +366,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _exportToCSV() async {
     try {
-      final historyRepo = context.read<HistoryRepository>();
-      final authRepo = context.read<AuthRepository>();
+      final historyRepo = context.read<IHistoryRepository>();
+      final authRepo = context.read<IAuthRepository>();
       final records = historyRepo.records;
 
       if (records.isEmpty) {
@@ -456,7 +456,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     child: const Text("CANCEL")),
                 TextButton(
                   onPressed: () {
-                    context.read<AuthRepository>().deleteUser(user.id);
+                    context.read<IAuthRepository>().deleteUser(user.id);
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text("Patient deleted."),
@@ -562,7 +562,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         phoneNumber: phoneController.text,
                         pinCode: '123456');
 
-                    context.read<AuthRepository>().updateUser(updatedUser);
+                    context.read<IAuthRepository>().updateUser(updatedUser);
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text("User updated.")));
@@ -623,12 +623,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (!await _verifyAdminAccess()) return;
     if (!mounted) return;
 
-    await context.read<HistoryRepository>().clearHistory();
+    await context.read<IHistoryRepository>().clearHistory();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text("Database cleared."),
         backgroundColor: AppColors.brandGreen));
-    context.read<HistoryRepository>().loadAllHistory();
+    context.read<IHistoryRepository>().loadAllHistory();
   }
 
   // --- RESPONSIVE BUILD ---
@@ -742,7 +742,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 _buildNavigationItem("Logout", Icons.logout,
                     color: Colors.redAccent, onTap: () async {
-                  await context.read<AuthRepository>().logout();
+                  await context.read<IAuthRepository>().logout();
                   if (mounted) {
                     // Kiosk Admin goes back to Patient Login, Desktop Admin stays in Admin Login
                     if (AppEnvironment().isKiosk) {
@@ -769,7 +769,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   IconButton(
                       icon: const Icon(Icons.refresh, color: Colors.black),
                       onPressed: () =>
-                          context.read<HistoryRepository>().loadAllHistory()),
+                          context.read<IHistoryRepository>().loadAllHistory()),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, color: Colors.black),
                     onSelected: (value) {
@@ -960,7 +960,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 title:
                     const Text("Logout", style: TextStyle(color: Colors.red)),
                 onTap: () {
-                  context.read<AuthRepository>().logout();
+                  context.read<IAuthRepository>().logout();
                   context.go(AppRoutes.adminLogin);
                 }),
           ],
@@ -993,8 +993,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildDashboardBody({required bool isMobile}) {
-    final authRepo = context.watch<AuthRepository>();
-    final historyRepo = context.watch<HistoryRepository>();
+    final authRepo = context.watch<IAuthRepository>();
+    final historyRepo = context.watch<IHistoryRepository>();
     context.watch<AdminRepository>(); // Watch for threshold changes
 
     final allUsers = authRepo.users;
@@ -1366,7 +1366,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             activeThumbColor: AppColors.brandGreen,
                             onChanged: (val) {
                               context
-                                  .read<AuthRepository>()
+                                  .read<IAuthRepository>()
                                   .toggleUserStatus(user, val);
                             },
                           ),
@@ -1484,7 +1484,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 itemBuilder: (context, index) {
                   final record = records[index];
                   // Lookup user for this record
-                  final user = context.read<AuthRepository>().users.firstWhere(
+                  final user = context.read<IAuthRepository>().users.firstWhere(
                       (u) => u.id == record.userId,
                       orElse: () => User(
                           id: '',

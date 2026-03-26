@@ -3,7 +3,7 @@ import '../../../../core/constants/app_colors.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:provider/provider.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 
 class PatientLoginScreen extends StatefulWidget {
   const PatientLoginScreen({super.key});
@@ -30,7 +30,7 @@ class _PatientLoginScreenState extends State<PatientLoginScreen> {
     setState(() => _isLoading = true);
 
     final error =
-        await context.read<AuthRepository>().loginPatientDevice(phone, pin);
+        await context.read<IAuthRepository>().loginPatientDevice(phone, pin);
 
     if (!mounted) return;
     setState(() => _isLoading = false);

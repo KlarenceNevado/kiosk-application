@@ -4,8 +4,7 @@ import 'dart:async'; // for Timer
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
-import '../../../../core/services/database/sync_service.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/config/routes.dart';
@@ -72,7 +71,8 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
 
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       try {
-        final results = await SyncService().searchPatients(query);
+        final authRepo = Provider.of<IAuthRepository>(context, listen: false);
+        final results = await authRepo.searchPatients(query);
         if (mounted) {
           setState(() {
             _filteredUsers = results;
@@ -110,7 +110,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
       }
 
       // Secure Login against Repository
-      final authRepo = context.read<AuthRepository>();
+      final authRepo = context.read<IAuthRepository>();
       final String? errorOrNull = await authRepo.login(nameInput, phoneInput);
 
       if (errorOrNull != null) {

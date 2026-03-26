@@ -13,7 +13,7 @@ import '../../../core/utils/vital_validator.dart';
 
 // DATA & SERVICES
 import '../../health_check/models/vital_signs_model.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../../../core/services/system/pdf_report_service.dart';
 
 class SummaryScreen extends StatefulWidget {
@@ -70,7 +70,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<HistoryRepository>();
+    final history = context.watch<IHistoryRepository>();
     final latestRecord =
         history.records.isNotEmpty ? history.records.first : null;
 

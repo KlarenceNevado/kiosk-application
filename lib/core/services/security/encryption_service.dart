@@ -1,66 +1,81 @@
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class EncryptionService {
   static final EncryptionService _instance = EncryptionService._internal();
   factory EncryptionService() => _instance;
   EncryptionService._internal();
 
-  /// AES-256 (Advanced Encryption Standard) implementation
-  /// This ensures that biometric and health data are encrypted at rest.
-  late encrypt.Key _key;
-  encrypt.Encrypter? _encrypter;
+  /// Primary encrypter (Shared key from .env)
+  encrypt.Encrypter? _primaryEncrypter;
+  
+  /// Legacy encrypter (Device-specific key from SecureStorage)
+  encrypt.Encrypter? _legacyEncrypter;
+  
+  encrypt.Key? _primaryKey;
+  
   final _storage = const FlutterSecureStorage();
   static const String _keyIdentifier = 'kiosk_secure_db_key_v1';
 
   /// Initializes the encryption service.
-  /// Must be called before any encryption/decryption.
+  /// Loads both the shared environment key and the legacy device key.
   Future<void> init() async {
-    if (_encrypter != null) return;
+    if (_primaryEncrypter != null) return;
 
     try {
-      String? encodedKey = await _storage.read(key: _keyIdentifier);
-
-      if (encodedKey == null) {
-        // Generate a new secure 32-byte key
-        _key = encrypt.Key.fromSecureRandom(32);
-        final base64Key = _key.base64;
-
-        // Save it securely
-        await _storage.write(key: _keyIdentifier, value: base64Key);
-        debugPrint("🔐 Encryption initialized with NEW secure key.");
-      } else {
-        // Load existing key
-        _key = encrypt.Key.fromBase64(encodedKey);
-        debugPrint("🔐 Encryption initialized with EXISTING secure key.");
+      // 1. Load Primary Shared Key (from .env)
+      final envKey = dotenv.env['DB_ENCRYPTION_KEY'];
+      if (envKey != null && envKey.isNotEmpty && envKey.length >= 32) {
+        _primaryKey = encrypt.Key.fromUtf8(envKey.substring(0, 32));
+        _primaryEncrypter = encrypt.Encrypter(encrypt.AES(_primaryKey!));
+        debugPrint("🔐 Encryption: Primary Shared Key loaded.");
       }
 
-      _encrypter = encrypt.Encrypter(encrypt.AES(_key));
+      // 2. Load Legacy Device Key (from SecureStorage)
+      String? encodedLegacyKey = await _storage.read(key: _keyIdentifier);
+      if (encodedLegacyKey != null) {
+        final legacyKey = encrypt.Key.fromBase64(encodedLegacyKey);
+        _legacyEncrypter = encrypt.Encrypter(encrypt.AES(legacyKey));
+        debugPrint("🔐 Encryption: Legacy Device Key loaded for migration.");
+      }
+
+      // 3. Fallback/Initial Setup Logic
+      if (_primaryEncrypter == null) {
+        if (encodedLegacyKey == null) {
+          // No Shared Key and No Legacy Key -> Generate a new local key
+          final newKey = encrypt.Key.fromSecureRandom(32);
+          await _storage.write(key: _keyIdentifier, value: newKey.base64);
+          _primaryKey = newKey;
+          _primaryEncrypter = encrypt.Encrypter(encrypt.AES(_primaryKey!));
+          debugPrint("🔐 Encryption: No keys found. Generated new local key.");
+        } else {
+          // No Shared Key but Legacy Key exists -> Use Legacy as Primary
+          _primaryKey = encrypt.Key.fromBase64(encodedLegacyKey);
+          _primaryEncrypter = _legacyEncrypter;
+          debugPrint("🔐 Encryption: Using existing local key as primary.");
+        }
+      }
     } catch (e) {
       debugPrint("CRITICAL: Encryption Init Failed: $e");
-
-      // Fallback to static for emergency offline mode, but log heavily
-      _key =
-          encrypt.Key.fromUtf8('IslaVerdeKioskFixedKey2026!!!!!!'); // 32 chars
-      _encrypter = encrypt.Encrypter(encrypt.AES(_key));
-      debugPrint(
-          "🔐 WARNING: Falling back to static key due to storage failure.");
+      // Safety fallback
+      final safetyKey = encrypt.Key.fromUtf8('IslaVerdeKioskFixedKey2026!!!!!!'); 
+      _primaryKey = safetyKey;
+      _primaryEncrypter = encrypt.Encrypter(encrypt.AES(safetyKey));
     }
   }
 
-  /// Encrypts plain text and bundles IV
+  /// Encrypts data using the PRIMARY key.
   String encryptData(String plainText) {
-    if (_encrypter == null) {
+    if (_primaryEncrypter == null) {
       throw Exception("EncryptionService not initialized. Call init() first.");
     }
     if (plainText.isEmpty) return plainText;
 
     try {
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypted = _encrypter!.encrypt(plainText, iv: iv);
-      // Format: iv_base64:ciphertext_base64
-      // This implementation follows the standard AES block cipher encryption protocol.
+      final encrypted = _primaryEncrypter!.encrypt(plainText, iv: iv);
       return '${iv.base64}:${encrypted.base64}';
     } catch (e) {
       debugPrint("Encryption Error: $e");
@@ -68,41 +83,62 @@ class EncryptionService {
     }
   }
 
-  /// Decrypts data bundled with its IV
+  /// Decrypts data using the Primary key, falling back to Legacy key if needed.
   String decryptData(String encryptedPayload) {
-    if (_encrypter == null) {
+    if (_primaryEncrypter == null) {
       throw Exception("EncryptionService not initialized. Call init() first.");
     }
     if (encryptedPayload.isEmpty) return encryptedPayload;
 
     try {
-      // Legacy check: If no colon, it might be the old static IV format, or plaintext
+      // Basic IV check
       if (!encryptedPayload.contains(':')) {
-        // Migration: Attempt decrypt with old static IV
-        try {
-          final legacyIv = encrypt.IV.fromLength(16);
-          return _encrypter!.decrypt64(encryptedPayload, iv: legacyIv);
-        } catch (e) {
-          return encryptedPayload; // Might just be plaintext or unrecoverable
-        }
+        return _tryLegacyDecryptRaw(encryptedPayload);
       }
 
       final parts = encryptedPayload.split(':');
       if (parts.length != 2) return encryptedPayload;
 
-      final ivBase64 = parts[0];
-      final ciphertextBase64 = parts[1];
+      final iv = encrypt.IV.fromBase64(parts[0]);
+      final ciphertext = parts[1];
 
-      final iv = encrypt.IV.fromBase64(ivBase64);
-      return _encrypter!.decrypt64(ciphertextBase64, iv: iv);
+      // 1. Try Primary Decryption
+      try {
+        return _primaryEncrypter!.decrypt64(ciphertext, iv: iv);
+      } catch (e) {
+        // 2. Try Legacy Decryption if primary fails
+        if (_legacyEncrypter != null) {
+          try {
+            return _legacyEncrypter!.decrypt64(ciphertext, iv: iv);
+          } catch (_) {
+            return encryptedPayload; // Silent failure: both encrypters failed
+          }
+        }
+        return encryptedPayload; // Silent failure: primary failed and no legacy
+      }
     } catch (e) {
-      debugPrint("Decryption Error: $e");
+      // Final safety net - ensures no crash or log spam
       return encryptedPayload;
     }
   }
 
-  /// Returns the raw key bytes as a string for HMAC operations.
+  /// Handles legacy data with static IV or missing markers
+  String _tryLegacyDecryptRaw(String payload) {
+    final legacyIv = encrypt.IV.fromLength(16);
+    try {
+      return _primaryEncrypter!.decrypt64(payload, iv: legacyIv);
+    } catch (e) {
+      if (_legacyEncrypter != null) {
+        try {
+          return _legacyEncrypter!.decrypt64(payload, iv: legacyIv);
+        } catch (_) {}
+      }
+      return payload;
+    }
+  }
+
+  /// Returns the raw primary key bytes as a string.
   String getSecureKey() {
-    return _key.base64;
+    return _primaryKey?.base64 ?? "";
   }
 }

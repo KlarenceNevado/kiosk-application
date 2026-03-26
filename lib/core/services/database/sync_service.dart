@@ -41,7 +41,7 @@ class SyncService with WidgetsBindingObserver {
   Stream<Map<String, dynamic>> get newVitalStream => vitalsHandler.newRecordStream;
   Stream<Map<String, dynamic>> get newAlertStream => systemHandler.newAlertStream;
   Stream<void> get scheduleStream => systemHandler.scheduleStream;
-  Stream<Map<String, dynamic>> get alertStream => systemHandler.alertStream;
+  Stream<void> get alertStream => systemHandler.alertStream;
   Stream<void> get patientStream => patientHandler.stream;
   Stream<void> get vitalsStream => vitalsHandler.stream;
 
@@ -57,7 +57,7 @@ class SyncService with WidgetsBindingObserver {
     debugPrint("🔄 SyncService: Starting sync loop and real-time listeners...");
     _attemptSync();
 
-    Timer.periodic(const Duration(minutes: 5), (timer) async {
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
       await _attemptSync();
     });
 
@@ -65,6 +65,7 @@ class SyncService with WidgetsBindingObserver {
     systemHandler.subscribeAll();
     patientHandler.subscribe((_) {});
     vitalsHandler.subscribe((_) {});
+    chatHandler.subscribe();
 
     ConnectionManager().statusStream.listen((status) {
       if (status == ConnectionStatus.online) {
@@ -83,6 +84,32 @@ class SyncService with WidgetsBindingObserver {
         await _cacheFilesInBackground();
       } catch (e) {
         debugPrint("❌ SyncService: Full Sync Error: $e");
+      }
+    });
+  }
+
+  /// Forces a push of ALL local records to the cloud, regardless of is_synced status.
+  /// This ensures that "previous" data from other devices/versions is unified in the latest cloud.
+  Future<void> forcePushAll() async {
+    SecurityLogger.info("🚀 Starting FORCE PUSH ALL for system unification...");
+    await _withSyncMutex(() async {
+      try {
+        // 1. Fetch all local patients
+        final patients = await DatabaseHelper.instance.getPatients();
+        for (final p in patients) {
+          await patientHandler.createPatient(p);
+        }
+
+        // 2. Fetch all local vitals
+        final vitals = await DatabaseHelper.instance.getAllRecords();
+        for (final v in vitals) {
+          // We use _upsertVitalSign which is private, let's make a public one or use create
+          await vitalsHandler.createVitalSign(v);
+        }
+
+        debugPrint("✅ SyncService: Force Push All complete.");
+      } catch (e) {
+        debugPrint("❌ SyncService: Force Push Error: $e");
       }
     });
   }
@@ -111,6 +138,9 @@ class SyncService with WidgetsBindingObserver {
       return;
     }
     await _withSyncMutex(() async {
+      // Ensure DB is initialized before handlers access DAOs
+      await DatabaseHelper.instance.database;
+
       if (ConnectionManager().currentStatus != ConnectionStatus.online) {
         return;
       }
@@ -152,6 +182,9 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> _cacheFilesInBackground() async {
     try {
+      // Ensure DB is initialized
+      await DatabaseHelper.instance.database;
+
       final db = await DatabaseHelper.instance.database;
       // Vitals Reports
       final List<Map<String, dynamic>> vr = await db.query('vitals', where: 'report_url IS NOT NULL AND report_path IS NULL');
@@ -215,9 +248,15 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> reactToAnnouncement(String id, String emoji, String userId) => systemHandler.reactToAnnouncement(id, emoji, userId);
 
-  Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) => systemHandler.fetchAnnouncements(currentUser: currentUser);
+  Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
+    await DatabaseHelper.instance.database;
+    return systemHandler.fetchAnnouncements(currentUser: currentUser);
+  }
 
-  Future<List<Map<String, dynamic>>> fetchAlerts({dynamic currentUser}) => systemHandler.fetchAlerts(currentUser: currentUser);
+  Future<List<Map<String, dynamic>>> fetchAlerts({dynamic currentUser}) async {
+    await DatabaseHelper.instance.database;
+    return systemHandler.fetchAlerts(currentUser: currentUser);
+  }
 
   Future<void> forceDownSyncAndRefresh(var authRepo, var historyRepo, {bool triggerStream = true}) async {
     await _withSyncMutex(() async {

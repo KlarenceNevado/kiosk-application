@@ -22,6 +22,11 @@ import 'package:kiosk_application/features/chat/data/chat_repository.dart';
 
 import 'package:kiosk_application/core/providers/language_provider.dart';
 import 'package:kiosk_application/l10n/app_localizations.dart';
+import 'package:kiosk_application/features/auth/domain/i_auth_repository.dart';
+import 'package:kiosk_application/features/user_history/domain/i_history_repository.dart';
+import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
+import 'package:kiosk_application/core/domain/i_system_repository.dart';
+import 'package:kiosk_application/core/repositories/local_system_repository.dart';
 
 // FIXED: Renamed back to 'main()' so VS Code debugger can find it
 void main() async {
@@ -35,12 +40,13 @@ void main() async {
     MultiProvider(
       providers: [
         Provider(create: (_) => SensorManager()),
-        ChangeNotifierProvider(create: (_) => AuthRepository(), lazy: false),
-        ChangeNotifierProvider(create: (_) => HistoryRepository()),
+        ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
+        ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
         ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-        ChangeNotifierProvider(create: (_) => ChatRepository()),
+        ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+        Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
         ChangeNotifierProvider(
           create: (context) => HealthWizardProvider(
             context.read<SensorManager>(),

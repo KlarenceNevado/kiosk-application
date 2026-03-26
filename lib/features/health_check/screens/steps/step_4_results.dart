@@ -10,8 +10,8 @@ import '../../../../core/widgets/vital_sign_display.dart';
 
 // LOGIC & DATA
 import '../../logic/health_wizard_provider.dart';
-import '../../../user_history/data/history_repository.dart';
-import '../../../auth/data/auth_repository.dart'; // Needed to get User ID
+import '../../../user_history/domain/i_history_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 
 class Step4Results extends StatefulWidget {
   const Step4Results({super.key});
@@ -28,7 +28,7 @@ class _Step4ResultsState extends State<Step4Results> {
 
     try {
       // 1. Get Current User ID
-      final authRepo = context.read<AuthRepository>();
+      final authRepo = context.read<IAuthRepository>();
       final currentUser = authRepo.currentUser;
 
       if (currentUser == null) {
@@ -44,7 +44,7 @@ class _Step4ResultsState extends State<Step4Results> {
           .generateFinalResult(currentUser.id);
 
       // 4. Save to SQLite
-      await context.read<HistoryRepository>().addRecord(result);
+      await context.read<IHistoryRepository>().addRecord(result);
 
       // 5. Navigate
       if (mounted) {

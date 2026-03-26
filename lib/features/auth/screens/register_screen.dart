@@ -7,7 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/widgets/flow_animated_button.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
-import '../data/auth_repository.dart';
+import '../domain/i_auth_repository.dart';
 import '../models/user_model.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
@@ -107,7 +107,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         dateOfBirth: _selectedDate!,
       );
 
-      final error = await context.read<AuthRepository>().registerUser(newUser);
+      final error = await context.read<IAuthRepository>().registerUser(newUser);
 
       if (error == null && mounted) {
         if (context.canPop()) {
@@ -124,7 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthRepository>().isLoading;
+    final isLoading = context.watch<IAuthRepository>().isLoading;
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),

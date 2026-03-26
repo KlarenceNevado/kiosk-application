@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/security/notification_service.dart';
-import '../../../../core/services/database/database_helper.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../../../core/domain/i_system_repository.dart';
+import 'package:provider/provider.dart';
+import '../../auth/domain/i_auth_repository.dart';
 
 class PatientRemindersTab extends StatefulWidget {
   const PatientRemindersTab({super.key});
@@ -21,9 +22,9 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
   }
 
   Future<void> _loadReminders() async {
-    final user = AuthRepository().currentUser;
+    final user = context.read<IAuthRepository>().currentUser;
     if (user != null) {
-      final dbReminders = await DatabaseHelper.instance.getReminders(user.id);
+      final dbReminders = await context.read<ISystemRepository>().getReminders(user.id);
       if (mounted) {
         setState(() {
           _reminders.clear();
@@ -104,13 +105,13 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () async {
-                        final user = AuthRepository().currentUser;
+                        final user = context.read<IAuthRepository>().currentUser;
                         if (user != null) {
                           final timeStr =
                               "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}";
 
                           final reminderId =
-                              await DatabaseHelper.instance.insertReminder({
+                              await context.read<ISystemRepository>().insertReminder({
                             'title': titleCtrl.text,
                             'time': timeStr,
                             'isActive': 1,
@@ -233,9 +234,9 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                         
                         // Update SQLite
                         final timeStr = "${(r['time'] as TimeOfDay).hour.toString().padLeft(2, '0')}:${(r['time'] as TimeOfDay).minute.toString().padLeft(2, '0')}";
-                        final user = AuthRepository().currentUser;
+                        final user = context.read<IAuthRepository>().currentUser;
                         if (user != null) {
-                          await DatabaseHelper.instance.updateReminder({
+                          await context.read<ISystemRepository>().updateReminder({
                             'id': r['id'],
                             'title': r['title'],
                             'time': timeStr,

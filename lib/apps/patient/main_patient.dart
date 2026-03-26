@@ -16,6 +16,11 @@ import 'package:kiosk_application/features/patient/data/mobile_navigation_provid
 import 'package:kiosk_application/features/chat/data/chat_repository.dart';
 import 'package:kiosk_application/core/services/system/app_environment.dart';
 import 'package:kiosk_application/core/services/system/initialization_service.dart';
+import 'package:kiosk_application/features/auth/domain/i_auth_repository.dart';
+import 'package:kiosk_application/features/user_history/domain/i_history_repository.dart';
+import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
+import 'package:kiosk_application/core/domain/i_system_repository.dart';
+import 'package:kiosk_application/core/repositories/local_system_repository.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -30,11 +35,12 @@ void main() {
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => AuthRepository()),
-          ChangeNotifierProvider(create: (_) => HistoryRepository()),
+          ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository()),
+          ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
           ChangeNotifierProvider(create: (_) => LanguageProvider()),
           ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-          ChangeNotifierProvider(create: (_) => ChatRepository()),
+          ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+          Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
         ],
         child: const PatientMobileApp(),
       ),

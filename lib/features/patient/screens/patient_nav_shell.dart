@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import 'package:uuid/uuid.dart';
 import '../../mobile/screens/mobile_history_screen.dart';
 import 'patient_dashboard_screen.dart';
 import 'patient_announcements_screen.dart';
 import '../../chat/screens/patient_chat_screen.dart';
-import '../../chat/data/chat_repository.dart';
+import '../../chat/domain/i_chat_repository.dart';
 import '../data/mobile_navigation_provider.dart';
 import '../../../../core/services/security/notification_service.dart';
-import '../../../../core/services/database/sync_service.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../../../core/domain/i_system_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 
 /// The unified navigation shell for the Patient Mobile App.
 /// 4 tabs: Dashboard, History, Announcements, Profile
@@ -92,7 +92,7 @@ class PatientNavShell extends StatelessWidget {
                   icon: Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Badge(
-                      label: Consumer<ChatRepository>(
+                      label: Consumer<IChatRepository>(
                         builder: (context, repo, _) =>
                             Text("${repo.messages.length}"),
                       ),
@@ -141,9 +141,19 @@ class PatientNavShell extends StatelessWidget {
 class _PatientProfileTab extends StatelessWidget {
   const _PatientProfileTab();
 
+  String _maskPhone(String? phone) {
+    if (phone == null || phone.isEmpty) return "--";
+    if (phone.length < 6) return phone;
+    // Format: 09*******1111 (First 2, Last 4)
+    final first2 = phone.substring(0, 2);
+    final last4 = phone.substring(phone.length - 4);
+    final masking = '*' * (phone.length - 6);
+    return "$first2$masking$last4";
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthRepository>().currentUser;
+    final user = context.watch<IAuthRepository>().currentUser;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -179,7 +189,7 @@ class _PatientProfileTab extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              user?.sitio.isNotEmpty == true ? "Sitio ${user!.sitio}" : "",
+              user?.sitio ?? "",
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
@@ -217,7 +227,7 @@ class _PatientProfileTab extends StatelessWidget {
             _buildInfoTile(
                 Icons.location_on, "Sitio / Zone", user?.sitio ?? "--"),
             _buildInfoTile(
-                Icons.phone, "Phone Number", user?.phoneNumber ?? "--"),
+                Icons.phone, "Phone Number", _maskPhone(user?.phoneNumber)),
             _buildInfoTile(
                 Icons.badge, "Patient ID", user?.id.substring(0, 8) ?? "--"),
 
@@ -297,9 +307,9 @@ class _PatientProfileTab extends StatelessWidget {
                 onTap: () async {
                    ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Syncing all data..."), duration: Duration(seconds: 1)));
-                   await SyncService().forceDownSyncAndRefresh(
-                     context.read<AuthRepository>(),
-                     context.read<HistoryRepository>(),
+                   await context.read<ISystemRepository>().syncNow(
+                     authRepo: context.read<IAuthRepository>(),
+                     historyRepo: context.read<IHistoryRepository>(),
                    );
                    if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -329,7 +339,7 @@ class _PatientProfileTab extends StatelessWidget {
                 ),
                 onPressed: () async {
                   context.read<MobileNavigationProvider>().reset();
-                  await context.read<AuthRepository>().logout();
+                  await context.read<IAuthRepository>().logout();
                   if (context.mounted) {
                     context.go('/patient/login');
                   }
@@ -343,7 +353,7 @@ class _PatientProfileTab extends StatelessWidget {
   }
 
   Widget _buildLinkedAccountsSection(BuildContext context) {
-    final authRepo = context.watch<AuthRepository>();
+    final authRepo = context.watch<IAuthRepository>();
     final linkedAccounts = authRepo.getLinkedAccounts();
     final currentUser = authRepo.currentUser;
 
@@ -539,7 +549,7 @@ class _PatientProfileTab extends StatelessWidget {
                   );
 
                   // Call backend directly (for demo simplicity, avoiding provider scopes overhead inside dialog)
-                  await ctx.read<AuthRepository>().registerUser(newDep);
+                  await ctx.read<IAuthRepository>().registerUser(newDep);
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
@@ -675,9 +685,14 @@ class _FadeIndexedStackState extends State<FadeIndexedStack>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _controller,
-      child: IndexedStack(
-        index: widget.index,
-        children: widget.children,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+        ),
+        child: IndexedStack(
+          index: widget.index,
+          children: widget.children,
+        ),
       ),
     );
   }

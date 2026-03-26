@@ -40,8 +40,8 @@ class PatientDao extends BaseDao {
         where: 'is_deleted = ?', whereArgs: [0], orderBy: 'last_name ASC');
     return result.map((json) {
       final decrypted = Map<String, dynamic>.from(json);
-      decrypted['phoneNumber'] = decrypt(json['phone_number'] as String);
-      decrypted['pinCode'] = decrypt(json['pin_code'] as String);
+      decrypted['phoneNumber'] = decrypt(json['phone_number']?.toString() ?? '');
+      decrypted['pinCode'] = decrypt(json['pin_code']?.toString() ?? '');
       return User.fromMap(decrypted);
     }).toList();
   }
@@ -50,8 +50,8 @@ class PatientDao extends BaseDao {
     final maps = await db.query('patients', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
       final decrypted = Map<String, dynamic>.from(maps.first);
-      decrypted['phoneNumber'] = decrypt(maps.first['phone_number'] as String);
-      decrypted['pinCode'] = decrypt(maps.first['pin_code'] as String);
+      decrypted['phoneNumber'] = decrypt(maps.first['phone_number']?.toString() ?? '');
+      decrypted['pinCode'] = decrypt(maps.first['pin_code']?.toString() ?? '');
       return User.fromMap(decrypted);
     }
     return null;
@@ -105,8 +105,8 @@ class PatientDao extends BaseDao {
     );
     return maps.map((map) {
       final decrypted = Map<String, dynamic>.from(map);
-      decrypted['phoneNumber'] = decrypt(map['phone_number'] as String);
-      decrypted['pinCode'] = decrypt(map['pin_code'] as String);
+      decrypted['phoneNumber'] = decrypt(map['phone_number']?.toString() ?? '');
+      decrypted['pinCode'] = decrypt(map['pin_code']?.toString() ?? '');
       return User.fromMap(decrypted);
     }).toList();
   }

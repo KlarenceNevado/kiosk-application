@@ -13,8 +13,9 @@ import '../../../core/services/notifications/vitals_listener_service.dart';
 import '../../../core/services/notifications/announcement_listener_service.dart';
 import '../../../core/services/security/security_logger.dart';
 import '../../../core/services/system/system_log_service.dart';
+import '../domain/i_auth_repository.dart';
 
-class AuthRepository extends ChangeNotifier {
+class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   User? _currentUser;
   List<User> _users = [];
   bool _isLoading = false;
@@ -26,11 +27,14 @@ class AuthRepository extends ChangeNotifier {
   static const String _migrationKey = 'sqlite_migration_done';
   static const String _storageKey = 'secure_kiosk_users';
 
+  @override
   User? get currentUser => _currentUser;
+  @override
   List<User> get users => _users;
+  @override
   bool get isLoading => _isLoading;
 
-  AuthRepository() {
+  LocalAuthRepository() {
     _loadUsers();
 
     // Listen for cloud changes and refresh local list (Debounced to avoid lag)
@@ -132,10 +136,12 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // Called explicitly by SyncService after downloading from cloud
+  @override
   Future<void> refreshUsers() async {
     await _loadUsers();
   }
 
+  @override
   Future<String?> registerUser(User newUser) async {
     _isLoading = true;
     notifyListeners();
@@ -177,6 +183,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // --- NEW: UPDATE USER ---
+  @override
   Future<void> updateUser(User updatedUser) async {
     await DatabaseHelper.instance.updatePatient(updatedUser);
     _users = await DatabaseHelper.instance.getPatients();
@@ -192,6 +199,7 @@ class AuthRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   Future<void> deleteUser(String userId) async {
     await DatabaseHelper.instance.deletePatient(userId);
     _users = await DatabaseHelper.instance.getPatients();
@@ -205,6 +213,7 @@ class AuthRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   Future<void> toggleUserStatus(User user, bool isActive) async {
     final updatedUser = user.copyWith(isActive: isActive);
     await DatabaseHelper.instance.updatePatient(updatedUser);
@@ -223,6 +232,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // Login Logic (Lookup by Name + Phone)
+  @override
   Future<String?> login(String firstName, String phoneNumber) async {
     _isLoading = true;
     notifyListeners();
@@ -334,6 +344,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // --- KIOSK QR LOGIN ---
+  @override
   Future<String?> loginWithId(String userId) async {
     _isLoading = true;
     notifyListeners();
@@ -381,6 +392,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // --- MOBILE COMPANION APP LOGIN ---
+  @override
   Future<String?> loginPatientDevice(String phone, String pin) async {
     _isLoading = true;
     notifyListeners();
@@ -430,6 +442,7 @@ class AuthRepository extends ChangeNotifier {
 
   // Legacy locking logic removed as there is no password to fail.
 
+  @override
   Future<void> logout() async {
     final mode = AppEnvironment().mode;
 
@@ -468,6 +481,7 @@ class AuthRepository extends ChangeNotifier {
   }
 
   // --- DEPENDENT MANAGEMENT ---
+  @override
   void switchUser(User user) {
     if (_users.any((u) => u.id == user.id)) {
       _currentUser = user;
@@ -475,6 +489,7 @@ class AuthRepository extends ChangeNotifier {
     }
   }
 
+  @override
   List<User> getLinkedAccounts() {
     if (_currentUser == null) return [];
     final parentId = _currentUser!.parentId ?? _currentUser!.id;
@@ -492,6 +507,30 @@ class AuthRepository extends ChangeNotifier {
     await DatabaseHelper.instance.markPatientAsSynced(userId);
     _users = await DatabaseHelper.instance.getPatients();
     notifyListeners();
+  }
+
+  // --- INTERFACE STUBS & HELPERS ---
+  @override
+  Future<bool> verifyAdminAccess(String pin) async => false;
+
+  @override
+  Future<bool> setPinCode(String newPin) async => false;
+
+  @override
+  Future<bool> verifyPatientPin(String enteredPin) async => false;
+
+  @override
+  User? getUserById(String uid) {
+    try {
+      return _users.firstWhere((u) => u.id == uid);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<User>> searchPatients(String query) async {
+    return await SyncService().searchPatients(query);
   }
 
   @override

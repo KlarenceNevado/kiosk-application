@@ -219,8 +219,12 @@ class DatabaseHelper {
       timestamp TEXT NOT NULL,
       reply_to TEXT,
       reactions TEXT DEFAULT '{}',
+      media_url TEXT,
+      media_path TEXT,
       is_forwarded INTEGER DEFAULT 0,
       is_deleted INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT "1970-01-01T00:00:00Z",
       is_synced INTEGER NOT NULL DEFAULT 0
     )
@@ -702,8 +706,8 @@ class DatabaseHelper {
         where: 'is_deleted = ?', whereArgs: [0], orderBy: 'last_name ASC');
     return result.map((json) {
       final decrypted = Map<String, dynamic>.from(json);
-      decrypted['phoneNumber'] = _decrypt(json['phone_number'] as String);
-      decrypted['pinCode'] = _decrypt(json['pin_code'] as String);
+      decrypted['phoneNumber'] = _decrypt(json['phone_number']?.toString() ?? '');
+      decrypted['pinCode'] = _decrypt(json['pin_code']?.toString() ?? '');
       // Ensure model mapping works with snake_case from DB
       return User.fromMap(decrypted);
     }).toList();
@@ -714,8 +718,8 @@ class DatabaseHelper {
     final maps = await db.query('patients', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
       final decrypted = Map<String, dynamic>.from(maps.first);
-      decrypted['phoneNumber'] = _decrypt(maps.first['phone_number'] as String);
-      decrypted['pinCode'] = _decrypt(maps.first['pin_code'] as String);
+      decrypted['phoneNumber'] = _decrypt(maps.first['phone_number']?.toString() ?? '');
+      decrypted['pinCode'] = _decrypt(maps.first['pin_code']?.toString() ?? '');
       return User.fromMap(decrypted);
     }
     return null;

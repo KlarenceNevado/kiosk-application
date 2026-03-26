@@ -10,6 +10,14 @@ class PatientPdfService {
     required User patient,
     required VitalSigns record,
   }) async {
+    String maskPhone(String phone) {
+      if (phone.length < 6) return phone;
+      final first2 = phone.substring(0, 2);
+      final last4 = phone.substring(phone.length - 4);
+      final masking = '*' * (phone.length - 6);
+      return "$first2$masking$last4";
+    }
+
     final pdf = pw.Document();
 
     final dateString =
@@ -38,7 +46,7 @@ class PatientPdfService {
               pw.Divider(),
               pw.Text("Name: ${patient.fullName}",
                   style: const pw.TextStyle(fontSize: 12)),
-              pw.Text("Phone Number: ${patient.phoneNumber}",
+              pw.Text("Phone Number: ${maskPhone(patient.phoneNumber)}",
                   style: const pw.TextStyle(fontSize: 12)),
               pw.Text("Age: ${patient.age} / Gender: ${patient.gender}",
                   style: const pw.TextStyle(fontSize: 12)),

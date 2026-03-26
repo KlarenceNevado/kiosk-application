@@ -85,11 +85,11 @@ class VitalSigns {
       id: map['id'] ?? '',
       userId: map['userId'] ?? map['user_id'] ?? 'guest',
       timestamp: DateTime.parse(map['timestamp']),
-      heartRate: (map['heartRate'] ?? map['heart_rate'])?.toInt() ?? 0,
-      systolicBP: (map['systolicBP'] ?? map['systolic_bp'])?.toInt() ?? 0,
-      diastolicBP: (map['diastolicBP'] ?? map['diastolic_bp'])?.toInt() ?? 0,
-      oxygen: map['oxygen']?.toInt() ?? 0,
-      temperature: map['temperature']?.toDouble() ?? 0.0,
+      heartRate: _toInt(map['heartRate'] ?? map['heart_rate']),
+      systolicBP: _toInt(map['systolicBP'] ?? map['systolic_bp']),
+      diastolicBP: _toInt(map['diastolicBP'] ?? map['diastolic_bp']),
+      oxygen: _toInt(map['oxygen']),
+      temperature: _toDouble(map['temperature']),
       bmi: map['bmi']?.toDouble(),
       bmiCategory: map['bmiCategory'] ?? map['bmi_category'],
       status: map['status'] ?? 'pending',
@@ -99,6 +99,22 @@ class VitalSigns {
       isDeleted: map['is_deleted'] == 1 || map['is_deleted'] == true,
       isSynced: map['is_synced'] == 1 || map['is_synced'] == true,
     );
+  }
+
+  static int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   factory VitalSigns.fromJson(String source) =>

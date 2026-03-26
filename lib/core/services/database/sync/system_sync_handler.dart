@@ -3,24 +3,21 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../security/notification_service.dart';
 import 'sync_handler.dart';
+import '../../system/sync_event_bus.dart';
 
 class SystemSyncHandler extends SyncHandler {
   RealtimeChannel? _announcementsChannel;
   RealtimeChannel? _alertsChannel;
   RealtimeChannel? _schedulesChannel;
 
-  final _announcementChangeController = StreamController<void>.broadcast();
-  Stream<void> get announcementStream => _announcementChangeController.stream;
+  Stream<void> get announcementStream => SyncEventBus.instance.announcementStream;
+  Stream<Map<String, dynamic>> get newAnnouncementStream => SyncEventBus.instance.newAnnouncementStream;
 
-  final _newAnnouncementController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get newAnnouncementStream => _newAnnouncementController.stream;
-
-  final _alertController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get alertStream => _alertController.stream;
-
-  final _newAlertController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get newAlertStream => _newAlertController.stream;
+  // Notice that alertStream was originally a Stream<Map<String,dynamic>>, let's map it via SyncEventBus
+  Stream<void> get alertStream => SyncEventBus.instance.alertStream;
+  Stream<Map<String, dynamic>> get newAlertStream => SyncEventBus.instance.newAlertStream;
 
   final _scheduleChangeController = StreamController<void>.broadcast();
   Stream<void> get scheduleStream => _scheduleChangeController.stream;
@@ -80,6 +77,14 @@ class SystemSyncHandler extends SyncHandler {
       String? latestTimestamp;
 
       for (var row in cloudData) {
+        final exists = await dbHelper.systemDao.getAnnouncementById(row['id']);
+        if (exists == null) {
+          // Trigger Notification for new announcement
+          NotificationService().showAnnouncementNotification(
+            title: "New Announcement",
+            body: row['title'] ?? "Tap to view details",
+          );
+        }
         await dbHelper.systemDao.insertAnnouncement({
           ...row,
           'is_synced': 1,
@@ -88,7 +93,7 @@ class SystemSyncHandler extends SyncHandler {
       }
       if (latestTimestamp != null) {
         await _updateLastSync('announcements', latestTimestamp);
-        _announcementChangeController.add(null);
+        SyncEventBus.instance.triggerAnnouncementUpdate();
       }
     } catch (e) {
       debugPrint("❌ SystemSyncHandler: Announcements Pull Error: $e");
@@ -137,7 +142,7 @@ class SystemSyncHandler extends SyncHandler {
       }
       if (latestTimestamp != null) {
         await _updateLastSync('alerts', latestTimestamp);
-        _alertController.add({'type': 'sync'});
+        SyncEventBus.instance.triggerAlertUpdate();
       }
     } catch (e) {
       debugPrint("❌ SystemSyncHandler: Alerts Pull Error: $e");
@@ -296,7 +301,7 @@ class SystemSyncHandler extends SyncHandler {
         'reactions': json.encode(reactions),
       });
 
-      _announcementChangeController.add(null);
+      SyncEventBus.instance.triggerAnnouncementUpdate();
 
       // Background Cloud Sync
       unawaited(() async {
@@ -396,17 +401,17 @@ class SystemSyncHandler extends SyncHandler {
   void subscribeAll() {
     _announcementsChannel = _subscribe('announcements', (payload) {
       pullAnnouncements();
-      _announcementChangeController.add(null);
+      SyncEventBus.instance.triggerAnnouncementUpdate();
       if (payload.newRecord.isNotEmpty) {
-        _newAnnouncementController.add(payload.newRecord);
+        SyncEventBus.instance.triggerNewAnnouncement(payload.newRecord);
       }
     });
 
     _alertsChannel = _subscribe('alerts', (payload) {
       pullAlerts();
-      _alertController.add({'type': 'sync'});
+      SyncEventBus.instance.triggerAlertUpdate();
       if (payload.newRecord.isNotEmpty) {
-        _newAlertController.add(payload.newRecord);
+        SyncEventBus.instance.triggerNewAlert(payload.newRecord);
       }
     });
 
@@ -416,7 +421,7 @@ class SystemSyncHandler extends SyncHandler {
     });
   }
 
-  RealtimeChannel _subscribe(String table, void Function(PostgresChangePayload payload) onData) {
+  RealtimeChannel _subscribe(String table, void Function(dynamic payload) onData) {
     return supabase
         .channel('public:${table}_realtime')
         .onPostgresChanges(

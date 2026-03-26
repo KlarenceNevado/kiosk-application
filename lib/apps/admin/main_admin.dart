@@ -19,6 +19,9 @@ import 'package:kiosk_application/features/chat/data/chat_repository.dart';
 import 'package:kiosk_application/core/providers/language_provider.dart';
 
 import 'package:kiosk_application/core/services/system/initialization_service.dart';
+import 'package:kiosk_application/features/auth/domain/i_auth_repository.dart';
+import 'package:kiosk_application/features/user_history/domain/i_history_repository.dart';
+import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
 
 // Entry point for the Desktop Admin App
 void main() async {
@@ -32,12 +35,12 @@ void main() async {
     MultiProvider(
       providers: [
         Provider(create: (_) => SensorManager()),
-        ChangeNotifierProvider(create: (_) => AuthRepository(), lazy: false),
-        ChangeNotifierProvider(create: (_) => HistoryRepository()),
+        ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
+        ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
         ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-        ChangeNotifierProvider(create: (_) => ChatRepository()),
+        ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
         ChangeNotifierProvider(
           create: (context) => HealthWizardProvider(
             context.read<SensorManager>(),

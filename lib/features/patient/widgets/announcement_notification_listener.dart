@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../core/services/database/sync_service.dart';
+import '../../../core/services/system/sync_event_bus.dart';
 import '../data/mobile_navigation_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
@@ -27,7 +27,7 @@ class _AnnouncementNotificationListenerState
   @override
   void initState() {
     super.initState();
-    _subscription = SyncService().newAnnouncementStream.listen((announcement) {
+    _subscription = SyncEventBus.instance.newAnnouncementStream.listen((announcement) {
       _showNotification(announcement);
     });
   }

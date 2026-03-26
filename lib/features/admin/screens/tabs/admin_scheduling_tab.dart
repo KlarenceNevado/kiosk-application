@@ -3,7 +3,7 @@ import '../../../../core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../data/admin_repository.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 
 class AdminSchedulingTab extends StatefulWidget {
   const AdminSchedulingTab({super.key});
@@ -29,7 +29,7 @@ class _AdminSchedulingTabState extends State<AdminSchedulingTab> {
   @override
   Widget build(BuildContext context) {
     final adminRepo = context.watch<AdminRepository>();
-    final authRepo = context.watch<AuthRepository>();
+    final authRepo = context.watch<IAuthRepository>();
     final schedules = adminRepo.schedules;
 
     return Row(children: [

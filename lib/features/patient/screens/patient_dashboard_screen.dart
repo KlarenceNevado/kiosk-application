@@ -3,11 +3,12 @@ import 'dart:async';
 import '../../../../core/constants/app_colors.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../auth/data/auth_repository.dart';
-import '../../../core/services/database/sync_service.dart';
+import '../../auth/domain/i_auth_repository.dart';
+import '../../../core/services/system/sync_event_bus.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../data/mobile_navigation_provider.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
+import '../../../core/domain/i_system_repository.dart';
 import 'dart:math' as math;
 
 class PatientDashboardScreen extends StatefulWidget {
@@ -33,15 +34,15 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     _loadData();
 
     // LISTEN FOR REAL-TIME UPDATES
-    _announcementSubscription = SyncService().announcementStream.listen((_) {
+    _announcementSubscription = SyncEventBus.instance.announcementStream.listen((_) {
       if (mounted) _loadData(forceSync: false);
     });
 
-    _alertSubscription = SyncService().alertStream.listen((_) {
+    _alertSubscription = SyncEventBus.instance.alertStream.listen((_) {
       if (mounted) _loadData(forceSync: false);
     });
 
-    _vitalsSubscription = SyncService().vitalsStream.listen((_) {
+    _vitalsSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
       if (mounted) _loadData(forceSync: false);
     });
   }
@@ -56,8 +57,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
   Future<void> _loadData({bool forceSync = true}) async {
     try {
-      final authRepo = context.read<AuthRepository>();
-      final historyRepo = context.read<HistoryRepository>();
+      final authRepo = context.read<IAuthRepository>();
+      final historyRepo = context.read<IHistoryRepository>();
+      final systemRepo = context.read<ISystemRepository>();
       final user = authRepo.currentUser;
       if (user == null) {
         setState(() {
@@ -68,10 +70,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       }
 
       // 1. Initial Local Fetch
-      final records = await SyncService().fetchPatientVitalsLocal(user.id);
+      await historyRepo.loadUserHistory(user.id);
+      final records = historyRepo.records;
+      
       final announcements =
-          await SyncService().fetchAnnouncements(currentUser: user);
-      final alerts = await SyncService().fetchAlerts(currentUser: user);
+          await systemRepo.fetchAnnouncements(currentUser: user);
+      final alerts = await systemRepo.fetchAlerts(currentUser: user);
 
       if (mounted) {
         setState(() {
@@ -88,12 +92,14 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       // 2. Only sync with Cloud if forced (e.g. on Init or Pull-to-Refresh)
       if (forceSync) {
         debugPrint("📱 Dashboard: Triggering full cloud sync...");
-        await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo,
-            triggerStream: true); // Enable broadcasting to siblings
+        await systemRepo.syncNow(
+          authRepo: authRepo,
+          historyRepo: historyRepo,
+        );
 
         // 3. Post-Sync Fetch
         final updatedAnnouncements =
-            await SyncService().fetchAnnouncements(currentUser: user);
+            await systemRepo.fetchAnnouncements(currentUser: user);
 
         if (!mounted) return;
         setState(() {
@@ -123,7 +129,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.read<AuthRepository>().currentUser;
+    final user = context.read<IAuthRepository>().currentUser;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -147,8 +153,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        AppColors.brandGreenDark,
-                        AppColors.brandGreen,
+                        Color(0xFF7CB335), // brandGreenDark
+                        Color(0xFF8CC63F), // brandGreen
                       ],
                     ),
                   ),
@@ -160,7 +166,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Text(
-                            "Hi, ${user?.firstName ?? 'Patient'} 👋",
+                            "Welcome, ${user?.firstName ?? 'Patient'}",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 26,
@@ -200,12 +206,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                         right: 12,
                         top: 12,
                         child: Container(
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
                           decoration: BoxDecoration(
-                            color: Colors.red,
+                            color: const Color(0xFFFF5252), // Clinical Red
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border: Border.all(color: Colors.white, width: 1.5),
                           ),
                         ),
                       ),
@@ -1456,9 +1462,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               child: Wrap(
                 spacing: 6,
                 children: [
-                  _buildChip("♥ ${vital.systolicBP}/${vital.diastolicBP}",
+                  _buildChip("BP: ${vital.systolicBP}/${vital.diastolicBP}",
                       isHypertensive ? Colors.red : Colors.grey.shade600),
-                  _buildChip("💓 ${vital.heartRate} bpm", Colors.grey.shade600),
+                  _buildChip("HR: ${vital.heartRate} bpm", Colors.grey.shade600),
                   _buildChip("BMI $bmiStr", Colors.grey.shade600),
                 ],
               ),

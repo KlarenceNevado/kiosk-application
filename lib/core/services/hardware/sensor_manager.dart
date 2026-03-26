@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'sensor_service_interface.dart';
 import 'mock_sensor_service.dart';
 import 'drivers/serial_service.dart';
@@ -26,7 +27,14 @@ class SensorManager {
     for (var type in SensorType.values) {
       if (AppEnvironment().isKiosk && (Platform.isWindows || Platform.isLinux)) {
         // Real Serial Ports for Desktop Kiosk
-        final portName = Platform.isWindows ? 'COM3' : '/dev/ttyUSB0';
+        // Use unique COM ports to avoid "Access is denied"
+        final portMap = {
+          SensorType.weight: Platform.isWindows ? 'COM1' : '/dev/ttyUSB0',
+          SensorType.oximeter: Platform.isWindows ? 'COM2' : '/dev/ttyUSB1',
+          SensorType.thermometer: Platform.isWindows ? 'COM3' : '/dev/ttyUSB2',
+          SensorType.bloodPressure: Platform.isWindows ? 'COM4' : '/dev/ttyUSB3',
+        };
+        final portName = portMap[type] ?? (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
         _sensors[type] = SerialSensorService(type: type, portName: portName);
       } else {
         _sensors[type] = MockSensorService(type);
@@ -38,6 +46,13 @@ class SensorManager {
           type: type,
           data: data,
           status: _sensors[type]!.currentStatus,
+        ));
+      }, onError: (e) {
+        debugPrint("❌ SensorManager [DataStream] Error for $type: $e");
+        // Don't rethrow, just notify the unified stream
+        _allDataController.add(SensorEvent(
+          type: type,
+          status: SensorStatus.error,
         ));
       });
 
@@ -56,6 +71,8 @@ class SensorManager {
             sensorFailures: 'Sensor $type is now $status',
           );
         }
+      }, onError: (e) {
+        debugPrint("❌ SensorManager [StatusStream] Error for $type: $e");
       });
     }
   }

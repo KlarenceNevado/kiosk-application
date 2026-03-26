@@ -7,7 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/database/database_helper.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -101,7 +101,7 @@ class AdminProvider extends ChangeNotifier {
   }
 
   // Clear Database
-  Future<void> clearDatabase(HistoryRepository historyRepo) async {
+  Future<void> clearDatabase(IHistoryRepository historyRepo) async {
     await historyRepo.clearHistory();
     await DatabaseHelper.instance.logSecurityEvent(
         "DB_WIPE", "Database cleared by Admin",

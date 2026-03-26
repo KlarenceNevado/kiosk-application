@@ -8,9 +8,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/services/database/database_helper.dart';
 import '../../../core/services/security/encryption_service.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
-import '../../user_history/data/history_repository.dart';
+import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import 'package:intl/intl.dart';
 import '../../../core/services/system/app_environment.dart';
@@ -160,7 +160,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authRepo = context.watch<AuthRepository>();
+    final authRepo = context.watch<IAuthRepository>();
     final allUsers = authRepo.users;
 
     var filteredUsers = allUsers.where((u) {
@@ -330,7 +330,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
 
   Widget _buildUserCard(User user) {
     final isSelected = _selectedUserIds.contains(user.id);
-    final historyRepo = context.read<HistoryRepository>();
+    final historyRepo = context.read<IHistoryRepository>();
     final userRecords =
         historyRepo.records.where((r) => r.userId == user.id).toList();
 
@@ -475,7 +475,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
             icon:
                 Icon(Icons.history_edu, color: Colors.grey.shade600, size: 20),
             onPressed: () {
-              final historyRepo = context.read<HistoryRepository>();
+              final historyRepo = context.read<IHistoryRepository>();
               _showPatientProfile(user, historyRepo.records);
             },
           ),
@@ -824,7 +824,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                       phoneNumber: phoneController.text.trim(),
                     );
                     await context
-                        .read<AuthRepository>()
+                        .read<IAuthRepository>()
                         .updateUser(updatedUser);
                     if (!mounted) return;
                     if (ctx.mounted) {
@@ -961,7 +961,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
   void _performDelete(List<String> userIds, String pin, BuildContext ctx) {
     if (pin == "123456") {
       Navigator.pop(ctx);
-      final repo = context.read<AuthRepository>();
+      final repo = context.read<IAuthRepository>();
       for (var id in userIds) {
         repo.deleteUser(id);
       }

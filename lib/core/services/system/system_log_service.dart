@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../../models/system_log_model.dart';
@@ -85,6 +86,40 @@ class SystemLogService {
     } catch (e) {
       SecurityLogger.error("Failed to persist system log", error: e);
     }
+  }
+
+  /// Logs the initial system health and hardware availability
+  /// Used for tracking Hypothesis H2 (Reliability)
+  Future<void> logUptimeHealth({
+    bool isSolarActive = true, // Placeholder for future solar sensor
+    double batteryLevel = 100.0,
+    Map<String, String>? availableSensors,
+  }) async {
+    final sensorStatusStr = availableSensors?.entries
+        .map((e) => "${e.key}: ${e.value}")
+        .join(", ");
+    
+    final remarks = "Solar: ${isSolarActive ? 'ON' : 'OFF'}, Battery: $batteryLevel%, Sensors: ${sensorStatusStr ?? 'None detected'}";
+
+    await logAction(
+      action: 'SYSTEM_UPTIME_HEALTH',
+      module: 'SYSTEM',
+      severity: 'INFO',
+      sensorFailures: remarks,
+    );
+    
+    debugPrint("📊 [SystemLogService] Uptime health logged for H2 validation.");
+  }
+
+  /// Prints the most recent logs in the Unified Log format (for debugging/audit)
+  Future<void> exportLogsToConsole({int limit = 20}) async {
+    final logs = await _db.getSystemLogs(limit: limit);
+    debugPrint("\n--- UNIFIED SYSTEM LOG EXPORT ---");
+    debugPrint("LogID | UserID | SessionID | Date | Time | Action | Duration | Result | Failed Sensor | Remarks");
+    for (final log in logs) {
+      debugPrint(log.toCsvRow());
+    }
+    debugPrint("--- END OF EXPORT ---\n");
   }
 
   String? get currentSessionId => _currentSessionId;

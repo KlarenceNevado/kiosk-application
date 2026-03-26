@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../user_history/data/history_repository.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../user_history/domain/i_history_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 import '../../../health_check/models/vital_signs_model.dart';
 import '../../../auth/models/user_model.dart';
 
@@ -29,7 +29,7 @@ class _AdminValidationTabState extends State<AdminValidationTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<HistoryRepository, AuthRepository>(
+    return Consumer2<IHistoryRepository, IAuthRepository>(
       builder: (context, historyRepo, authRepo, child) {
         final pendingRecords =
             historyRepo.records.where((r) => r.status == 'pending').toList();
@@ -120,7 +120,7 @@ class _AdminValidationTabState extends State<AdminValidationTab> {
     );
   }
 
-  Widget _buildValidationDetails(AuthRepository authRepo) {
+  Widget _buildValidationDetails(IAuthRepository authRepo) {
     final record = _selectedRecord!;
     final user = authRepo.users.firstWhere(
       (u) => u.id == record.userId,
@@ -349,7 +349,7 @@ class _AdminValidationTabState extends State<AdminValidationTab> {
                     );
 
                     context
-                        .read<HistoryRepository>()
+                        .read<IHistoryRepository>()
                         .updateRecord(updatedRecord);
 
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

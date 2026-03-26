@@ -15,7 +15,7 @@ import '../../../core/widgets/system_pill.dart';
 
 // STATE
 import '../../../../core/providers/language_provider.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 
 class MainMenuScreen extends StatelessWidget {
@@ -101,7 +101,7 @@ class MainMenuScreen extends StatelessWidget {
     final loc = AppLocalizations.of(context);
 
     // Get Current User Name
-    final currentUser = context.watch<AuthRepository>().currentUser;
+    final currentUser = context.watch<IAuthRepository>().currentUser;
     final String firstName = currentUser?.firstName ?? "Guest";
 
     return Scaffold(
@@ -298,7 +298,7 @@ class MainMenuScreen extends StatelessWidget {
                   children: [
                     _buildFooterButton(loc?.btnLogout ?? "Logout",
                         onTap: () async {
-                      await context.read<AuthRepository>().logout();
+                      await context.read<IAuthRepository>().logout();
                       if (context.mounted) {
                         context.go(AppRoutes.login);
                       }

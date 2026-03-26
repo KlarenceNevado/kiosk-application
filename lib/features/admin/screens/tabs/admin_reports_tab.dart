@@ -7,8 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../user_history/data/history_repository.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../user_history/domain/i_history_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 import '../../../auth/models/user_model.dart';
 import '../../../health_check/models/vital_signs_model.dart';
 import '../../services/pdf_report_service.dart';
@@ -57,8 +57,8 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
   Future<void> _exportToCSV() async {
     setState(() => _isGenerating = true);
     try {
-      final historyRepo = context.read<HistoryRepository>();
-      final authRepo = context.read<AuthRepository>();
+      final historyRepo = context.read<IHistoryRepository>();
+      final authRepo = context.read<IAuthRepository>();
       final records = _getFilteredRecords(historyRepo.records);
 
       if (records.isEmpty) {
@@ -140,8 +140,8 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final historyRepo = context.watch<HistoryRepository>();
-    final authRepo = context.watch<AuthRepository>();
+    final historyRepo = context.watch<IHistoryRepository>();
+    final authRepo = context.watch<IAuthRepository>();
     final filteredRecords = _getFilteredRecords(historyRepo.records);
 
     return SingleChildScrollView(

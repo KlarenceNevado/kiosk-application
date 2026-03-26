@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../auth/data/auth_repository.dart';
-import '../data/chat_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
+import '../domain/i_chat_repository.dart';
 import '../models/chat_message.dart';
 
 class PatientChatScreen extends StatefulWidget {
@@ -25,10 +25,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
     super.initState();
     _scrollController.addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = context.read<AuthRepository>().currentUser;
+      final user = context.read<IAuthRepository>().currentUser;
       if (user != null) {
         // In the patient app, we're always chatting with the admin (system)
-        final chatRepo = context.read<ChatRepository>();
+        final chatRepo = context.read<IChatRepository>();
         chatRepo.initChat(user.id, 'admin');
 
         // AUTO-SCROLL LISTENER
@@ -62,7 +62,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   @override
   void dispose() {
     try {
-      context.read<ChatRepository>().removeListener(_onChatChanged);
+      context.read<IChatRepository>().removeListener(_onChatChanged);
     } catch (_) {}
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
@@ -94,10 +94,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty) return;
 
-    final user = context.read<AuthRepository>().currentUser;
+    final user = context.read<IAuthRepository>().currentUser;
     if (user == null) return;
 
-    final chatRepo = context.read<ChatRepository>();
+    final chatRepo = context.read<IChatRepository>();
     final message = ChatMessage(
       id: const Uuid().v4(),
       senderId: user.id,
@@ -126,8 +126,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chatRepo = context.watch<ChatRepository>();
-    final user = context.watch<AuthRepository>().currentUser;
+    final chatRepo = context.watch<IChatRepository>();
+    final user = context.watch<IAuthRepository>().currentUser;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -145,13 +145,13 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
                 CircleAvatar(
                     radius: 3,
                     backgroundColor:
-                        context.watch<ChatRepository>().onlineStatus['admin'] ==
+                        context.watch<IChatRepository>().onlineStatus['admin'] ==
                                 true
                             ? Colors.lightGreenAccent
                             : Colors.white54),
                 const SizedBox(width: 4),
                 Text(
-                    context.watch<ChatRepository>().onlineStatus['admin'] ==
+                    context.watch<IChatRepository>().onlineStatus['admin'] ==
                             true
                         ? "Online"
                         : "Connecting...",
@@ -269,7 +269,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   Widget _buildMessageBubble(ChatMessage msg, bool isMe) {
     // Find the replied message if exists
     final repliedMsg = msg.replyTo != null
-        ? context.read<ChatRepository>().messages.firstWhere(
+        ? context.read<IChatRepository>().messages.firstWhere(
             (m) => m.id == msg.replyTo,
             orElse: () => ChatMessage(
                 id: '',
@@ -293,8 +293,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
             if (msg.replyTo != null) _buildSmallReplyPreview(repliedMsg!, isMe),
             GestureDetector(
               onLongPress: () => _showOptions(msg),
-              onDoubleTap: () => context.read<ChatRepository>().toggleReaction(
-                  msg.id, context.read<AuthRepository>().currentUser!.id, "❤️"),
+              onDoubleTap: () => context.read<IChatRepository>().toggleReaction(
+                  msg.id, context.read<IAuthRepository>().currentUser!.id, "❤️"),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -385,7 +385,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
     );
   }
 
-  Widget _buildReplyPreview(ChatRepository repo) {
+  Widget _buildReplyPreview(IChatRepository repo) {
     final msg = repo.messages.firstWhere((m) => m.id == _replyingToId!);
     return Container(
       padding: const EdgeInsets.all(12),
@@ -508,7 +508,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
                 title:
                     const Text("Delete", style: TextStyle(color: Colors.red)),
                 onTap: () {
-                  context.read<ChatRepository>().deleteMessage(msg.id);
+                  context.read<IChatRepository>().deleteMessage(msg.id);
                   Navigator.pop(context);
                 },
               ),
@@ -537,8 +537,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
             children: emojis.map((emoji) {
               return GestureDetector(
                 onTap: () {
-                  context.read<ChatRepository>().toggleReaction(msg.id,
-                      context.read<AuthRepository>().currentUser!.id, emoji);
+                  context.read<IChatRepository>().toggleReaction(msg.id,
+                      context.read<IAuthRepository>().currentUser!.id, emoji);
                   Navigator.pop(context);
                 },
                 child: Text(emoji, style: const TextStyle(fontSize: 32)),
@@ -564,7 +564,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
               child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () {
-              context.read<ChatRepository>().forwardMessage(msg, 'admin');
+              context.read<IChatRepository>().forwardMessage(msg, 'admin');
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Message forwarded")));

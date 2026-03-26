@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/database/sync_service.dart';
+import '../../../../core/services/system/sync_event_bus.dart';
+import '../../../../core/domain/i_system_repository.dart';
 import 'package:provider/provider.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/i_auth_repository.dart';
 import '../data/mobile_navigation_provider.dart';
 
 class PatientAnnouncementsScreen extends StatefulWidget {
@@ -43,8 +44,8 @@ class _PatientAnnouncementsScreenState
     super.initState();
     _loadAnnouncements();
 
-    // LISTEN FOR REAL-TIME UPDATES VIA SYNC SERVICE
-    _subscription = SyncService().announcementStream.listen((_) {
+    // LISTEN FOR REAL-TIME UPDATES VIA SYNC EVENT BUS
+    _subscription = SyncEventBus.instance.announcementStream.listen((_) {
       if (mounted) {
         debugPrint(
             "🔔 Patient Announcements: Real-time/Sync update received. Reloading (Local Only)...");
@@ -55,11 +56,12 @@ class _PatientAnnouncementsScreenState
 
   Future<void> _loadAnnouncements({bool forceSync = true}) async {
     try {
-      final authRepo = context.read<AuthRepository>();
+      final authRepo = context.read<IAuthRepository>();
+      final systemRepo = context.read<ISystemRepository>();
       final user = authRepo.currentUser;
 
-      // 1. Local fetch
-      final data = await SyncService().fetchAnnouncements(currentUser: user);
+      // 1. Local/Web fetch
+      final data = await systemRepo.fetchAnnouncements(currentUser: user);
 
       if (mounted) {
         setState(() {
@@ -72,12 +74,11 @@ class _PatientAnnouncementsScreenState
       if (forceSync) {
         debugPrint(
             "📱 Patient Announcements: Triggering background downward sync...");
-        await SyncService().forceDownSyncAndRefresh(authRepo, null,
-            triggerStream: true); // Broadcast to siblings
+        await systemRepo.syncNow(authRepo: authRepo);
 
         // 3. Final refetch after cloud sync
         final updatedData =
-            await SyncService().fetchAnnouncements(currentUser: user);
+            await systemRepo.fetchAnnouncements(currentUser: user);
 
         if (mounted) {
           setState(() {
@@ -379,9 +380,11 @@ class _PatientAnnouncementsScreenState
   }
 
   void _onReactionToggle(String id, String emoji) {
-    final user = context.read<AuthRepository>().currentUser;
+    final authRepo = context.read<IAuthRepository>();
+    final systemRepo = context.read<ISystemRepository>();
+    final user = authRepo.currentUser;
     if (user != null) {
-      SyncService().reactToAnnouncement(id, emoji, user.id);
+      systemRepo.reactToAnnouncement(id, emoji, user.id);
     }
   }
 

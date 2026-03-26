@@ -9,8 +9,8 @@ import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
 
 // DATA & REPO
-import '../../../user_history/data/history_repository.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../user_history/domain/i_history_repository.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 import '../../models/vital_signs_model.dart';
 
 enum SensorType { temperature, bloodPressure, heartRate, oxygen }
@@ -70,8 +70,8 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
 
   Future<void> _saveAndFinish() async {
     final provider = context.read<HealthWizardProvider>();
-    final historyRepo = context.read<HistoryRepository>();
-    final authRepo = context.read<AuthRepository>();
+    final historyRepo = context.read<IHistoryRepository>();
+    final authRepo = context.read<IAuthRepository>();
 
     if (authRepo.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(

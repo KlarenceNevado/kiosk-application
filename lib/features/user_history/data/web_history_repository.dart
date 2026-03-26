@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../health_check/models/vital_signs_model.dart';
 
+import '../domain/i_history_repository.dart';
+
 /// Web-safe HistoryRepository that uses Supabase directly.
 /// No DatabaseHelper, SyncService, FileStorageService, dart:io, or open_file.
-class HistoryRepository extends ChangeNotifier {
+class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository {
   final _supabase = Supabase.instance.client;
   List<VitalSigns> _records = [];
   bool _isLoading = false;
 
+  @override
   List<VitalSigns> get records => List.unmodifiable(_records);
+  @override
   bool get isLoading => _isLoading;
 
   /// Loads vitals ONLY for a specific user from Supabase
+  @override
   Future<void> loadUserHistory(String userId) async {
     _isLoading = true;
     notifyListeners();
@@ -36,6 +41,7 @@ class HistoryRepository extends ChangeNotifier {
   }
 
   /// Loads ALL vitals from Supabase (Admin only)
+  @override
   Future<void> loadAllHistory() async {
     _isLoading = true;
     notifyListeners();
@@ -58,18 +64,22 @@ class HistoryRepository extends ChangeNotifier {
   }
 
   // Stubs for methods that are native-only (no local DB on web)
+  @override
   Future<void> addRecord(VitalSigns record) async {
     debugPrint("⚠️ Web: addRecord is a no-op. Vitals are recorded at the Kiosk.");
   }
 
+  @override
   Future<void> updateRecord(VitalSigns updatedRecord) async {
     debugPrint("⚠️ Web: updateRecord is a no-op.");
   }
 
+  @override
   Future<void> clearHistory() async {
     debugPrint("⚠️ Web: clearHistory is a no-op.");
   }
 
+  @override
   Future<void> openReport(VitalSigns record) async {
     // On web, open the report URL directly in a new tab if available
     if (record.reportUrl != null) {

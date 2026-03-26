@@ -3,7 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../auth/models/user_model.dart';
-import '../../chat/data/chat_repository.dart';
+import '../../chat/domain/i_chat_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import 'dart:math' as math;
 
@@ -31,7 +31,7 @@ class _AdminPatientProfileSidebarState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<ChatRepository>().initChat('admin', widget.patient.id);
+        context.read<IChatRepository>().initChat('admin', widget.patient.id);
       }
     });
   }
@@ -56,7 +56,7 @@ class _AdminPatientProfileSidebarState
       if (bmiCount > 0) avgBmi = totalBmi / bmiCount;
     }
 
-    final chatRepo = context.watch<ChatRepository>();
+    final chatRepo = context.watch<IChatRepository>();
     final messages = chatRepo.messages
         .where((m) =>
             m.senderId == widget.patient.id ||
@@ -206,7 +206,7 @@ class _AdminPatientProfileSidebarState
                         TextButton.icon(
                             onPressed: () {
                               context
-                                  .read<ChatRepository>()
+                                  .read<IChatRepository>()
                                   .setSelectedPatient(widget.patient);
                               widget.onMessagePressed?.call();
                               Navigator.pop(context);

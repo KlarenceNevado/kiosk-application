@@ -1,10 +1,10 @@
 import 'package:go_router/go_router.dart';
 
 // WEB-SAFE: Only Patient/Mobile screens — NO admin, NO kiosk, NO SyncService
-import '../../features/mobile/screens/web_mobile_splash_screen.dart';
-import '../../features/mobile/screens/web_mobile_login_screen.dart';
-import '../../features/patient/screens/web_patient_nav_shell.dart';
-import '../../features/patient/screens/web_patient_dashboard_screen.dart';
+import '../../features/mobile/screens/mobile_splash_screen.dart';
+import '../../features/mobile/screens/mobile_login_screen.dart';
+import '../../features/patient/screens/patient_nav_shell.dart';
+import '../../features/patient/screens/patient_dashboard_screen.dart';
 
 class WebAppRoutes {
   static const String patientSplash = '/patient/splash';
@@ -19,19 +19,19 @@ final GoRouter webPatientRouter = GoRouter(
   routes: [
     GoRoute(
       path: WebAppRoutes.patientSplash,
-      builder: (context, state) => const WebMobileSplashScreen(),
+      builder: (context, state) => const MobileSplashScreen(),
     ),
     GoRoute(
       path: WebAppRoutes.patientLogin,
-      builder: (context, state) => const WebMobileLoginScreen(),
+      builder: (context, state) => const MobileLoginScreen(),
     ),
     GoRoute(
       path: WebAppRoutes.patientHome,
-      builder: (context, state) => const WebPatientNavShell(),
+      builder: (context, state) => const PatientNavShell(),
     ),
     GoRoute(
       path: WebAppRoutes.patientDashboard,
-      builder: (context, state) => const WebPatientDashboardScreen(),
+      builder: (context, state) => const PatientDashboardScreen(),
     ),
   ],
 );
