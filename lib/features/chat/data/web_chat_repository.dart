@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+// No extra import needed, just fixing the enum name.
 import '../../auth/models/user_model.dart';
 import '../models/chat_message.dart';
 
@@ -17,6 +18,10 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   User? _selectedPatient;
   int _retryCount = 0;
   Timer? _retryTimer;
+  Timer? _pollingTimer;
+  String? _activeCurrentUserId;
+  String? _activeOtherUserId;
+  bool _isRealtimeOperational = false;
 
   @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -37,7 +42,20 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   /// Initialize real-time listener for a specific chat between two users
   @override
   void initChat(String currentUserId, String otherUserId) {
+    if (_activeCurrentUserId == currentUserId && 
+        _activeOtherUserId == otherUserId && 
+        _chatChannel != null) {
+      debugPrint("ℹ️ Web Chat: Already initialized for $currentUserId <-> $otherUserId");
+      return;
+    }
+    
+    _activeCurrentUserId = currentUserId;
+    _activeOtherUserId = otherUserId;
+    _retryCount = 0;
+    _isRealtimeOperational = false;
+    
     _messages.clear();
+    _stopPolling(); // Stop any existing fallback
     _syncDownCloudMessages(currentUserId, otherUserId);
     _setupRealtime(currentUserId, otherUserId);
     _setupPresence(currentUserId);
@@ -62,60 +80,89 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     }
   }
 
-  void _setupRealtime(String currentUserId, String otherUserId) {
-    _chatChannel?.unsubscribe();
+  void _setupRealtime(String currentUserId, String otherUserId) async {
+    if (_chatChannel != null) {
+      await _chatChannel!.unsubscribe();
+      _chatChannel = null;
+    }
     _retryTimer?.cancel();
 
-    // 1. UNIQUE CHANNEL NAME per user lane
-    final String channelName = 'chat_user_${currentUserId.replaceAll('-', '_')}';
+    // Diagnostic: Log Session State
+    final session = _supabase.auth.currentSession;
+    debugPrint("🔐 Supabase Session: ${session == null ? 'ANON' : 'ACTIVE'} (User: ${session?.user.id})");
+
+    // 1. UNIQUE CHANNEL NAME (Using 'public:' prefix for better anon compatibility)
+    final String channelName = 'public:chat_user_${currentUserId.replaceAll('-', '_')}';
     final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
-    // 2. SERVER-SIDE FILTERS (Best practice for performance and security)
-    // We listen specifically for messages received by the current user
+    // 2. BROAD LISTENERS (Most compatible for anon users)
     channel
         .onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'chat_messages',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'receiver_id',
-        value: currentUserId,
-      ),
+      // No filter here; we filter locally in _onRealtimeChange for compatibility
       callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
-    ).onPostgresChanges(
-      // Also listen for messages sent by the current user (e.g. from another device)
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'chat_messages',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'sender_id',
-        value: currentUserId,
-      ),
-      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+    ).onBroadcast(
+      // 3. BROADCAST SIGNAL (Immediate "New Message" ping)
+      event: 'new_message',
+      callback: (payload) {
+        debugPrint("🔔 Web Chat: Received Broadcast new_message.");
+        _syncDownCloudMessages(currentUserId, otherUserId);
+      },
     )
         .subscribe((status, [error]) {
       debugPrint("📡 Web Chat Realtime ($currentUserId): Status is $status");
       
       if (status == RealtimeSubscribeStatus.subscribed) {
-        _retryCount = 0; // Reset on success
+        _retryCount = 0; 
+        _isRealtimeOperational = true;
+        _stopPolling(); 
+        debugPrint("✅ Web Chat: Realtime Operational.");
       }
       
       if (status == RealtimeSubscribeStatus.channelError || status == RealtimeSubscribeStatus.timedOut) {
         if (error != null) debugPrint("❌ Realtime Error: $error");
+        _isRealtimeOperational = false;
         
         // 3. EXPONENTIAL BACKOFF
         _retryCount++;
         final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 6)))).inSeconds;
         debugPrint("🔄 Retrying Realtime subscription in ${delaySeconds}s (Attempt $_retryCount)...");
         
+        // 4. FALLBACK POLLING (If Realtime is struggling)
+        if (_retryCount >= 3) {
+          final int pollingInterval = _retryCount >= 5 ? 3 : 10;
+          _startPolling(currentUserId, otherUserId, interval: pollingInterval);
+        }
+
         _retryTimer = Timer(Duration(seconds: delaySeconds), () {
           _setupRealtime(currentUserId, otherUserId);
         });
       }
     });
+  }
+
+  void _startPolling(String currentUserId, String otherUserId, {int interval = 10}) {
+    // If interval changed, restart
+    if (_pollingTimer != null) {
+      _pollingTimer?.cancel();
+      _pollingTimer = null;
+    }
+    
+    debugPrint("⚠️ Web Chat: Engaging Polling Fallback (${interval}s interval)...");
+    _pollingTimer = Timer.periodic(Duration(seconds: interval), (_) {
+      if (!_isRealtimeOperational) {
+        debugPrint("⏱️ Web Chat: Polling for updates (${interval}s)...");
+        _syncDownCloudMessages(currentUserId, otherUserId);
+      }
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
   }
 
   void _onRealtimeChange(PostgresChangePayload payload, String currentUserId, String otherUserId) {
@@ -158,10 +205,14 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     _handleIncomingMessage(msg);
   }
 
-  void _setupPresence(String userId) {
-    _presenceChannel?.unsubscribe();
-
-    _presenceChannel = _supabase.channel('online-users');
+  void _setupPresence(String userId) async {
+    if (_presenceChannel != null) {
+      await _presenceChannel!.unsubscribe();
+      _presenceChannel = null;
+    }
+    
+    // Using 'public:' prefix for better compatibility with anon roles
+    _presenceChannel = _supabase.channel('public:online-users');
 
     _presenceChannel!.onPresenceSync((payload) {
       final newState = _presenceChannel!.presenceState();
@@ -213,6 +264,9 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
     try {
       await _supabase.from('chat_messages').insert(message.toSupabaseMap());
+      
+      // 5. BROADCAST NOTIFICATION (Optional: Speed-up signal)
+      // _chatChannel?.send(type: RealtimeListenTypes.broadcast, event: 'new_message', payload: {'id': message.id});
     } catch (e) {
       debugPrint("❌ Web Chat Send Error: $e");
     }
@@ -282,6 +336,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
   @override
   void dispose() {
+    _stopPolling();
     _retryTimer?.cancel();
     _chatChannel?.unsubscribe();
     _presenceChannel?.unsubscribe();
