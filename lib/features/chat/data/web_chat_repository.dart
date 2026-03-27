@@ -154,6 +154,8 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     });
   }
 
+  int _pollCount = 0;
+  
   void _startPolling(String currentUserId, String otherUserId, {int interval = 10}) {
     // If interval changed, restart
     if (_pollingTimer != null) {
@@ -164,7 +166,10 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     debugPrint("⚠️ Web Chat: Engaging Polling Fallback (${interval}s interval)...");
     _pollingTimer = Timer.periodic(Duration(seconds: interval), (_) {
       if (!_isRealtimeOperational) {
-        debugPrint("⏱️ Web Chat: Polling for updates (${interval}s)...");
+        _pollCount++;
+        if (_pollCount % 10 == 1) {
+          debugPrint("⏱️ Web Chat: Polling active (${interval}s)...");
+        }
         _syncDownCloudMessages(currentUserId, otherUserId);
       }
     });
