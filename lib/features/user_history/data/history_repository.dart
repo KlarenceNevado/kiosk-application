@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/database/database_helper.dart';
 import '../../../core/services/database/sync_service.dart';
+import '../../../core/services/system/sync_event_bus.dart';
 import '../../../features/health_check/models/vital_signs_model.dart';
 import '../../../core/services/system/file_storage_service.dart';
 import 'package:open_file/open_file.dart';
@@ -12,6 +14,22 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   List<VitalSigns> _records = [];
   bool _isLoading = false;
+  StreamSubscription? _syncSubscription;
+
+  LocalHistoryRepository() {
+    _syncSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
+      debugPrint("🔔 HistoryRepository: Sync event detected. Refreshing data...");
+      if (_records.isNotEmpty) {
+        loadAllHistory();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   List<VitalSigns> get records => List.unmodifiable(_records);

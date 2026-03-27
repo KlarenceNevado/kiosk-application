@@ -118,8 +118,12 @@ class MigrationService {
 
     // Specific check for Patients 'created_at'
     final patientCols = await db.rawQuery('PRAGMA table_info(patients)');
-    if (!patientCols.any((c) => c['name'] == 'created_at')) {
+    final patientColNames = patientCols.map((c) => c['name'].toString()).toList();
+    if (!patientColNames.contains('created_at')) {
       await db.execute('ALTER TABLE patients ADD COLUMN created_at TEXT');
+    }
+    if (!patientColNames.contains('relation')) {
+      await db.execute('ALTER TABLE patients ADD COLUMN relation TEXT');
     }
 
     // Vitals missing columns
@@ -175,6 +179,15 @@ class MigrationService {
     if (!chatColNames.contains('is_active')) {
       await db.execute('ALTER TABLE chat_messages ADD COLUMN is_active INTEGER DEFAULT 1');
     }
+    if (!chatColNames.contains('patient_id')) {
+      await db.execute('ALTER TABLE chat_messages ADD COLUMN patient_id TEXT');
+    }
+    if (!chatColNames.contains('sender')) {
+      await db.execute('ALTER TABLE chat_messages ADD COLUMN sender TEXT');
+    }
+    if (!chatColNames.contains('message')) {
+      await db.execute('ALTER TABLE chat_messages ADD COLUMN message TEXT');
+    }
 
     // --- RECONSTRUCTION FIX FOR NOT NULL & LEGACY COLUMNS ---
     await _reconstructPatientsTable(db);
@@ -207,6 +220,7 @@ class MigrationService {
             'gender TEXT, '
             'parent_id TEXT, '
             'avatar_url TEXT, '
+            'relation TEXT, '
             'is_active INTEGER DEFAULT 1, '
             'is_synced INTEGER DEFAULT 0, '
             'is_deleted INTEGER DEFAULT 0, '
@@ -227,12 +241,13 @@ class MigrationService {
           colNames.contains('parent_id') ? 'parent_id' : 'parentId',
           'is_active',
           'is_synced',
+          colNames.contains('relation') ? 'relation' : "NULL",
           'created_at',
           'updated_at'
         ].join(', ');
 
         await txn.execute(
-            'INSERT INTO patients_new (id, first_name, last_name, middle_initial, sitio, phone_number, pin_code, date_of_birth, gender, parent_id, is_active, is_synced, created_at, updated_at) '
+            'INSERT INTO patients_new (id, first_name, last_name, middle_initial, sitio, phone_number, pin_code, date_of_birth, gender, parent_id, is_active, is_synced, relation, created_at, updated_at) '
             'SELECT $selectCols FROM patients');
 
         await txn.execute('DROP TABLE patients');

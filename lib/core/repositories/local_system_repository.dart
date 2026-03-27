@@ -6,6 +6,18 @@ import '../../features/user_history/domain/i_history_repository.dart';
 
 class LocalSystemRepository implements ISystemRepository {
   @override
+  Stream<List<Map<String, dynamic>>> get announcementStream =>
+      DatabaseHelper.instance.systemDao.announcementStream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> get alertStream =>
+      DatabaseHelper.instance.systemDao.alertStream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> get scheduleStream =>
+      DatabaseHelper.instance.systemDao.scheduleStream;
+
+  @override
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
     return await SyncService().fetchAnnouncements(currentUser: currentUser);
   }

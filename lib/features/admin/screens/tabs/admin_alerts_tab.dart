@@ -27,9 +27,6 @@ class _AdminAlertsTabState extends State<AdminAlertsTab> {
   Widget build(BuildContext context) {
     final adminRepo = context.watch<AdminRepository>();
     final alerts = adminRepo.alerts;
-    final activeAlerts = alerts.where((a) => a.isActive).toList();
-    final archivedAlerts = alerts.where((a) => !a.isActive).toList();
-
     return Column(
       children: [
         // TOP SECTION: Dispatch and Active Alerts
@@ -172,55 +169,27 @@ class _AdminAlertsTabState extends State<AdminAlertsTab> {
                                     }))
                           ]))),
 
-              // RIGHT: Active
+              // RIGHT: Recent Alerts
               Expanded(
-                  child: DefaultTabController(
-                length: 2,
                 child: Container(
-                    color: Colors.grey[50],
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text("Community Alerts",
-                                  style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.brandDark)),
-                              Container(
-                                width: 250,
-                                decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.grey[300]!)),
-                                child: const TabBar(
-                                  labelColor: AppColors.brandDark,
-                                  unselectedLabelColor: Colors.grey,
-                                  indicatorColor: AppColors.brandGreen,
-                                  tabs: [
-                                    Tab(text: "Active"),
-                                    Tab(text: "Archived"),
-                                  ],
-                                ),
-                              )
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Expanded(
-                              child: TabBarView(
-                            children: [
-                              // Active Alerts
-                              _buildAlertsList(activeAlerts, adminRepo),
-                              // Archived Alerts
-                              _buildAlertsList(archivedAlerts, adminRepo),
-                            ],
-                          ))
-                        ])),
-              ))
+                  color: Colors.grey[50],
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Community Alerts",
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.brandDark)),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: _buildAlertsList(alerts, adminRepo),
+                      )
+                    ],
+                  ),
+                ),
+              )
             ])),
 
         // BOTTOM SECTION: Automated Config
@@ -348,26 +317,12 @@ class _AdminAlertsTabState extends State<AdminAlertsTab> {
                                     icon: const Icon(Icons.more_vert,
                                         color: Colors.grey, size: 20),
                                     onSelected: (val) {
-                                      if (val == 'archive') {
-                                        adminRepo.toggleAlertStatus(
-                                            alert, false);
-                                      } else if (val == 'restore') {
-                                        adminRepo.toggleAlertStatus(
-                                            alert, true);
-                                      } else if (val == 'delete') {
+                                      if (val == 'delete') {
                                         _confirmDeleteAlert(
                                             context, alert, adminRepo);
                                       }
                                     },
                                     itemBuilder: (context) => [
-                                      if (alert.isActive)
-                                        const PopupMenuItem(
-                                            value: 'archive',
-                                            child: Text('Archive Alert')),
-                                      if (!alert.isActive)
-                                        const PopupMenuItem(
-                                            value: 'restore',
-                                            child: Text('Restore Alert')),
                                       const PopupMenuItem(
                                           value: 'delete',
                                           child: Text('Permanently Delete',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
@@ -5,9 +6,29 @@ import 'package:crypto/crypto.dart';
 import 'base_dao.dart';
 import '../../../models/system_log_model.dart';
 import '../../security/encryption_service.dart';
+import '../../../../features/chat/models/chat_message.dart';
 
 class SystemDao extends BaseDao {
   SystemDao(super.db);
+
+  // --- REACTIVE STREAMS ---
+  final _announcementController = StreamController<List<Map<String, dynamic>>>.broadcast();
+  final _alertController = StreamController<List<Map<String, dynamic>>>.broadcast();
+  final _scheduleController = StreamController<List<Map<String, dynamic>>>.broadcast();
+
+  Stream<List<Map<String, dynamic>>> get announcementStream => _announcementController.stream;
+  Stream<List<Map<String, dynamic>>> get alertStream => _alertController.stream;
+  Stream<List<Map<String, dynamic>>> get scheduleStream => _scheduleController.stream;
+
+  void refreshAnnouncements() async => _announcementController.add(await getAnnouncements());
+  void refreshAlerts() async => _alertController.add(await getAlerts());
+  void refreshSchedules() async => _scheduleController.add(await getSchedules());
+
+  void dispose() {
+    _announcementController.close();
+    _alertController.close();
+    _scheduleController.close();
+  }
 
   // --- SECURITY & AUDIT ---
   Future<void> logSecurityEvent(String action, String description,
@@ -158,25 +179,60 @@ class SystemDao extends BaseDao {
     dbRow['is_synced'] = (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
     dbRow.remove('targetGroup');
     await db.insert('announcements', dbRow, conflictAlgorithm: ConflictAlgorithm.replace);
+    refreshAnnouncements();
   }
 
   Future<List<Map<String, dynamic>>> getAnnouncements() async {
-    return await db.query('announcements', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'timestamp DESC');
+    final results = await db.query('announcements', 
+        where: 'is_deleted = ?', 
+        whereArgs: [0], 
+        orderBy: 'timestamp DESC');
+    return results.map((row) {
+      final map = Map<String, dynamic>.from(row);
+      if (map['reactions'] is String) {
+        try {
+          map['reactions'] = json.decode(map['reactions'] as String);
+        } catch (_) {
+          map['reactions'] = {};
+        }
+      } else if (map['reactions'] == null) {
+        map['reactions'] = {};
+      }
+      return map;
+    }).toList();
   }
 
   Future<Map<String, dynamic>?> getAnnouncementById(String id) async {
     final results = await db.query('announcements', where: 'id = ?', whereArgs: [id]);
-    return results.isNotEmpty ? results.first : null;
+    if (results.isEmpty) return null;
+    final map = Map<String, dynamic>.from(results.first);
+    if (map['reactions'] is String) {
+      try {
+        map['reactions'] = json.decode(map['reactions'] as String);
+      } catch (_) {
+        map['reactions'] = {};
+      }
+    } else if (map['reactions'] == null) {
+      map['reactions'] = {};
+    }
+    return map;
   }
 
   Future<void> updateAnnouncement(Map<String, dynamic> row) async {
     final dbRow = Map<String, dynamic>.from(row);
     if (dbRow['reactions'] is Map) dbRow['reactions'] = json.encode(dbRow['reactions']);
     await db.update('announcements', dbRow, where: 'id = ?', whereArgs: [dbRow['id']]);
+    refreshAnnouncements();
   }
 
   Future<void> deleteAnnouncement(String id) async {
-    await db.update('announcements', {'is_deleted': 1, 'is_synced': 0, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    await db.update('announcements', {'is_deleted': 1, 'is_synced': 0, 'updated_at': DateTime.now().toUtc().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    refreshAnnouncements();
+  }
+
+  Future<void> hardDeleteAnnouncement(String id) async {
+    await db.delete('announcements', where: 'id = ?', whereArgs: [id]);
+    refreshAnnouncements();
   }
 
   // --- SCHEDULES ---
@@ -187,14 +243,19 @@ class SystemDao extends BaseDao {
     dbRow['color_value'] = dbRow['color_value'] ?? dbRow['colorValue'];
     dbRow.remove('colorValue');
     await db.insert('schedules', dbRow, conflictAlgorithm: ConflictAlgorithm.replace);
+    refreshSchedules();
   }
 
   Future<List<Map<String, dynamic>>> getSchedules() async {
-    return await db.query('schedules', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'date ASC');
+    return await db.query('schedules', 
+        where: 'is_deleted = ?', 
+        whereArgs: [0], 
+        orderBy: 'date ASC');
   }
 
   Future<void> deleteSchedule(String id) async {
     await db.update('schedules', {'is_deleted': 1, 'is_synced': 0, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    refreshSchedules();
   }
 
   Future<Map<String, dynamic>?> getScheduleById(String id) async {
@@ -212,10 +273,14 @@ class SystemDao extends BaseDao {
     dbRow.remove('isEmergency');
     dbRow.remove('targetGroup');
     await db.insert('alerts', dbRow, conflictAlgorithm: ConflictAlgorithm.replace);
+    refreshAlerts();
   }
 
   Future<List<Map<String, dynamic>>> getAlerts() async {
-    return await db.query('alerts', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'timestamp DESC');
+    return await db.query('alerts', 
+        where: 'is_deleted = ?', 
+        whereArgs: [0], 
+        orderBy: 'timestamp DESC');
   }
 
   Future<Map<String, dynamic>?> getAlertById(String id) async {
@@ -225,10 +290,17 @@ class SystemDao extends BaseDao {
 
   Future<void> updateAlert(Map<String, dynamic> row) async {
     await db.update('alerts', row, where: 'id = ?', whereArgs: [row['id']]);
+    refreshAlerts();
   }
 
   Future<void> deleteAlert(String id) async {
-    await db.update('alerts', {'is_deleted': 1, 'is_synced': 0, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    await db.update('alerts', {'is_deleted': 1, 'is_synced': 0, 'updated_at': DateTime.now().toUtc().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    refreshAlerts();
+  }
+
+  Future<void> hardDeleteAlert(String id) async {
+    await db.delete('alerts', where: 'id = ?', whereArgs: [id]);
+    refreshAlerts();
   }
 
   // --- UNSYNCED FETCHERS ---
@@ -254,12 +326,12 @@ class SystemDao extends BaseDao {
   }
 
   Future<void> upsertChatMessage(Map<String, dynamic> data) async {
-    final prepared = Map<String, dynamic>.from(data);
-    prepared.forEach((key, value) {
-      if (value is bool) {
-        prepared[key] = value ? 1 : 0;
-      }
-    });
+    // Use the model to normalize data (handles message/content mapping, reactions decoding, etc.)
+    final message = ChatMessage.fromMap(data);
+    
+    // Convert back to map for SQLite insertion (now includes patient_id, sender, message)
+    final prepared = message.toMap();
+    
     await db.insert('chat_messages', prepared, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 

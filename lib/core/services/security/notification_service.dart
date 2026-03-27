@@ -314,6 +314,7 @@ class NotificationService {
   Future<void> showChatNotification({
     required String senderName,
     required String message,
+    int notificationId = 888,
   }) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
@@ -333,7 +334,7 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       await flutterLocalNotificationsPlugin.show(
-        888, // Static ID for chat
+        notificationId,
         "New Message from $senderName",
         message,
         platformDetails,

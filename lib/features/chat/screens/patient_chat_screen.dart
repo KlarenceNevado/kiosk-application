@@ -33,29 +33,27 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
 
         // AUTO-SCROLL LISTENER
         chatRepo.addListener(_onChatChanged);
+
+        // INITIAL SCROLL TO BOTTOM
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+        });
       }
     });
   }
 
   void _onChatChanged() {
-    if (!mounted) return;
-    // Scroll to bottom if we are already near bottom
-    if (_scrollController.hasClients) {
-      final bool isNearBottom = _scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 200;
-
-      if (isNearBottom) {
-        // Allow time for build
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
+    // With reverse: true, the list stays pinned to the bottom (index 0) automatically.
+    // We only need to show/hide the "Scroll to Bottom" button based on current position.
+    if (!mounted || !_scrollController.hasClients) return;
+    
+    final bool isNearBottom = _scrollController.position.pixels <= 200;
+    if (_showScrollToBottom == isNearBottom) {
+      setState(() {
+        _showScrollToBottom = !isNearBottom;
+      });
     }
   }
 
@@ -179,18 +177,23 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
                     ? _buildEmptyState()
                     : ListView.builder(
                         controller: _scrollController,
+                        reverse: true, // Latest messages at bottom (index 0)
                         padding: const EdgeInsets.all(16),
                         itemCount: chatRepo.messages.length,
                         itemBuilder: (context, index) {
                           final msg = chatRepo.messages[index];
                           final isMe = msg.senderId == user?.id;
-                          final prevMsg =
-                              index > 0 ? chatRepo.messages[index - 1] : null;
-                          final showDate = prevMsg == null ||
-                              DateFormat('yyyy-MM-dd')
-                                      .format(msg.phtTimestamp) !=
-                                  DateFormat('yyyy-MM-dd')
-                                      .format(prevMsg.phtTimestamp);
+                          
+                          // In a reversed list, "previous" in time is index + 1
+                          final prevInTimeMsg = index < chatRepo.messages.length - 1 
+                              ? chatRepo.messages[index + 1] 
+                              : null;
+                          
+                          // Show date if it's the first message ever (last index in reversed) 
+                          // or different from the message above it in the timeline (index + 1)
+                          final showDate = prevInTimeMsg == null ||
+                              DateFormat('yyyy-MM-dd').format(msg.phtTimestamp) !=
+                              DateFormat('yyyy-MM-dd').format(prevInTimeMsg.phtTimestamp);
 
                           return Column(
                             children: [

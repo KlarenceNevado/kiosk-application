@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'sensor_service_interface.dart';
 import 'mock_sensor_service.dart';
 import 'drivers/serial_service.dart';
+import 'drivers/sensor_hub_service.dart';
 import 'sensor_data_models.dart';
 import '../system/system_log_service.dart';
 import '../system/app_environment.dart';
@@ -22,50 +22,61 @@ class SensorManager {
   Stream<SensorEvent> get allDataStream => _allDataController.stream;
 
   void _initSensors() {
-    // For now, we initialize all as Mock services in "standby" mode
-    // These can be replaced with SerialSensorService when real hardware is defined
-    for (var type in SensorType.values) {
-      if (AppEnvironment().isKiosk && 
-          !AppEnvironment().useSimulation && 
-          (Platform.isWindows || Platform.isLinux)) {
-        // Real Serial Ports for Desktop Kiosk
-        // Use unique COM ports to avoid "Access is denied"
-        final portMap = {
-          SensorType.weight: Platform.isWindows ? 'COM1' : '/dev/ttyUSB0',
-          SensorType.oximeter: Platform.isWindows ? 'COM2' : '/dev/ttyUSB1',
-          SensorType.thermometer: Platform.isWindows ? 'COM3' : '/dev/ttyUSB2',
-          SensorType.bloodPressure: Platform.isWindows ? 'COM4' : '/dev/ttyUSB3',
-        };
-        final portName = portMap[type] ?? (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
-        _sensors[type] = SerialSensorService(type: type, portName: portName);
-      } else {
+    final bool isRealHardware = AppEnvironment().isKiosk && 
+        !AppEnvironment().useSimulation && 
+        (Platform.isWindows || Platform.isLinux);
+
+    if (isRealHardware) {
+      // PRODUCTION PORT MAPPING (From Integration Guide)
+      final String hubPort = Platform.isWindows ? 'COM1' : '/dev/ttyUSB0';
+      final String oximeterPort = Platform.isWindows ? 'COM2' : '/dev/ttyUSB1';
+      final String bpPort = Platform.isWindows ? 'COM4' : '/dev/ttyUSB3';
+
+      // 1. Initialize ESP32 HUB (Shared for Weight and Temp)
+      final hub = SensorHubService(type: SensorType.weight, portName: hubPort);
+      _sensors[SensorType.weight] = hub;
+      
+      // The thermometer uses the secondary stream from the hub
+      // For now, we manually pipe it in the listener below, 
+      // but we still need an entry in the map for status tracking.
+      _sensors[SensorType.thermometer] = SerialSensorService(
+        type: SensorType.thermometer, 
+        portName: hubPort, 
+      );
+
+      // 2. Initialize Direct USB Sensors
+      _sensors[SensorType.oximeter] = SerialSensorService(
+        type: SensorType.oximeter, 
+        portName: oximeterPort,
+        baudRate: 19200, 
+      );
+      
+      _sensors[SensorType.bloodPressure] = SerialSensorService(
+        type: SensorType.bloodPressure, 
+        portName: bpPort,
+        baudRate: 9600, 
+      );
+    } else {
+      // Mock sensors for development
+      for (var type in SensorType.values) {
         _sensors[type] = MockSensorService(type);
       }
+    }
 
+    // Listen to all registered sensors
+    for (var type in _sensors.keys) {
+      final service = _sensors[type]!;
       
-      // Listen to each sensor and pipe to the unified controller
-      _sensors[type]!.dataStream.listen((data) {
+      service.dataStream.listen((data) {
         _allDataController.add(SensorEvent(
           type: type,
           data: data,
-          status: _sensors[type]!.currentStatus,
-        ));
-      }, onError: (e) {
-        debugPrint("❌ SensorManager [DataStream] Error for $type: $e");
-        // Don't rethrow, just notify the unified stream
-        _allDataController.add(SensorEvent(
-          type: type,
-          status: SensorStatus.error,
+          status: service.currentStatus,
         ));
       });
 
-      _sensors[type]!.statusStream.listen((status) {
-        _allDataController.add(SensorEvent(
-          type: type,
-          status: status,
-        ));
-
-        // Log sensor failures or warnings
+      service.statusStream.listen((status) {
+        _allDataController.add(SensorEvent(type: type, status: status));
         if (status == SensorStatus.error || status == SensorStatus.disconnected) {
           SystemLogService().logAction(
             action: 'SENSOR_STATUS_CHANGE',
@@ -74,15 +85,24 @@ class SensorManager {
             sensorFailures: 'Sensor $type is now $status',
           );
         }
-      }, onError: (e) {
-        debugPrint("❌ SensorManager [StatusStream] Error for $type: $e");
+      });
+    }
+
+    // Special Case: Pipe Hub secondary data to Thermometer
+    if (_sensors[SensorType.weight] is SensorHubService) {
+      final hub = _sensors[SensorType.weight] as SensorHubService;
+      hub.secondaryDataStream.listen((tempData) {
+        _allDataController.add(SensorEvent(
+          type: SensorType.thermometer,
+          data: tempData,
+          status: hub.currentStatus,
+        ));
       });
     }
   }
 
   ISensorService getSensor(SensorType type) => _sensors[type]!;
-
-  /// Specialized accessors for convenience
+  
   ISensorService get weightSensor => _sensors[SensorType.weight]!;
   ISensorService get oximeterSensor => _sensors[SensorType.oximeter]!;
   ISensorService get thermometerSensor => _sensors[SensorType.thermometer]!;
@@ -91,12 +111,9 @@ class SensorManager {
   Future<void> startAll() async {
     for (var s in _sensors.values) {
       s.startReading();
-      // STAGGERED START: Introduce a small delay between each sensor open
-      // to spread out CPU/Bus load and avoid UI micro-stutters.
       await Future.delayed(const Duration(milliseconds: 150));
     }
   }
-
 
   void stopAll() {
     for (var s in _sensors.values) {
@@ -104,17 +121,11 @@ class SensorManager {
     }
   }
 
-  void startSensor(SensorType type) {
-    _sensors[type]?.startReading();
-  }
-
-  void stopSensor(SensorType type) {
-    _sensors[type]?.stopReading();
-  }
+  void startSensor(SensorType type) => _sensors[type]?.startReading();
+  void stopSensor(SensorType type) => _sensors[type]?.stopReading();
 
   void dispose() {
     stopAll();
     _allDataController.close();
   }
 }
-

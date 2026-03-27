@@ -6,6 +6,8 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'app_environment.dart';
 import '../../errors/error_handler.dart';
+import '../security/encryption_service.dart';
+
 
 /// Web-safe initialization service.
 /// This service is used ONLY for the Patient Mobile PWA build.
@@ -28,8 +30,12 @@ class WebInitializationService {
     // 3. Load .env
     await _initDotEnv();
 
-    // 4. Initialize Supabase (the SOLE data source on Web)
+    // 4. Core logic - Encryption (Crucial for Cloud sync data)
+    await EncryptionService().init();
+
+    // 5. Initialize Supabase (the SOLE data source on Web)
     await _initSupabase();
+
 
     debugPrint("✅ [WebInitializationService] Web initialization complete.");
   }

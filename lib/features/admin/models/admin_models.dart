@@ -69,7 +69,7 @@ class Announcement {
       content: map['content'],
       targetGroup: map['targetGroup'] ?? map['target_group'] ?? 'all',
       timestamp: DateTime.parse(map['timestamp']),
-      isActive: map['isActive'] == 1 || map['is_active'] == true,
+      isActive: map['is_active'] == 1 || map['is_active'] == true || map['isActive'] == 1 || map['isActive'] == true,
       reactions: parsedReactions,
       mediaUrl: map['media_url'],
       mediaPath: map['media_path'],
@@ -177,7 +177,7 @@ class SystemAlert {
           map['isActive'] == 1 ||
           map['isActive'] == true ||
           (map['isActive'] == null &&
-              map['is_active'] == null), // Default true for legacy
+              map['is_active'] == null),
     );
   }
 }

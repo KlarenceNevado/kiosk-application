@@ -10,6 +10,7 @@ import '../system/file_storage_service.dart';
 import 'database_helper.dart';
 import '../../../features/auth/models/user_model.dart';
 import '../../../features/health_check/models/vital_signs_model.dart';
+import '../system/app_environment.dart';
 import 'package:kiosk_application/core/services/security/security_logger.dart';
 
 class SyncService with WidgetsBindingObserver {
@@ -63,8 +64,9 @@ class SyncService with WidgetsBindingObserver {
 
     // Subscriptions
     systemHandler.subscribeAll();
-    patientHandler.subscribe((_) {});
-    vitalsHandler.subscribe((_) {});
+    patientHandler.subscribe((_) => patientHandler.pull());
+    vitalsHandler.subscribe((_) => vitalsHandler.pull());
+
     chatHandler.subscribe();
 
     ConnectionManager().statusStream.listen((status) {
@@ -119,8 +121,9 @@ class SyncService with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _attemptSync();
       systemHandler.subscribeAll();
-      patientHandler.subscribe((_) {});
-      vitalsHandler.subscribe((_) {});
+      patientHandler.subscribe((_) => patientHandler.pull());
+      vitalsHandler.subscribe((_) => vitalsHandler.pull());
+
     }
   }
 
@@ -159,11 +162,11 @@ class SyncService with WidgetsBindingObserver {
         await callback();
       }
 
-      // Parallel Push
+      // Parallel Push: Only Admin pushes system tables
       await Future.wait([
         patientHandler.push(),
         vitalsHandler.push(),
-        systemHandler.push(),
+        if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
       ]);
 

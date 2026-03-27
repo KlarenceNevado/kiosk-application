@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/system/sync_event_bus.dart';
 import '../../../../core/domain/i_system_repository.dart';
 import 'package:provider/provider.dart';
 import '../../auth/domain/i_auth_repository.dart';
-import '../data/mobile_navigation_provider.dart';
 
 class PatientAnnouncementsScreen extends StatefulWidget {
   const PatientAnnouncementsScreen({super.key});
@@ -18,88 +15,14 @@ class PatientAnnouncementsScreen extends StatefulWidget {
 
 class _PatientAnnouncementsScreenState
     extends State<PatientAnnouncementsScreen> {
-  bool _isLoading = true;
-  List<Map<String, dynamic>> _announcements = [];
-  String _errorMessage = '';
-  StreamSubscription? _subscription;
-  MobileNavigationProvider? _navProvider;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Listen for tab changes to refresh when this tab becomes active
-    final navProvider = context.watch<MobileNavigationProvider>();
-    if (_navProvider != null &&
-        _navProvider!.currentIndex != navProvider.currentIndex) {
-      if (navProvider.currentIndex == 2) {
-        debugPrint("📱 Announcements Tab Activated: Refreshing...");
-        _loadAnnouncements(forceSync: false);
-      }
-    }
-    _navProvider = navProvider;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAnnouncements();
-
-    // LISTEN FOR REAL-TIME UPDATES VIA SYNC EVENT BUS
-    _subscription = SyncEventBus.instance.announcementStream.listen((_) {
-      if (mounted) {
-        debugPrint(
-            "🔔 Patient Announcements: Real-time/Sync update received. Reloading (Local Only)...");
-        _loadAnnouncements(forceSync: false);
-      }
-    });
-  }
-
-  Future<void> _loadAnnouncements({bool forceSync = true}) async {
-    try {
-      final authRepo = context.read<IAuthRepository>();
-      final systemRepo = context.read<ISystemRepository>();
-      final user = authRepo.currentUser;
-
-      // 1. Local/Web fetch
-      final data = await systemRepo.fetchAnnouncements(currentUser: user);
-
-      if (mounted) {
-        setState(() {
-          _announcements = data;
-          _isLoading = false;
-        });
-      }
-
-      // 2. Only sync with Cloud if forced (e.g. on Init or Pull-to-Refresh)
-      if (forceSync) {
-        debugPrint(
-            "📱 Patient Announcements: Triggering background downward sync...");
-        await systemRepo.syncNow(authRepo: authRepo);
-
-        // 3. Final refetch after cloud sync
-        final updatedData =
-            await systemRepo.fetchAnnouncements(currentUser: user);
-
-        if (mounted) {
-          setState(() {
-            _announcements = updatedData;
-            _isLoading = false;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("❌ PatientAnnouncementsScreen Error: $e");
-      if (mounted) {
-        setState(() {
-          _errorMessage = "Failed to load announcements.";
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  // Managed by StreamBuilder in build()
 
   @override
   Widget build(BuildContext context) {
+    final authRepo = context.watch<IAuthRepository>();
+    final systemRepo = context.read<ISystemRepository>();
+    final user = authRepo.currentUser;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -109,68 +32,123 @@ class _PatientAnnouncementsScreenState
         elevation: 0,
         centerTitle: true,
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadAnnouncements,
-        color: AppColors.brandGreen,
-        child: _buildContent(),
-      ),
-    );
-  }
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: systemRepo.announcementStream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
+          }
 
-  Widget _buildContent() {
-    if (_isLoading) {
-      return const Center(
-          child: CircularProgressIndicator(color: AppColors.brandGreen));
-    }
+          if (snapshot.hasError) {
+             return Center(
+               child: Padding(
+                 padding: const EdgeInsets.all(32.0),
+                 child: Column(
+                   mainAxisAlignment: MainAxisAlignment.center,
+                   children: [
+                     const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.redAccent),
+                     const SizedBox(height: 16),
+                     Text(
+                       snapshot.error.toString().contains('RealtimeSubscribeException') 
+                           ? "Connection Lost" 
+                           : "Something went wrong",
+                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                     ),
+                     const SizedBox(height: 8),
+                     const Text(
+                       "We're having trouble reaching the server. Please try refreshing.",
+                       textAlign: TextAlign.center,
+                       style: TextStyle(color: Colors.grey),
+                     ),
+                     const SizedBox(height: 24),
+                     ElevatedButton.icon(
+                       onPressed: () {
+                         // A simple setState will trigger a rebuild and re-subscribe
+                         setState(() {});
+                       },
+                       icon: const Icon(Icons.refresh),
+                       label: const Text("Retry Connection"),
+                       style: ElevatedButton.styleFrom(
+                         backgroundColor: AppColors.brandGreen,
+                         foregroundColor: Colors.white,
+                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
+             );
+          }
 
-    if (_errorMessage.isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline_rounded,
-                color: Colors.red, size: 64),
-            const SizedBox(height: 16),
-            Text(_errorMessage, style: const TextStyle(color: Colors.grey)),
-            TextButton(
-                onPressed: _loadAnnouncements, child: const Text("Retry")),
-          ],
-        ),
-      );
-    }
+          final rawData = snapshot.data ?? [];
+          
+          // Strict filtering for Active and Not Deleted
+          var announcements = rawData.where((a) {
+            final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
+            final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
+            return isActive && !isDeleted;
+          }).toList();
+          
+          // User-specific filtering (Seniors/Children/All)
+          if (user != null) {
+            final int age = user.age;
+            announcements = announcements.where((a) {
+              final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+              if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
+              if (target == 'SENIORS' && age >= 60) return true;
+              if (target == 'CHILDREN' && age <= 12) return true;
+              return false;
+            }).toList();
+          }
 
-    if (_announcements.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.campaign_outlined,
-                color: Colors.grey.shade300, size: 80),
-            const SizedBox(height: 16),
-            const Text("No announcements yet",
-                style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-              child: Text(
-                "Important updates from your Barangay will appear here.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+          if (announcements.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
+              child: Stack(
+                children: [
+                   ListView(), // For pull-to-refresh
+                   Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.campaign_outlined,
+                            color: Colors.grey.shade300, size: 80),
+                        const SizedBox(height: 16),
+                        const Text("No announcements yet",
+                            style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold)),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                          child: Text(
+                            "Important updates from your Barangay will appear here.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      );
-    }
+            );
+          }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _announcements.length,
-      itemBuilder: (context, index) {
-        return _buildAnnouncementCard(_announcements[index]);
-      },
+          return RefreshIndicator(
+            onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
+            color: AppColors.brandGreen,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: announcements.length,
+              itemBuilder: (context, index) {
+                return _buildAnnouncementCard(announcements[index]);
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -388,9 +366,4 @@ class _PatientAnnouncementsScreenState
     }
   }
 
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    super.dispose();
-  }
 }

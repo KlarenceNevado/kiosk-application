@@ -18,6 +18,7 @@ import '../database/connection_manager.dart';
 import '../system/system_log_service.dart';
 import '../hardware/sensor_manager.dart';
 import '../hardware/sensor_service_interface.dart';
+import 'background_service_helper.dart';
 
 class InitializationService {
   static final InitializationService _instance = InitializationService._internal();
@@ -51,6 +52,7 @@ class InitializationService {
     // 6. Mode-specific Services
     if (AppEnvironment().isMobilePatient) {
        await _initNotifications();
+       await BackgroundServiceHelper.initializeService();
     }
 
     // 7. UI Configuration

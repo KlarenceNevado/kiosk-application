@@ -15,6 +15,8 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   RealtimeChannel? _chatChannel;
   RealtimeChannel? _presenceChannel;
   User? _selectedPatient;
+  int _retryCount = 0;
+  Timer? _retryTimer;
 
   @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -48,13 +50,12 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
           .from('chat_messages')
           .select()
           .or('and(sender_id.eq.$currentUserId,receiver_id.eq.$otherUserId),and(sender_id.eq.$otherUserId,receiver_id.eq.$currentUserId)')
-          .eq('is_deleted', false)
           .order('timestamp', ascending: true);
 
       final List<dynamic> data = response as List;
       _messages.clear();
       _messages.addAll(data.map((row) => ChatMessage.fromMap({...row, 'is_synced': 1})));
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
       notifyListeners();
     } catch (e) {
       debugPrint("☁️ Web Chat Sync Down Error: $e");
@@ -63,53 +64,98 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
   void _setupRealtime(String currentUserId, String otherUserId) {
     _chatChannel?.unsubscribe();
+    _retryTimer?.cancel();
 
-    late final RealtimeChannel channel;
-    channel = _supabase.channel('public:chat_messages:$otherUserId');
+    // 1. UNIQUE CHANNEL NAME per user lane
+    final String channelName = 'chat_user_${currentUserId.replaceAll('-', '_')}';
+    final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
+    // 2. SERVER-SIDE FILTERS (Best practice for performance and security)
+    // We listen specifically for messages received by the current user
     channel
         .onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'chat_messages',
-      callback: (payload) {
-        final row = payload.newRecord;
-        if (payload.eventType == PostgresChangeEvent.delete) {
-          final deletedId = payload.oldRecord['id'];
-          if (deletedId != null) {
-            _messages.removeWhere((m) => m.id == deletedId);
-            notifyListeners();
-          }
-          return;
-        }
-
-        final existingIndex = _messages.indexWhere((m) => m.id == row['id']);
-        Map<String, dynamic> fullData;
-        if (existingIndex != -1) {
-          fullData = {
-            ..._messages[existingIndex].toMap(),
-            ...row,
-            'is_synced': 1,
-          };
-        } else {
-          fullData = {
-            ...row,
-            'is_synced': 1,
-          };
-        }
-
-        final msg = ChatMessage.fromMap(fullData);
-
-        if ((msg.senderId == currentUserId && msg.receiverId == otherUserId) ||
-            (msg.senderId == otherUserId && msg.receiverId == currentUserId)) {
-          _handleIncomingMessage(msg);
-        }
-      },
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'receiver_id',
+        value: currentUserId,
+      ),
+      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+    ).onPostgresChanges(
+      // Also listen for messages sent by the current user (e.g. from another device)
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'chat_messages',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'sender_id',
+        value: currentUserId,
+      ),
+      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
     )
         .subscribe((status, [error]) {
-      debugPrint("📡 Web Chat Realtime ($otherUserId): Status is $status");
+      debugPrint("📡 Web Chat Realtime ($currentUserId): Status is $status");
+      
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        _retryCount = 0; // Reset on success
+      }
+      
+      if (status == RealtimeSubscribeStatus.channelError || status == RealtimeSubscribeStatus.timedOut) {
+        if (error != null) debugPrint("❌ Realtime Error: $error");
+        
+        // 3. EXPONENTIAL BACKOFF
+        _retryCount++;
+        final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 6)))).inSeconds;
+        debugPrint("🔄 Retrying Realtime subscription in ${delaySeconds}s (Attempt $_retryCount)...");
+        
+        _retryTimer = Timer(Duration(seconds: delaySeconds), () {
+          _setupRealtime(currentUserId, otherUserId);
+        });
+      }
     });
+  }
+
+  void _onRealtimeChange(PostgresChangePayload payload, String currentUserId, String otherUserId) {
+    final row = payload.newRecord;
+    
+    if (payload.eventType == PostgresChangeEvent.delete) {
+      final deletedId = payload.oldRecord['id'];
+      if (deletedId != null) {
+        _messages.removeWhere((m) => m.id == deletedId);
+        notifyListeners();
+      }
+      return;
+    }
+
+    final String? msgSenderId = row['sender_id'];
+    final String? msgReceiverId = row['receiver_id'];
+
+    // Ensure message belongs to the CURRENT conversation view
+    final bool isRelevant = (msgSenderId == currentUserId && msgReceiverId == otherUserId) ||
+                            (msgSenderId == otherUserId && msgReceiverId == currentUserId);
+
+    if (!isRelevant) return;
+
+    final existingIndex = _messages.indexWhere((m) => m.id == row['id']);
+    Map<String, dynamic> fullData;
+    if (existingIndex != -1) {
+      fullData = {
+        ..._messages[existingIndex].toMap(),
+        ...row,
+        'is_synced': 1,
+      };
+    } else {
+      fullData = {
+        ...row,
+        'is_synced': 1,
+      };
+    }
+
+    final msg = ChatMessage.fromMap(fullData);
+    _handleIncomingMessage(msg);
   }
 
   void _setupPresence(String userId) {
@@ -149,7 +195,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
       _messages.add(msg);
     }
 
-    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
     notifyListeners();
   }
 
@@ -158,11 +204,11 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     // Optimistic local add
     final index = _messages.indexWhere((m) => m.id == message.id);
     if (index == -1) {
-      _messages.add(message);
+      _messages.insert(0, message); // Latest at top for reversed list
     } else {
       _messages[index] = message;
     }
-    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
     notifyListeners();
 
     try {
@@ -236,6 +282,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _chatChannel?.unsubscribe();
     _presenceChannel?.unsubscribe();
     super.dispose();

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/admin_models.dart';
@@ -31,8 +30,9 @@ class AdminRepository extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  RealtimeChannel? _announcementsChannel;
-  RealtimeChannel? _schedulesChannel;
+  StreamSubscription? _announcementSub;
+  StreamSubscription? _alertsSub;
+  StreamSubscription? _schedulesSub;
 
   // This init method will now also subscribe to real-time changes
   Future<void> init() async {
@@ -51,8 +51,22 @@ class AdminRepository extends ChangeNotifier {
       _alerts = results[2].map((m) => SystemAlert.fromMap(m)).toList();
 
       await _loadThresholds();
-      _subscribeToAnnouncements();
-      _subscribeToSchedules();
+      
+      // Listen to reactive DAO streams instead of manual Supabase channels
+      _announcementSub = _dbHelper.systemDao.announcementStream.listen((list) {
+        _announcements = list.map((m) => Announcement.fromMap(m)).toList();
+        notifyListeners();
+      });
+
+      _alertsSub = _dbHelper.systemDao.alertStream.listen((list) {
+        _alerts = list.map((m) => SystemAlert.fromMap(m)).toList();
+        notifyListeners();
+      });
+
+      _schedulesSub = _dbHelper.systemDao.scheduleStream.listen((list) {
+        _schedules = list.map((m) => HealthActivity.fromMap(m)).toList();
+        notifyListeners();
+      });
     } catch (e) {
       debugPrint("❌ AdminRepository Init Error: $e");
     }
@@ -86,53 +100,13 @@ class AdminRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Method to subscribe to Supabase Realtime changes for announcements
-  void _subscribeToAnnouncements() {
-    _announcementsChannel?.unsubscribe();
-    final client = Supabase.instance.client;
-    _announcementsChannel = client
-        .channel('public:announcements')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'announcements',
-          callback: (payload) {
-            fetchAnnouncements(); // Just reload everything for simplicity
-          },
-        )
-        .subscribe();
-  }
 
-  void _subscribeToSchedules() {
-    _schedulesChannel?.unsubscribe();
-    final client = Supabase.instance.client;
-    _schedulesChannel = client
-        .channel('public:schedules')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'schedules',
-          callback: (payload) {
-            fetchSchedules(); // Reload when cloud changes
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'patients',
-          callback: (payload) {
-            // Patients changed, BHW names might be relevant if we fetch them
-            notifyListeners();
-          },
-        )
-        .subscribe();
-  }
-
-  // Dispose method to unsubscribe from the channel when the repository is no longer needed
+  // Dispose method to cancel stream subscriptions
   @override
   void dispose() {
-    _announcementsChannel?.unsubscribe();
-    _schedulesChannel?.unsubscribe();
+    _announcementSub?.cancel();
+    _alertsSub?.cancel();
+    _schedulesSub?.cancel();
     super.dispose();
   }
 
@@ -164,7 +138,9 @@ class AdminRepository extends ChangeNotifier {
     // PERSIST IN BACKGROUND
     unawaited(() async {
       try {
-        await _dbHelper.insertAnnouncement(announcement.toMap());
+        final map = announcement.toMap();
+        map['updated_at'] = DateTime.now().toUtc().toIso8601String();
+        await _dbHelper.insertAnnouncement(map);
         await SyncService().pushAnnouncement(
           id: announcement.id,
           title: announcement.title,
@@ -195,10 +171,7 @@ class AdminRepository extends ChangeNotifier {
       try {
         await _dbHelper.deleteAnnouncement(id);
         // Supabase soft-deletion
-        await SyncService().supabase.from('announcements').update({
-          'is_deleted': true,
-          'updated_at': DateTime.now().toIso8601String()
-        }).eq('id', id);
+        await SyncService().supabase.from('announcements').delete().eq('id', id);
         debugPrint("✅ Background: Announcement '$id' deleted.");
       } catch (e) {
         debugPrint("❌ Background: Failed to delete announcement: $e");
@@ -229,6 +202,7 @@ class AdminRepository extends ChangeNotifier {
         final map = announcement.toMap();
         map['is_active'] = isActive ? 1 : 0;
         map['is_synced'] = 0;
+        map['updated_at'] = DateTime.now().toUtc().toIso8601String();
         await _dbHelper.updateAnnouncement(map);
 
         await SyncService().pushAnnouncement(
@@ -308,7 +282,7 @@ class AdminRepository extends ChangeNotifier {
         // Supabase soft-deletion
         await SyncService().supabase.from('schedules').update({
           'is_deleted': true,
-          'updated_at': DateTime.now().toIso8601String()
+          'updated_at': DateTime.now().toUtc().toIso8601String()
         }).eq('id', id);
         debugPrint("✅ Background: Schedule '$id' deleted.");
       } catch (e) {
@@ -345,8 +319,9 @@ class AdminRepository extends ChangeNotifier {
       'message': alert.message,
       'target_group': alert.targetGroup,
       'is_emergency': alert.isEmergency,
-      'timestamp': alert.timestamp.toIso8601String(),
+      'timestamp': alert.timestamp.toUtc().toIso8601String(),
       'is_active': alert.isActive,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     }).catchError((e) {
       debugPrint("⚠️ Failed to push Alert to cloud: $e");
       return null;
@@ -367,48 +342,11 @@ class AdminRepository extends ChangeNotifier {
     unawaited(() async {
       try {
         await _dbHelper.deleteAlert(id);
-        // Supabase soft-deletion
-        await SyncService().supabase.from('alerts').update({
-          'is_deleted': true,
-          'updated_at': DateTime.now().toIso8601String()
-        }).eq('id', id);
-        debugPrint("✅ Background: Alert '$id' deleted.");
+        // Supabase hard-deletion triggers immediate Realtime removal for clients
+        await SyncService().supabase.from('alerts').delete().eq('id', id);
+        debugPrint("✅ Background: Alert '$id' hard deleted from cloud.");
       } catch (e) {
         debugPrint("❌ Background: Failed to delete alert: $e");
-      }
-    }());
-  }
-
-  Future<void> toggleAlertStatus(SystemAlert alert, bool isActive) async {
-    // OPTIMISTIC UPDATE: Find and update in memory
-    final index = _alerts.indexWhere((a) => a.id == alert.id);
-    if (index != -1) {
-      _alerts[index] = SystemAlert(
-        id: alert.id,
-        message: alert.message,
-        targetGroup: alert.targetGroup,
-        isEmergency: alert.isEmergency,
-        timestamp: alert.timestamp,
-        isActive: isActive,
-      );
-      notifyListeners();
-    }
-
-    // PERSIST IN BACKGROUND
-    unawaited(() async {
-      try {
-        final map = alert.toMap();
-        map['is_active'] = isActive ? 1 : 0;
-        map['is_synced'] = 0; // mark for general sync
-        await _dbHelper.updateAlert(map);
-
-        await SyncService().supabase.from('alerts').update({
-          'is_active': isActive,
-        }).eq('id', alert.id);
-
-        debugPrint("✅ Background: Alert status toggled to $isActive.");
-      } catch (e) {
-        debugPrint("❌ Background: Failed to toggle alert: $e");
       }
     }());
   }

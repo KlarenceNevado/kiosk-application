@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/database/database_helper.dart';
-import '../../../core/services/database/sync_service.dart'; // NEW
+import '../../../core/services/database/sync_service.dart';
+import '../../../core/services/system/sync_event_bus.dart';
 import '../../../core/services/security/encryption_service.dart';
 import '../../../core/services/system/app_environment.dart';
 import '../models/user_model.dart';
@@ -38,7 +39,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     _loadUsers();
 
     // Listen for cloud changes and refresh local list (Debounced to avoid lag)
-    _patientSyncSub = SyncService().patientStream.listen((_) {
+    _patientSyncSub = SyncEventBus.instance.patientStream.listen((_) {
       _refreshDebounce?.cancel();
       _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
         debugPrint("☁️ AuthRepository: Sync event received, refreshing (debounced)...");
@@ -238,110 +239,78 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
-      // 1. Offline Check (Online Mode removed for backend migration)
-      final localUser = _users.firstWhere(
-        (u) =>
-            (u.firstName.toLowerCase() == firstName.toLowerCase() ||
-                u.fullName.toLowerCase() == firstName.toLowerCase()) &&
-            u.phoneNumber == phoneNumber,
-        orElse: () => User(
-            id: '',
-            firstName: '',
-            middleInitial: '',
-            lastName: '',
-            sitio: '',
-            phoneNumber: '',
-            pinCode: '123456',
-            dateOfBirth: DateTime.now(),
-            gender: ''),
-      );
+      // 1. Local Offline Check (SQLite)
+      // Since local SQLite data is stored with deterministic re-encryption (or plain if using getPatients),
+      // the comparison here might be tricky if the Repository list is stale.
+      // But _loadUsers correctly decrypts when loading.
+      final localUser = _users.where((u) => 
+        (u.firstName.toLowerCase().contains(firstName.toLowerCase()) || 
+         u.fullName.toLowerCase().contains(firstName.toLowerCase())) &&
+        u.phoneNumber.trim() == phoneNumber.trim()
+      ).toList();
 
-      if (localUser.id.isNotEmpty) {
-        // Fetch Dependents for the logged-in parent even in offline mode
-        final dependents = await SyncService().fetchDependents(localUser.id);
-        for (final dependent in dependents) {
-          await DatabaseHelper.instance.insertPatient(dependent);
-        }
-        _users = await DatabaseHelper.instance.getPatients();
-
-        _currentUser = localUser;
-        _isLoading = false;
-        
-        // Save for session restoration
-        final prefs = await SharedPreferences.getInstance();
-        final encryptedId = EncryptionService().encryptData(_currentUser!.id);
-        await prefs.setString('last_logged_in_user_id', encryptedId);
-
-        // NEW: EAGER FULL SYNC FOR OFFLINE
-        SyncService().fullSyncForUser(_currentUser!.id);
-
-        // Start background listeners
-        ChatListenerService().startListening(_currentUser!.id);
-        AnnouncementListenerService().startListening();
-        SystemLogService().startSession(_currentUser!.id);
-        SystemAlertListenerService().startListening(
-          userRole: 'patient',
-          sitio: _currentUser!.sitio,
-        );
-        VitalsListenerService().startListening(
-          familyIds: getLinkedAccounts().map((u) => u.id).toList(),
-        );
-
-        notifyListeners();
-        return null;
+      if (localUser.isNotEmpty) {
+        _currentUser = localUser.first;
+        return _handleSuccessfulLogin();
       }
 
-      // 2. Cloud Check (Fallback for Mobile App matching Name + Phone)
-      final cloudCheck =
-          await SyncService().findPatient(firstName, phoneNumber);
-      if (cloudCheck.isNotEmpty) {
-        final cloudUser = User.fromMap(cloudCheck.first);
-
-        // Fetch Dependents for the logged-in parent
-        final dependents = await SyncService().fetchDependents(cloudUser.id);
-
+      // 2. Cloud Fallback (Critical for new accounts not yet pulled)
+      final cloudMatches = await SyncService().findPatient(firstName, phoneNumber);
+      if (cloudMatches.isNotEmpty) {
+        final cloudUser = User.fromMap(cloudMatches.first);
         await DatabaseHelper.instance.insertPatient(cloudUser);
-        for (final dependent in dependents) {
-          await DatabaseHelper.instance.insertPatient(dependent);
-        }
         _users = await DatabaseHelper.instance.getPatients();
-
-        _currentUser = cloudUser;
-        _isLoading = false;
-
-        // Save for session restoration
-        final prefs = await SharedPreferences.getInstance();
-        final encryptedId = EncryptionService().encryptData(_currentUser!.id);
-        await prefs.setString('last_logged_in_user_id', encryptedId);
-
-        // NEW: EAGER FULL SYNC FOR OFFLINE
-        SyncService().fullSyncForUser(_currentUser!.id);
-
-        // Start background listeners
-        ChatListenerService().startListening(_currentUser!.id);
-        AnnouncementListenerService().startListening();
-        SystemLogService().startSession(_currentUser!.id);
-        SystemAlertListenerService().startListening(
-          userRole: 'patient',
-          sitio: _currentUser!.sitio,
-        );
-        VitalsListenerService().startListening(
-          familyIds: getLinkedAccounts().map((u) => u.id).toList(),
-        );
-
-        notifyListeners();
-        return null;
+        _currentUser = _users.firstWhere((u) => u.id == cloudUser.id);
+        return _handleSuccessfulLogin();
       }
 
       _isLoading = false;
       notifyListeners();
-      return "Patient not found. Please register.";
+      return "Patient not found or Credentials mismatch. Please ensure you are registered.";
     } catch (e) {
       _isLoading = false;
       notifyListeners();
       return "Login Error: $e";
     }
   }
+
+  /// Extracted shared login success logic
+  Future<String?> _handleSuccessfulLogin() async {
+    if (_currentUser == null) return "Unknown Error";
+
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Fetch Dependents
+    final dependents = await SyncService().fetchDependents(_currentUser!.id);
+    for (final dependent in dependents) {
+      await DatabaseHelper.instance.insertPatient(dependent);
+    }
+    _users = await DatabaseHelper.instance.getPatients();
+
+    // Save session
+    final encryptedId = EncryptionService().encryptData(_currentUser!.id);
+    await prefs.setString('last_logged_in_user_id', encryptedId);
+
+    // EAGER SYNC
+    SyncService().fullSyncForUser(_currentUser!.id);
+
+    // Listeners
+    ChatListenerService().startListening(_currentUser!.id);
+    AnnouncementListenerService().startListening();
+    SystemLogService().startSession(_currentUser!.id);
+    SystemAlertListenerService().startListening(
+      userRole: 'patient',
+      sitio: _currentUser!.sitio,
+    );
+    VitalsListenerService().startListening(
+      familyIds: getLinkedAccounts().map((u) => u.id).toList(),
+    );
+
+    _isLoading = false;
+    notifyListeners();
+    return null;
+  }
+
 
   // --- KIOSK QR LOGIN ---
   @override

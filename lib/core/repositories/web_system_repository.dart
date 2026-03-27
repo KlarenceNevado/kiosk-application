@@ -5,13 +5,38 @@ class WebSystemRepository implements ISystemRepository {
   final _supabase = Supabase.instance.client;
 
   @override
+  Stream<List<Map<String, dynamic>>> get announcementStream =>
+      _supabase.from('announcements').stream(primaryKey: ['id']).map((list) =>
+          list.where((a) {
+            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
+            // Removed isActive filtering here so Admin PWA can see archived records; 
+            // Patient PWA filters at the UI level.
+            return !isDeleted;
+          }).toList());
+
+  @override
+  Stream<List<Map<String, dynamic>>> get alertStream =>
+      _supabase.from('alerts').stream(primaryKey: ['id']).map((list) =>
+          list.where((a) {
+            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
+            return !isDeleted;
+          }).toList());
+
+  @override
+  Stream<List<Map<String, dynamic>>> get scheduleStream =>
+      _supabase.from('schedules').stream(primaryKey: ['id']).map((list) =>
+          list.where((a) {
+            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
+            return !isDeleted;
+          }).toList());
+
+  @override
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
     try {
       final response = await _supabase
           .from('announcements')
           .select()
           .eq('is_deleted', false)
-          .eq('is_active', true)
           .order('timestamp', ascending: false);
       
       List<Map<String, dynamic>> filtered = List<Map<String, dynamic>>.from(response);

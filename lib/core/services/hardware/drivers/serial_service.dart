@@ -5,6 +5,7 @@ import '../sensor_service_interface.dart';
 import '../parsers/weight_parser.dart';
 import '../parsers/spo2_parser.dart';
 import '../parsers/temp_parser.dart';
+import '../parsers/contec_bp_parser.dart';
 
 /// Generic driver for Serial (USB) sensors.
 class SerialSensorService implements ISensorService {
@@ -128,8 +129,7 @@ class SerialSensorService implements ISensorService {
         parsedData = TempParser.parse(bytes);
         break;
       case SensorType.bloodPressure:
-        // BP usually has its own complex binary protocol (e.g. OMRON)
-        parsedData = bytes; 
+        parsedData = ContecBpParser.parse(bytes); 
         break;
     }
 

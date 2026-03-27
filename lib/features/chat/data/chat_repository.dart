@@ -8,6 +8,7 @@ import '../../auth/models/user_model.dart';
 import '../models/chat_message.dart';
 
 import '../domain/i_chat_repository.dart';
+import '../../../core/services/security/encryption_service.dart';
 
 class LocalChatRepository extends ChangeNotifier implements IChatRepository {
   final _supabase = Supabase.instance.client;
@@ -56,7 +57,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
 
     _messages.clear();
     _messages.addAll(maps.map((m) => ChatMessage.fromMap(m)));
-    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
     notifyListeners();
   }
 
@@ -89,7 +90,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
-        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
         notifyListeners();
       }
     } catch (e) {
@@ -194,7 +195,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
       _messages.add(msg);
     }
 
-    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     notifyListeners();
 
     // Persist locally
@@ -218,7 +219,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     } else {
       _messages[index] = message;
     }
-    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     notifyListeners();
 
     try {
@@ -231,7 +232,14 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
 
       // 2. Upload to Supabase (Best effort)
       try {
-        await _supabase.from('chat_messages').insert(message.toSupabaseMap());
+        final encryptedMap = message.toSupabaseMap();
+        // Encrypt content before pushing to cloud
+        if (encryptedMap['content'] != null && !encryptedMap['content'].toString().startsWith('http')) {
+          encryptedMap['content'] = EncryptionService().encryptData(encryptedMap['content']);
+          encryptedMap['message'] = encryptedMap['content'];
+        }
+        
+        await _supabase.from('chat_messages').insert(encryptedMap);
         
         // 3. Mark as synced
         await db.update(
@@ -314,11 +322,10 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
 
   @override
   Future<void> forwardMessage(ChatMessage original, String targetUserId) async {
+    // Note: original.content is already decrypted by fromMap when loaded
     final forwarded = ChatMessage(
-      id: DateTime.now()
-          .millisecondsSinceEpoch
-          .toString(), // Simplified ID or use Uuid
-      senderId: original.senderId == 'admin' ? 'admin' : original.senderId,
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      senderId: 'admin', // Or current user ID
       receiverId: targetUserId,
       content: original.content,
       timestamp: DateTime.now(),

@@ -76,16 +76,25 @@ class ChatSyncHandler extends SyncHandler {
       String? latestTimestamp;
 
       for (var row in cloudData) {
-        // Decrypt content from Supabase
-        if (row['content'] != null && row['content'].toString().contains(':')) {
-           row['content'] = dbHelper.decrypt(row['content']);
-        }
-
         final exists = await dbHelper.systemDao.getChatMessageById(row['id']);
         if (exists == null) {
+          final msg = ChatMessage.fromMap(row);
+          String senderName = "Health Worker";
+          
+          if (msg.senderId != 'admin') {
+            final patient = await dbHelper.patientDao.getPatientById(msg.senderId);
+            if (patient != null) {
+              senderName = "${patient.firstName} ${patient.lastName}";
+            }
+          }
+
+          // Use a simple hash of senderId for notification ID grouping
+          final int notificationId = msg.senderId.hashCode.abs() % 10000;
+
           NotificationService().showChatNotification(
-            senderName: "Health Worker", // or join with sender name if available
-            message: row['content'] ?? "New message",
+            senderName: senderName,
+            message: msg.content,
+            notificationId: notificationId,
           );
         }
 

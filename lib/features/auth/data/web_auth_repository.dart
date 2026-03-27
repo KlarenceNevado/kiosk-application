@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../../auth/models/user_model.dart';
 import '../domain/i_auth_repository.dart';
+import '../../../core/services/security/encryption_service.dart';
+
 
 /// Web-safe AuthRepository that uses Supabase directly.
 /// No DatabaseHelper, SyncService, EncryptionService, or dart:io.
@@ -26,20 +28,23 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   @override
   Future<List<User>> searchPatients(String query) async {
+    if (query.isEmpty) return [];
+    
     try {
+      // Corrected: Uses .or() for first/last name search on Supabase
+      // Removed role and is_deleted as they are not in the consolidated schema
       final response = await _supabase
           .from('patients')
           .select()
-          .ilike('full_name', '%$query%')
-          .eq('role', 'patient')
-          .eq('is_deleted', false)
+          .or('first_name.ilike.%$query%,last_name.ilike.%$query%')
           .limit(10);
       
-      return (response as List).map((json) => User.fromJson(json)).toList();
+      return (response as List).map((json) => User.fromMap(json)).toList();
     } catch (_) {
       return [];
     }
   }
+
 
   /// Mobile Companion Login (Phone + PIN) — Cloud only
   @override
@@ -48,24 +53,42 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
-      // Query Supabase directly
+      // NOTE: Because Phone/PIN are encrypted with random IVs, 
+      // we can't query them directly with .eq(). 
+      // This is a trade-off for security.
+      // On the Web PWA, we usually expect the user to have found themselves by name first.
+      // If they are logging in via Phone+PIN, we have to fetch and decrypt.
+      // Since this is inefficient, we limit search and encourage using Name search first.
       final response = await _supabase
           .from('patients')
           .select()
-          .eq('phone_number', phone)
-          .eq('pin_code', pin)
-          .eq('is_deleted', false)
-          .maybeSingle();
+          .limit(100); // Fetch a small batch to scan locally
 
-      if (response != null) {
-        final cloudUser = User.fromMap(response);
+      final List<dynamic> data = response as List;
+      User? match;
+
+      for (var row in data) {
+        final dbEncPhone = row['phone_number'] as String?;
+        final dbEncPin = row['pin_code'] as String?;
+        if (dbEncPhone == null || dbEncPin == null) continue;
+
+        final decPhone = EncryptionService().decryptData(dbEncPhone);
+        final decPin = EncryptionService().decryptData(dbEncPin);
+
+        if (decPhone == phone.trim() && decPin == pin.trim()) {
+          match = User.fromMap(row);
+          break;
+        }
+      }
+
+      if (match != null) {
+        final cloudUser = match;
 
         // Fetch dependents
         final depsResponse = await _supabase
             .from('patients')
             .select()
-            .eq('parent_id', cloudUser.id)
-            .eq('is_deleted', false);
+            .eq('parent_id', cloudUser.id);
 
         final dependents = (depsResponse as List)
             .map((row) => User.fromMap(row))
@@ -79,7 +102,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
       } else {
         _isLoading = false;
         notifyListeners();
-        return "Invalid Phone Number or PIN. Please try again or contact your BHW.";
+        return "Account not found with provided credentials.";
       }
     } catch (e) {
       _isLoading = false;
@@ -88,6 +111,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     }
   }
 
+
+
   /// Login by Name + Phone (for Kiosk-style login on web)
   @override
   Future<String?> login(String firstName, String phoneNumber) async {
@@ -95,30 +120,39 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
+      // 1. Search by name (Names are PLAIN TEXT in Supabase)
+      // We search by first_name as a starting point
       final response = await _supabase
           .from('patients')
           .select()
-          .eq('phone_number', phoneNumber)
-          .eq('is_deleted', false);
+          .ilike('first_name', '%$firstName%')
+          .limit(20);
 
       final List<dynamic> data = response as List;
-      final match = data.where((row) {
-        final fn = (row['first_name'] ?? '').toString().toLowerCase();
-        final ln = (row['last_name'] ?? '').toString().toLowerCase();
-        final full = '$fn $ln';
-        final query = firstName.toLowerCase();
-        return fn == query || full == query;
-      }).toList();
+      
+      // 2. Local Decryption Check
+      // We cannot use .eq() on phone_number because of random IVs.
+      // We must fetch by name and check the decrypted phone number locally.
+      User? match;
+      for (var row in data) {
+        final dbEncPhone = row['phone_number'] as String?;
+        if (dbEncPhone == null) continue;
 
-      if (match.isNotEmpty) {
-        final cloudUser = User.fromMap(match.first);
+        final decryptedPhone = EncryptionService().decryptData(dbEncPhone);
+        if (decryptedPhone == phoneNumber.trim()) {
+          match = User.fromMap(row);
+          break;
+        }
+      }
+
+      if (match != null) {
+        final cloudUser = match;
 
         // Fetch dependents
         final depsResponse = await _supabase
             .from('patients')
             .select()
-            .eq('parent_id', cloudUser.id)
-            .eq('is_deleted', false);
+            .eq('parent_id', cloudUser.id);
 
         final dependents = (depsResponse as List)
             .map((row) => User.fromMap(row))
@@ -133,13 +167,15 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       _isLoading = false;
       notifyListeners();
-      return "Patient not found. Please register.";
+      return "Patient and Phone combination not found. Please verify your details.";
     } catch (e) {
       _isLoading = false;
       notifyListeners();
       return "Login Error: $e";
     }
   }
+
+
 
   @override
   Future<void> logout() async {

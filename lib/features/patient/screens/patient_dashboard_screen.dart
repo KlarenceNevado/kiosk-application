@@ -31,7 +31,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
 
     // LISTEN FOR REAL-TIME UPDATES
     _announcementSubscription = SyncEventBus.instance.announcementStream.listen((_) {

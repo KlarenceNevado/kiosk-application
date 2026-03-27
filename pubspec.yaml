@@ -47,7 +47,12 @@ dependencies:
   timezone: ^0.9.2
   
   # HARDWARE
+  # HARDWARE
   flutter_libserialport: ^0.6.0
+  
+  # SYNC & BACKGROUND
+  flutter_background_service: any
+  flutter_background_service_android: any
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +60,16 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.4
   image: ^4.5.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/patient_icon.png"
+  adaptive_icon_background: "#4CAF50"
+  adaptive_icon_foreground: "assets/icons/patient_icon.png"
+  notification_icon:
+    enabled: true
+    image_path: "assets/icons/patient_icon.png"
 
 flutter:
   uses-material-design: true

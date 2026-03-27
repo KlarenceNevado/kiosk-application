@@ -26,32 +26,38 @@ class _AdminChatTabState extends State<AdminChatTab> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_scrollListener);
+    _scrollController.addListener(_onChatChanged);
+    
+    // With reverse: true, we don't need a repository listener for scrolling
+    // because index 0 is always the bottom and stays pinned automatically.
+    // But we might want it for other UI reactive elements if needed.
+  }
+
+  void _onChatChanged() {
+    // Reverse list stays at index 0 automatically when new items are added
+    if (!mounted || !_scrollController.hasClients) return;
+
+    final bool isNearBottom = _scrollController.position.pixels <= 200;
+    if (_showScrollToBottom == isNearBottom) {
+      setState(() {
+        _showScrollToBottom = !isNearBottom;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_scrollListener);
+    _scrollController.removeListener(_onChatChanged);
     _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
-  void _scrollListener() {
-    if (!_scrollController.hasClients) return;
-    final bool isAtBottom = _scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200;
-    if (isAtBottom != !_showScrollToBottom) {
-      setState(() {
-        _showScrollToBottom = !isAtBottom;
-      });
-    }
-  }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0, // Reversed list bottom is index 0
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -165,19 +171,23 @@ class _AdminChatTabState extends State<AdminChatTab> {
                             color: Colors.grey.shade50,
                             child: ListView.builder(
                               controller: _scrollController,
+                              reverse: true, // Latest at bottom (index 0)
                               padding: const EdgeInsets.all(32),
                               itemCount: chatRepo.messages.length,
                               itemBuilder: (context, index) {
                                 final msg = chatRepo.messages[index];
                                 final isMe = msg.senderId == 'admin';
-                                final prevMsg = index > 0
-                                    ? chatRepo.messages[index - 1]
+                                
+                                // In a reversed list, "previous" in time is index + 1
+                                final prevInTimeMsg = index < chatRepo.messages.length - 1 
+                                    ? chatRepo.messages[index + 1] 
                                     : null;
-                                final showDate = prevMsg == null ||
+                                
+                                final showDate = prevInTimeMsg == null ||
                                     DateFormat('yyyy-MM-dd')
                                             .format(msg.phtTimestamp) !=
                                         DateFormat('yyyy-MM-dd')
-                                            .format(prevMsg.phtTimestamp);
+                                            .format(prevInTimeMsg.phtTimestamp);
 
                                 return Column(
                                   children: [
@@ -534,16 +544,9 @@ class _AdminChatTabState extends State<AdminChatTab> {
     chatRepo.sendMessage(message);
     _messageController.clear();
     setState(() => _replyingToId = null);
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    
+    // No manual scroll needed with reverse: true! 
+    // It stays at 0 (bottom) if we're already there.
   }
 
   void _showOptions(ChatMessage msg) {

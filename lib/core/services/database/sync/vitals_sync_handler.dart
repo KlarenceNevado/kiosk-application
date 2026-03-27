@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'sync_handler.dart';
 import '../../../../features/health_check/models/vital_signs_model.dart';
+import '../../system/sync_event_bus.dart';
 
 class VitalsSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
@@ -106,6 +107,7 @@ class VitalsSyncHandler extends SyncHandler {
       callback: (payload) {
         onData(payload);
         _changeController.add(null);
+        SyncEventBus.instance.triggerVitalsUpdate();
       },
     ).subscribe();
   }
@@ -129,8 +131,11 @@ class VitalsSyncHandler extends SyncHandler {
         'oxygen': dbHelper.encrypt(vital.oxygen),
         'temperature': dbHelper.encrypt(vital.temperature),
         'bmi': vital.bmi,
+        'bmi_category': vital.bmiCategory,
         'status': vital.status,
         'remarks': vital.remarks,
+        'follow_up_action': vital.followUpAction,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
       await supabase.from('vitals').upsert(supabaseData);
       return true;
@@ -151,8 +156,11 @@ class VitalsSyncHandler extends SyncHandler {
         'oxygen': dbHelper.encrypt(vital.oxygen),
         'temperature': dbHelper.encrypt(vital.temperature),
         'bmi': vital.bmi,
+        'bmi_category': vital.bmiCategory,
         'status': vital.status,
         'remarks': vital.remarks,
+        'follow_up_action': vital.followUpAction,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
       await supabase.from('vitals').insert(supabaseData);
     } catch (e) {

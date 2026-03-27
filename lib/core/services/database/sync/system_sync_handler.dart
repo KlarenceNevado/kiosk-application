@@ -47,6 +47,7 @@ class SystemSyncHandler extends SyncHandler {
   Future<void> pushAnnouncements() async {
     try {
       final unsynced = await dbHelper.systemDao.getUnsyncedAnnouncements();
+      final List<String> syncedIds = [];
       for (final row in unsynced) {
         await supabase.from('announcements').upsert({
           'id': row['id'],
@@ -56,9 +57,13 @@ class SystemSyncHandler extends SyncHandler {
           'timestamp': row['timestamp'],
           'is_active': row['is_active'] == 1,
           'is_deleted': row['is_deleted'] == 1,
-          'updated_at': row['updated_at'] ?? DateTime.now().toIso8601String(),
+          'updated_at': row['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
         });
+        syncedIds.add(row['id']);
         await dbHelper.systemDao.clearSyncMetadata('announcements', row['id']);
+      }
+      if (syncedIds.isNotEmpty) {
+        await dbHelper.markBatchAsSynced('announcements', syncedIds);
       }
     } catch (e) {
       debugPrint("❌ SystemSyncHandler: Announcements Push Error: $e");
@@ -66,7 +71,21 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> pullAnnouncements() async {
-    try {
+    await _withRetry(() async {
+      // 1. PARITY PURGE: Remove records that no longer exist in the cloud
+      final cloudIdsData = await supabase.from('announcements').select('id');
+      final cloudIds = cloudIdsData.map((row) => row['id'].toString()).toSet();
+      
+      final localAnnouncements = await dbHelper.systemDao.getAnnouncements();
+      for (final local in localAnnouncements) {
+        final id = local['id'].toString();
+        if (!cloudIds.contains(id)) {
+          await dbHelper.systemDao.hardDeleteAnnouncement(id);
+          debugPrint("🧹 Parity Purge: Removed ghost announcement $id");
+        }
+      }
+
+      // 2. INCREMENTAL PULL: Fetch new/updated records
       final lastSync = await _getLastSync('announcements');
       var query = supabase.from('announcements').select();
       if (lastSync != null) {
@@ -78,26 +97,22 @@ class SystemSyncHandler extends SyncHandler {
 
       for (var row in cloudData) {
         final exists = await dbHelper.systemDao.getAnnouncementById(row['id']);
-        if (exists == null) {
-          // Trigger Notification for new announcement
-          NotificationService().showAnnouncementNotification(
-            title: "New Announcement",
-            body: row['title'] ?? "Tap to view details",
-          );
-        }
         await dbHelper.systemDao.insertAnnouncement({
           ...row,
           'is_synced': 1,
         });
+        if (exists == null) {
+          _handleNewAnnouncementNotification(row);
+        }
         latestTimestamp = row['updated_at'];
       }
       if (latestTimestamp != null) {
         await _updateLastSync('announcements', latestTimestamp);
-        SyncEventBus.instance.triggerAnnouncementUpdate();
       }
-    } catch (e) {
-      debugPrint("❌ SystemSyncHandler: Announcements Pull Error: $e");
-    }
+      
+      // Always trigger update to ensure parity changes are reflected
+      SyncEventBus.instance.triggerAnnouncementUpdate();
+    });
   }
 
   // --- ALERTS ---
@@ -105,6 +120,7 @@ class SystemSyncHandler extends SyncHandler {
   Future<void> pushAlerts() async {
     try {
       final unsynced = await dbHelper.systemDao.getUnsyncedAlerts();
+      final List<String> syncedIds = [];
       for (final row in unsynced) {
         await supabase.from('alerts').upsert({
           'id': row['id'],
@@ -113,9 +129,13 @@ class SystemSyncHandler extends SyncHandler {
           'is_emergency': row['is_emergency'] == 1,
           'timestamp': row['timestamp'],
           'is_deleted': row['is_deleted'] == 1,
-          'updated_at': row['updated_at'] ?? DateTime.now().toIso8601String(),
+          'updated_at': row['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
         });
+        syncedIds.add(row['id']);
         await dbHelper.systemDao.clearSyncMetadata('alerts', row['id']);
+      }
+      if (syncedIds.isNotEmpty) {
+        await dbHelper.markBatchAsSynced('alerts', syncedIds);
       }
     } catch (e) {
       debugPrint("❌ SystemSyncHandler: Alerts Push Error: $e");
@@ -123,7 +143,21 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> pullAlerts() async {
-    try {
+    await _withRetry(() async {
+      // 1. PARITY PURGE
+      final cloudIdsData = await supabase.from('alerts').select('id');
+      final cloudIds = cloudIdsData.map((row) => row['id'].toString()).toSet();
+      
+      final localAlerts = await dbHelper.systemDao.getAlerts();
+      for (final local in localAlerts) {
+        final id = local['id'].toString();
+        if (!cloudIds.contains(id)) {
+          await dbHelper.systemDao.hardDeleteAlert(id);
+          debugPrint("🧹 Parity Purge: Removed ghost alert $id");
+        }
+      }
+
+      // 2. INCREMENTAL PULL
       final lastSync = await _getLastSync('alerts');
       var query = supabase.from('alerts').select();
       if (lastSync != null) {
@@ -142,11 +176,10 @@ class SystemSyncHandler extends SyncHandler {
       }
       if (latestTimestamp != null) {
         await _updateLastSync('alerts', latestTimestamp);
-        SyncEventBus.instance.triggerAlertUpdate();
       }
-    } catch (e) {
-      debugPrint("❌ SystemSyncHandler: Alerts Pull Error: $e");
-    }
+      
+      SyncEventBus.instance.triggerAlertUpdate();
+    });
   }
 
   // --- SCHEDULES ---
@@ -163,7 +196,7 @@ class SystemSyncHandler extends SyncHandler {
           'assigned': row['assigned'],
           'color_value': row['color_value'],
           'is_deleted': row['is_deleted'] == 1,
-          'updated_at': row['updated_at'] ?? DateTime.now().toIso8601String(),
+          'updated_at': row['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
         });
         await dbHelper.systemDao.clearSyncMetadata('schedules', row['id']);
       }
@@ -173,7 +206,7 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> pullSchedules() async {
-    try {
+    await _withRetry(() async {
       final lastSync = await _getLastSync('schedules');
       var query = supabase.from('schedules').select();
       if (lastSync != null) {
@@ -194,9 +227,7 @@ class SystemSyncHandler extends SyncHandler {
         await _updateLastSync('schedules', latestTimestamp);
         _scheduleChangeController.add(null);
       }
-    } catch (e) {
-      debugPrint("❌ SystemSyncHandler: Schedules Pull Error: $e");
-    }
+    });
   }
 
   // --- PUBLIC MANIPULATION ---
@@ -217,7 +248,9 @@ class SystemSyncHandler extends SyncHandler {
         'target_group': targetGroup,
         'timestamp': timestamp.toIso8601String(),
         'is_active': isActive,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
+      await dbHelper.markAnnouncementAsSynced(id);
       await dbHelper.systemDao.clearSyncMetadata('announcements', id);
     } catch (e) {
       debugPrint("⚠️ SystemSyncHandler: Announcement push failed. $e");
@@ -226,10 +259,7 @@ class SystemSyncHandler extends SyncHandler {
 
   Future<void> deleteAnnouncement(String id) async {
     try {
-      await supabase.from('announcements').update({
-        'is_deleted': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
+      await supabase.from('announcements').delete().eq('id', id);
     } catch (e) {
       debugPrint("⚠️ SystemSyncHandler: Announcement delete failed. $e");
     }
@@ -251,7 +281,9 @@ class SystemSyncHandler extends SyncHandler {
         'location': location,
         'assigned': assigned,
         'color_value': colorValue,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
+      await dbHelper.markScheduleAsSynced(id);
       await dbHelper.systemDao.clearSyncMetadata('schedules', id);
     } catch (e) {
       debugPrint("⚠️ SystemSyncHandler: Schedule push failed. $e");
@@ -260,10 +292,7 @@ class SystemSyncHandler extends SyncHandler {
 
   Future<void> deleteScheduleCloud(String id) async {
     try {
-      await supabase.from('schedules').update({
-        'is_deleted': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
+      await supabase.from('schedules').delete().eq('id', id);
     } catch (e) {
       debugPrint("⚠️ SystemSyncHandler: Schedule delete failed. $e");
     }
@@ -365,7 +394,11 @@ class SystemSyncHandler extends SyncHandler {
   Future<List<Map<String, dynamic>>> fetchAlerts({dynamic currentUser}) async {
     try {
       final all = await dbHelper.systemDao.getAlerts();
-      var filtered = all.where((a) => a['is_deleted'] != 1 && a['is_deleted'] != true).toList();
+      var filtered = all.where((a) {
+        final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
+        final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
+        return !isDeleted && isActive;
+      }).toList();
 
       if (currentUser != null) {
         final int age = currentUser.age;
@@ -399,25 +432,67 @@ class SystemSyncHandler extends SyncHandler {
   // --- REAL-TIME SUBSCRIPTIONS ---
 
   void subscribeAll() {
-    _announcementsChannel = _subscribe('announcements', (payload) {
-      pullAnnouncements();
-      SyncEventBus.instance.triggerAnnouncementUpdate();
-      if (payload.newRecord.isNotEmpty) {
-        SyncEventBus.instance.triggerNewAnnouncement(payload.newRecord);
+    _announcementsChannel = _subscribe('announcements', (payload) async {
+      debugPrint("📢 Realtime: Announcement change detected: ${payload.eventType}");
+      
+      if (payload.eventType == PostgresChangeEvent.delete) {
+        final id = payload.oldRecord['id']?.toString();
+        if (id != null) {
+          await dbHelper.systemDao.hardDeleteAnnouncement(id);
+          SyncEventBus.instance.triggerAnnouncementUpdate();
+        }
+        return;
       }
+
+      // OPTIMIZATION: Inject payload directly into DB to bypass RLS pull filters for soft-deletes
+      if (payload.newRecord.isNotEmpty) {
+        await dbHelper.systemDao.insertAnnouncement({...payload.newRecord, 'is_synced': 1});
+        SyncEventBus.instance.triggerNewAnnouncement(payload.newRecord);
+        _handleNewAnnouncementNotification(payload.newRecord);
+      } else if (payload.oldRecord.isNotEmpty) {
+        await pullAnnouncements();
+      }
+      
+      SyncEventBus.instance.triggerAnnouncementUpdate();
     });
 
-    _alertsChannel = _subscribe('alerts', (payload) {
-      pullAlerts();
-      SyncEventBus.instance.triggerAlertUpdate();
+    _alertsChannel = _subscribe('alerts', (payload) async {
+      debugPrint("📢 Realtime: Alert change detected: ${payload.eventType}");
+      
+      if (payload.eventType == PostgresChangeEvent.delete) {
+        final id = payload.oldRecord['id']?.toString();
+        if (id != null) {
+          await dbHelper.systemDao.hardDeleteAlert(id);
+          SyncEventBus.instance.triggerAlertUpdate();
+        }
+        return;
+      }
+
       if (payload.newRecord.isNotEmpty) {
+        // Direct injection to trigger reactive DAO stream
+        await dbHelper.systemDao.insertAlert({...payload.newRecord, 'is_synced': 1});
         SyncEventBus.instance.triggerNewAlert(payload.newRecord);
       }
+      
+      SyncEventBus.instance.triggerAlertUpdate();
     });
 
-    _schedulesChannel = _subscribe('schedules', (payload) {
-      pullSchedules();
-      _scheduleChangeController.add(null);
+    _schedulesChannel = _subscribe('schedules', (payload) async {
+      debugPrint("📢 Realtime: Schedule change detected: ${payload.eventType}");
+      
+      if (payload.eventType == PostgresChangeEvent.delete) {
+        final id = payload.oldRecord['id']?.toString();
+        if (id != null) {
+          await dbHelper.systemDao.deleteSchedule(id); // Using existing delete logic
+          SyncEventBus.instance.triggerScheduleUpdate();
+        }
+        return;
+      }
+
+      if (payload.newRecord.isNotEmpty) {
+        await dbHelper.systemDao.insertSchedule({...payload.newRecord, 'is_synced': 1});
+        SyncEventBus.instance.triggerScheduleUpdate();
+      }
     });
   }
 
@@ -439,6 +514,24 @@ class SystemSyncHandler extends SyncHandler {
     _schedulesChannel?.unsubscribe();
   }
 
+  void _handleNewAnnouncementNotification(Map<String, dynamic> row) {
+    final target = (row['target_group'] ?? row['targetGroup'])?.toString() ?? 'all';
+    final title = row['title'] ?? "New Announcement";
+    final body = row['content'] ?? "Tap to view details";
+
+    if (target.toUpperCase() == 'BROADCAST_ALL') {
+      NotificationService().showSystemAlertNotification(
+        title: "🚨 URGENT: $title",
+        body: body,
+      );
+    } else {
+      NotificationService().showAnnouncementNotification(
+        title: title,
+        body: body,
+      );
+    }
+  }
+
   // --- PRIVATE HELPERS ---
 
   Future<String?> _getLastSync(String table) async {
@@ -452,5 +545,23 @@ class SystemSyncHandler extends SyncHandler {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_sync_$table', timestamp);
+  }
+
+  Future<void> _withRetry(Future<void> Function() action, {int maxAttempts = 3}) async {
+    int attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        await action();
+        return;
+      } catch (e) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          debugPrint("❌ SystemSyncHandler: Operation failed after $maxAttempts attempts: $e");
+          rethrow;
+        }
+        debugPrint("⚠️ SystemSyncHandler: Attempt $attempts failed ($e). Retrying...");
+        await Future.delayed(Duration(seconds: attempts * 2));
+      }
+    }
   }
 }

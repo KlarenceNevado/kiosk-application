@@ -111,25 +111,28 @@ class HighRiskPatientsCard extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.warning_amber_rounded,
-                    color: Colors.white, size: 24),
-                const SizedBox(width: 8),
-                const Text(
-                  "Triage: Requires Attention",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16),
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 6),
+                const Flexible(
+                  child: Text(
+                    "Triage: Attention",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 6),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    "${highRiskProfiles.length} Patients",
+                    "${highRiskProfiles.length}",
                     style: TextStyle(
                         color: Colors.red.shade700,
                         fontWeight: FontWeight.bold,
@@ -160,10 +163,11 @@ class HighRiskPatientsCard extends StatelessWidget {
                 ),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4.0),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
                     children: reasons
                         .map((r) => Container(
-                              margin: const EdgeInsets.only(right: 8),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(

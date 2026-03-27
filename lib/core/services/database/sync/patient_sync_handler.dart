@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:kiosk_application/core/services/security/security_logger.dart';
 import 'sync_handler.dart';
 import '../../../../features/auth/models/user_model.dart';
+import '../../system/sync_event_bus.dart';
 
 class PatientSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
@@ -58,8 +60,8 @@ class PatientSyncHandler extends SyncHandler {
       var query = supabase.from('patients').select();
 
       if (lastSync != null) {
-        final overlapTime = DateTime.parse(lastSync).subtract(const Duration(minutes: 5));
-        query = query.gt('updated_at', overlapTime.toIso8601String());
+        final overlapTime = DateTime.parse(lastSync).toUtc().subtract(const Duration(minutes: 5));
+        query = query.gt('updated_at', overlapTime.toUtc().toIso8601String());
       }
 
       final cloudPatients = await query.order('updated_at', ascending: true);
@@ -95,6 +97,7 @@ class PatientSyncHandler extends SyncHandler {
       callback: (payload) {
         onData(payload);
         _changeController.add(null);
+        SyncEventBus.instance.triggerPatientUpdate();
       },
     ).subscribe();
   }
@@ -107,6 +110,8 @@ class PatientSyncHandler extends SyncHandler {
   // --- CRUD HELPERS ---
 
   Future<User?> createPatient(User user) async {
+    final String birthDate = user.dateOfBirth.toIso8601String().split('T')[0];
+    
     final Map<String, dynamic> supabaseData = {
       'id': user.id,
       'first_name': user.firstName,
@@ -114,19 +119,30 @@ class PatientSyncHandler extends SyncHandler {
       'middle_initial': user.middleInitial,
       'sitio': user.sitio,
       'phone_number': dbHelper.encrypt(user.phoneNumber),
-      'pin_code': dbHelper.encrypt(user.pinCode),
-      'date_of_birth': user.dateOfBirth.toIso8601String(),
       'gender': user.gender,
+      'date_of_birth': birthDate,
       'parent_id': user.parentId,
       'updated_at': DateTime.now().toIso8601String(),
     };
 
+    // Validation: Supabase 'patients' table ID is a UUID. 
+    // If the account has a 'local_' prefix (legacy/guest), it cannot be pushed to cloud.
+    if (user.id.startsWith('local_')) {
+      SecurityLogger.info("Sync: Skipping Supabase push for legacy/local user ID: ${user.id}");
+      await dbHelper.insertPatient(user.copyWith(isSynced: false));
+      return user.copyWith(isSynced: false);
+    }
+
     try {
       await supabase.from('patients').upsert(supabaseData);
+      
       final syncedUser = user.copyWith(isSynced: true, updatedAt: DateTime.now());
       await dbHelper.insertPatient(syncedUser);
+      SecurityLogger.info("Sync: Successfully pushed patient ${user.id} to Supabase.");
       return syncedUser;
     } catch (e) {
+      SecurityLogger.error("Sync: Failed to push patient ${user.id} to Supabase: $e");
+      
       final offlineUser = user.copyWith(isSynced: false);
       await dbHelper.insertPatient(offlineUser);
       return offlineUser;
@@ -134,6 +150,7 @@ class PatientSyncHandler extends SyncHandler {
   }
 
   Future<bool> updatePatient(User user) async {
+    final String birthDate = user.dateOfBirth.toIso8601String().split('T')[0];
     try {
       final Map<String, dynamic> supabaseData = {
         'first_name': user.firstName,
@@ -141,11 +158,10 @@ class PatientSyncHandler extends SyncHandler {
         'middle_initial': user.middleInitial,
         'sitio': user.sitio,
         'phone_number': dbHelper.encrypt(user.phoneNumber),
-        'pin_code': dbHelper.encrypt(user.pinCode),
-        'date_of_birth': user.dateOfBirth.toIso8601String(),
+        'date_of_birth': birthDate,
         'gender': user.gender,
         'parent_id': user.parentId,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
       await supabase.from('patients').update(supabaseData).eq('id', user.id);
@@ -193,22 +209,38 @@ class PatientSyncHandler extends SyncHandler {
 
   Future<User?> authenticatePatient(String phone, String pin) async {
     try {
-      final encryptedPhone = dbHelper.encrypt(phone);
-      final encryptedPin = dbHelper.encrypt(pin);
-      final data = await supabase.from('patients').select().eq('phone_number', encryptedPhone).eq('pin_code', encryptedPin).limit(1);
+      // NOTE: We cannot use .eq('phone_number') due to randomized IVs.
+      // Strategy: Fetch a recent batch and scan locally (Decryption happens in memory).
+      final data = await supabase.from('patients').select().limit(50);
 
       if (data.isNotEmpty) {
-        final row = data.first;
-        final decryptedRow = Map<String, dynamic>.from(row);
-        decryptedRow['phone_number'] = dbHelper.decrypt(row['phone_number']);
-        decryptedRow['pin_code'] = dbHelper.decrypt(row['pin_code']);
-        return User.fromMap(decryptedRow);
+        for (var row in data) {
+          final dbEncPhone = row['phone_number']?.toString();
+          final dbEncPin = row['pin_code']?.toString();
+          if (dbEncPhone == null || dbEncPin == null) continue;
+
+          try {
+            final decPhone = dbHelper.decrypt(dbEncPhone);
+            final decPin = dbHelper.decrypt(dbEncPin);
+
+            if (decPhone == phone.trim() && decPin == pin.trim()) {
+              final decryptedRow = Map<String, dynamic>.from(row);
+              decryptedRow['phone_number'] = decPhone;
+              decryptedRow['pin_code'] = decPin;
+              return User.fromMap(decryptedRow);
+            }
+          } catch (_) {
+            continue; // Skip stale or unreadable data
+          }
+        }
       }
       return null;
     } catch (e) {
+      debugPrint("❌ authenticatePatient Error: $e");
       return null;
     }
   }
+
 
   Future<List<User>> fetchDependents(String parentId) async {
     try {
@@ -221,17 +253,34 @@ class PatientSyncHandler extends SyncHandler {
 
   Future<List<Map<String, dynamic>>> findPatient(String nameInput, String phoneNumber) async {
     try {
-      final data = await supabase.from('patients').select().eq('phone_number', phoneNumber);
-      return data.where((row) {
-        final first = row['first_name']?.toString().toLowerCase() ?? '';
-        final last = row['last_name']?.toString().toLowerCase() ?? '';
-        final input = nameInput.toLowerCase().trim();
-        return input == first || input == last || "$first $last" == input;
-      }).toList();
+      // Strategy: Search by Name (Plain Text) then decrypt found phone numbers to match input
+      final results = await supabase
+          .from('patients')
+          .select()
+          .or('first_name.ilike.%$nameInput%,last_name.ilike.%$nameInput%')
+          .limit(10);
+
+      final List<Map<String, dynamic>> matches = [];
+      for (var row in results) {
+        final dbEncPhone = row['phone_number']?.toString();
+        if (dbEncPhone == null) continue;
+
+        try {
+          final decPhone = dbHelper.decrypt(dbEncPhone);
+          if (decPhone == phoneNumber.trim()) {
+            final preparedRow = Map<String, dynamic>.from(row);
+            preparedRow['phone_number'] = decPhone; // Use plain for AuthRepo logic
+            matches.add(preparedRow);
+          }
+        } catch (_) {}
+      }
+      return matches;
     } catch (e) {
+      debugPrint("❌ findPatient (Cloud) Error: $e");
       return [];
     }
   }
+
 
   // --- PRIVATE HELPERS ---
 
@@ -248,8 +297,21 @@ class PatientSyncHandler extends SyncHandler {
     await prefs.setString('last_sync_patients', timestamp);
   }
 
+  /// Known local SQLite columns for the 'patients' table.
+  /// Any extra columns from Supabase are stripped to prevent INSERT crashes.
+  static const _knownPatientColumns = {
+    'id', 'first_name', 'last_name', 'middle_initial', 'sitio',
+    'phone_number', 'pin_code', 'date_of_birth', 'gender', 'parent_id',
+    'avatar_url', 'relation', 'is_active', 'is_synced', 'is_deleted',
+    'created_at', 'updated_at',
+  };
+
   Map<String, dynamic> _prepareRowForSqlite(Map<String, dynamic> row) {
     final prepared = Map<String, dynamic>.from(row);
+
+    // Strip unknown columns to prevent "table has no column" errors
+    prepared.removeWhere((key, _) => !_knownPatientColumns.contains(key));
+
     prepared.forEach((key, value) {
       if (value is bool) {
         prepared[key] = value ? 1 : 0;

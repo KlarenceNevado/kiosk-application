@@ -20,7 +20,7 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
   @override
   Future<void> loadUserHistory(String userId) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       final response = await _supabase
@@ -44,7 +44,7 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
   @override
   Future<void> loadAllHistory() async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     try {
       final response = await _supabase

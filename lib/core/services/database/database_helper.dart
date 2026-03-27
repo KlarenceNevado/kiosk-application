@@ -62,7 +62,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 19, // BUMPED TO 19 FOR MISSING SYNC COLUMNS
+      version: 20, // BUMPED TO 20 FOR CHAT SCHEMA ALIGNMENT (patient_id, sender)
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -215,6 +215,10 @@ class DatabaseHelper {
       id TEXT PRIMARY KEY,
       sender_id TEXT NOT NULL,
       receiver_id TEXT NOT NULL,
+      patient_id TEXT,
+      sender TEXT,
+      message TEXT,
+      parent_id TEXT,
       content TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       reply_to TEXT,

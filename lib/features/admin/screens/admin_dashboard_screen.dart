@@ -20,6 +20,7 @@ import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/services/database/sync_service.dart';
+import '../../../core/services/system/sync_event_bus.dart';
 
 // NEW TABS
 import 'tabs/admin_validation_tab.dart';
@@ -78,10 +79,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _setupSyncListeners() {
-    final syncService = SyncService();
+    final bus = SyncEventBus.instance;
 
     // 1. Patient Changes
-    _patientSyncSub = syncService.patientStream.listen((_) {
+    _patientSyncSub = bus.patientStream.listen((_) {
       if (mounted) {
         debugPrint("🔄 Dashboard: Patient data synced, refreshing UI.");
         context.read<IAuthRepository>().refreshUsers();
@@ -89,20 +90,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     });
 
     // 2. New Vitals (Live Notifications)
-    _vitalSyncSub = syncService.newVitalStream.listen((data) {
-      debugPrint("🔄 Dashboard: New Vital Sign Sync Event!");
+    _vitalSyncSub = bus.vitalsStream.listen((_) {
+      debugPrint("🔄 Dashboard: Vitals change detected.");
       if (mounted) {
         context.read<IHistoryRepository>().loadAllHistory();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("New live reading received from Kiosk!"),
-          backgroundColor: AppColors.brandGreen,
-          duration: Duration(seconds: 4),
-        ));
       }
     });
 
-    // 3. New Alerts
-    _alertSyncSub = syncService.newAlertStream.listen((data) {
+    // 3. New Alerts (Snackbars)
+    _alertSyncSub = bus.newAlertStream.listen((data) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("⚠️ ALERT: ${data['message'] ?? 'New system alert'}"),
@@ -112,8 +108,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       }
     });
 
-    // 4. New Announcements
-    _announcementSyncSub = syncService.newAnnouncementStream.listen((data) {
+    // 4. New Announcements (Snackbars)
+    _announcementSyncSub = bus.newAnnouncementStream.listen((data) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("📢 ANNOUNCEMENT: ${data['title'] ?? 'New update'}"),

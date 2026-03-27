@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:timezone/timezone.dart' as tz;
+import '../../../core/services/security/encryption_service.dart';
 
 class ChatMessage {
   final String id;
@@ -59,12 +60,24 @@ class ChatMessage {
       return false;
     }
 
+    // Extraction & Decryption
+    String content = map['message'] ?? map['content'] ?? '';
+    
+    // Decrypt if it looks like E2EE content (contains IV separator ':')
+    if (content.contains(':') && !content.startsWith('http')) {
+      try {
+        content = EncryptionService().decryptData(content);
+      } catch (_) {
+        // If decryption fails, keep original (might be a false positive or wrong key)
+      }
+    }
+
     return ChatMessage(
       id: map['id']?.toString() ?? '',
       senderId: map['sender_id']?.toString() ?? map['sender']?.toString() ?? '',
       receiverId:
           map['receiver_id']?.toString() ?? map['receiver']?.toString() ?? '',
-      content: map['message'] ?? map['content'] ?? '',
+      content: content,
       timestamp: map['timestamp'] != null
           ? (DateTime.tryParse(map['timestamp'].toString()) ?? DateTime.now())
               .toLocal()
@@ -74,7 +87,7 @@ class ChatMessage {
       isForwarded: parseBool(map['is_forwarded']),
       isDeleted: parseBool(map['is_deleted']),
       updatedAt:
-          DateTime.parse(map['updated_at'] ?? map['timestamp'].toString())
+          DateTime.parse(map['updated_at'] ?? map['timestamp']?.toString() ?? DateTime.now().toIso8601String())
               .toLocal(),
       isSynced: map['is_synced'] == 1,
       mediaUrl: map['media_url'],
@@ -94,11 +107,19 @@ class ChatMessage {
   }
 
   Map<String, dynamic> toMap() {
+    // Supabase alignment for local persistence
+    final safeSenderId = senderId.isEmpty ? 'admin' : senderId;
+    final safeReceiverId = receiverId.isEmpty ? 'system' : receiverId;
+    final patientId = safeSenderId == 'admin' ? safeReceiverId : safeSenderId;
+
     return {
       'id': id,
       'sender_id': senderId,
       'receiver_id': receiverId,
+      'sender': senderId,
+      'patient_id': patientId,
       'content': content,
+      'message': content,
       'timestamp': timestamp.toIso8601String(),
       'reply_to': replyTo,
       'reactions': jsonEncode(reactions),
