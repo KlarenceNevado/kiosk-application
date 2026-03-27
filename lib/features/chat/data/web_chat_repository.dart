@@ -126,17 +126,27 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
         if (error != null) debugPrint("❌ Realtime Error: $error");
         _isRealtimeOperational = false;
         
-        // 3. EXPONENTIAL BACKOFF
         _retryCount++;
-        final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 6)))).inSeconds;
-        debugPrint("🔄 Retrying Realtime subscription in ${delaySeconds}s (Attempt $_retryCount)...");
         
-        // 4. FALLBACK POLLING (If Realtime is struggling)
-        if (_retryCount >= 3) {
-          final int pollingInterval = _retryCount >= 5 ? 3 : 10;
-          _startPolling(currentUserId, otherUserId, interval: pollingInterval);
+        // FALLBACK: Start polling immediately on state error 3
+        final isClosedError = error?.toString().contains('state error: 3') ?? false;
+        if (isClosedError) {
+          _startPolling(currentUserId, otherUserId, interval: 3);
+        } else if (_retryCount >= 3) {
+          _startPolling(currentUserId, otherUserId, interval: 3);
         }
 
+        // CAP RETRIES: After 5 failures, give up on Realtime entirely
+        if (_retryCount >= 5) {
+          debugPrint("🛑 Web Chat: WebSocket permanently unavailable. Using REST polling only.");
+          _chatChannel?.unsubscribe();
+          _chatChannel = null;
+          return; // Stop retrying
+        }
+
+        final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 4)))).inSeconds;
+        debugPrint("🔄 Retrying Realtime in ${delaySeconds}s (Attempt $_retryCount/5)...");
+        
         _retryTimer = Timer(Duration(seconds: delaySeconds), () {
           _setupRealtime(currentUserId, otherUserId);
         });

@@ -34,10 +34,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
         // AUTO-SCROLL LISTENER
         chatRepo.addListener(_onChatChanged);
 
-        // INITIAL SCROLL TO BOTTOM
+        // INITIAL SCROLL TO BOTTOM (reverse:true => position 0 is bottom)
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted && _scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            _scrollController.jumpTo(0);
           }
         });
       }
@@ -45,11 +45,21 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   }
 
   void _onChatChanged() {
-    // With reverse: true, the list stays pinned to the bottom (index 0) automatically.
-    // We only need to show/hide the "Scroll to Bottom" button based on current position.
+    // With reverse: true, position 0 = bottom. Auto-scroll if near bottom.
     if (!mounted || !_scrollController.hasClients) return;
     
     final bool isNearBottom = _scrollController.position.pixels <= 200;
+    if (isNearBottom) {
+      // Auto-scroll to latest message
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.animateTo(0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
     if (_showScrollToBottom == isNearBottom) {
       setState(() {
         _showScrollToBottom = !isNearBottom;
@@ -70,8 +80,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
 
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
-    final bool isAtBottom = _scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200;
+    // reverse:true => position 0 is bottom, higher values = scrolled up
+    final bool isAtBottom = _scrollController.position.pixels <= 200;
     if (isAtBottom != !_showScrollToBottom) {
       setState(() {
         _showScrollToBottom = !isAtBottom;
@@ -82,7 +92,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0, // reverse:true => 0 is bottom
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -110,12 +120,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
     _messageController.clear();
     setState(() => _replyingToId = null);
 
-    // Scroll to bottom
+    // Scroll to bottom (reverse:true => 0 is bottom)
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          0,
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       }

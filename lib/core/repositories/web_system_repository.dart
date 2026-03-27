@@ -1,34 +1,41 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/i_system_repository.dart';
 
 class WebSystemRepository implements ISystemRepository {
   final _supabase = Supabase.instance.client;
 
+  // Helper: Emits immediately, then every [interval]
+  Stream<List<Map<String, dynamic>>> _pollingStream(
+      Future<List<Map<String, dynamic>>> Function() fetcher,
+      {Duration interval = const Duration(seconds: 15)}) async* {
+    // Emit once immediately
+    yield await fetcher();
+    // Then poll periodically
+    yield* Stream.periodic(interval).asyncMap((_) => fetcher());
+  }
+
   @override
   Stream<List<Map<String, dynamic>>> get announcementStream =>
-      _supabase.from('announcements').stream(primaryKey: ['id']).map((list) =>
-          list.where((a) {
-            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
-            // Removed isActive filtering here so Admin PWA can see archived records; 
-            // Patient PWA filters at the UI level.
-            return !isDeleted;
-          }).toList());
+      _pollingStream(() => fetchAnnouncements());
 
   @override
   Stream<List<Map<String, dynamic>>> get alertStream =>
-      _supabase.from('alerts').stream(primaryKey: ['id']).map((list) =>
-          list.where((a) {
-            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
-            return !isDeleted;
-          }).toList());
+      _pollingStream(() => fetchAlerts());
 
   @override
   Stream<List<Map<String, dynamic>>> get scheduleStream =>
-      _supabase.from('schedules').stream(primaryKey: ['id']).map((list) =>
-          list.where((a) {
-            final isDeleted = a['is_deleted'] == true || a['is_deleted'] == 1;
-            return !isDeleted;
-          }).toList());
+      _pollingStream(() async {
+        try {
+          final response = await _supabase
+              .from('schedules')
+              .select()
+              .eq('is_deleted', false);
+          return List<Map<String, dynamic>>.from(response);
+        } catch (_) {
+          return <Map<String, dynamic>>[];
+        }
+      });
 
   @override
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
