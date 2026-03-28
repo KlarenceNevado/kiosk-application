@@ -129,8 +129,9 @@ class PatientSyncHandler extends SyncHandler {
     // If the account has a 'local_' prefix (legacy/guest), it cannot be pushed to cloud.
     if (user.id.startsWith('local_')) {
       SecurityLogger.info("Sync: Skipping Supabase push for legacy/local user ID: ${user.id}");
-      await dbHelper.insertPatient(user.copyWith(isSynced: false));
-      return user.copyWith(isSynced: false);
+      // Mark as synced so it doesn't re-appear in getUnsyncedPatients every cycle
+      await dbHelper.insertPatient(user.copyWith(isSynced: true));
+      return user.copyWith(isSynced: true);
     }
 
     try {

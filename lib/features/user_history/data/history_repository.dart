@@ -15,19 +15,25 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
   List<VitalSigns> _records = [];
   bool _isLoading = false;
   StreamSubscription? _syncSubscription;
+  Timer? _debounceTimer;
 
   LocalHistoryRepository() {
     _syncSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
-      debugPrint("🔔 HistoryRepository: Sync event detected. Refreshing data...");
-      if (_records.isNotEmpty) {
-        loadAllHistory();
-      }
+      // Debounce: Coalesce rapid sync events into a single reload
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(seconds: 1), () {
+        debugPrint("🔔 HistoryRepository: Sync event detected. Refreshing data...");
+        if (_records.isNotEmpty) {
+          loadAllHistory();
+        }
+      });
     });
   }
 
   @override
   void dispose() {
     _syncSubscription?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 

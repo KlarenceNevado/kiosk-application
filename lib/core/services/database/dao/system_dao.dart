@@ -267,10 +267,12 @@ class SystemDao extends BaseDao {
   Future<void> insertAlert(Map<String, dynamic> row) async {
     final dbRow = Map<String, dynamic>.from(row);
     dbRow['is_emergency'] = (dbRow['is_emergency'] == true || dbRow['is_emergency'] == 1 || dbRow['isEmergency'] == true || dbRow['isEmergency'] == 1) ? 1 : 0;
+    dbRow['is_active'] = (dbRow['is_active'] == true || dbRow['is_active'] == 1 || dbRow['isActive'] == true || dbRow['isActive'] == 1) ? 1 : 0;
     dbRow['is_deleted'] = (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
     dbRow['is_synced'] = (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
     dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
     dbRow.remove('isEmergency');
+    dbRow.remove('isActive');
     dbRow.remove('targetGroup');
     await db.insert('alerts', dbRow, conflictAlgorithm: ConflictAlgorithm.replace);
     refreshAlerts();
