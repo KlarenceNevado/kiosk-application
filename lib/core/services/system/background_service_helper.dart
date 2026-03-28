@@ -13,24 +13,29 @@ class BackgroundServiceHelper {
   static Future<void> initializeService() async {
     final service = FlutterBackgroundService();
 
-    await service.configure(
-      androidConfiguration: AndroidConfiguration(
-        onStart: onStart,
-        autoStart: true,
-        isForegroundMode: true,
-        notificationChannelId: 'system_alerts_channel', // High priority
-        initialNotificationTitle: 'Kiosk Sync Active',
-        initialNotificationContent: 'Monitoring for alerts & announcements...',
-        foregroundServiceNotificationId: 888,
-      ),
-      iosConfiguration: IosConfiguration(
-        autoStart: true,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
-    );
+    try {
+      await service.configure(
+        androidConfiguration: AndroidConfiguration(
+          onStart: onStart,
+          autoStart: true,
+          isForegroundMode: true,
+          notificationChannelId: 'system_alerts_channel', // High priority
+          initialNotificationTitle: 'Kiosk Sync Active',
+          initialNotificationContent: 'Monitoring for alerts & announcements...',
+          foregroundServiceNotificationId: 888,
+        ),
+        iosConfiguration: IosConfiguration(
+          autoStart: true,
+          onForeground: onStart,
+          onBackground: onIosBackground,
+        ),
+      );
 
-    await service.startService();
+      await service.startService();
+    } catch (e) {
+      debugPrint("❌ [BackgroundServiceHelper] Configuration/Start Failed: $e");
+      rethrow; // Rethrow so InitializationService can see it and log it
+    }
   }
 
   @pragma('vm:entry-point')

@@ -51,12 +51,33 @@ class InitializationService {
     // 5. Initialize Supabase (Offline-First Cloud Sync)
     await _initSupabase();
 
-    // 6. Mode-specific Services
+    // 6. Mode-specific Services (Resilient Startup)
     if (AppEnvironment().isMobilePatient) {
-       // Request OS permissions before initializing services
-       await _requestAppPermissions();
-       await _initNotifications();
-       await BackgroundServiceHelper.initializeService();
+       try {
+         debugPrint("📦 [InitializationService] Phase: Mobile Patient Setup");
+         // 6.1. Permissions
+         try {
+           await _requestAppPermissions();
+         } catch (e) {
+           debugPrint("⚠️ [InitializationService] Permissions Error: $e");
+         }
+         
+         // 6.2. Notifications
+         try {
+           await _initNotifications();
+         } catch (e) {
+           debugPrint("⚠️ [InitializationService] Notifications Error: $e");
+         }
+
+         // 6.3. Background service (Non-blocking)
+         try {
+           await BackgroundServiceHelper.initializeService();
+         } catch (e) {
+           debugPrint("❌ [InitializationService] Background Service Critical Error: $e");
+         }
+       } catch (e) {
+         debugPrint("⚠️ [InitializationService] Global Mobile Setup Error: $e");
+       }
     }
 
     // 7. UI Configuration
