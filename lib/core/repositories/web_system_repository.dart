@@ -61,6 +61,7 @@ class WebSystemRepository implements ISystemRepository {
           .from('announcements')
           .select()
           .eq('is_deleted', false)
+          .eq('is_active', true)
           .order('timestamp', ascending: false);
       
       List<Map<String, dynamic>> filtered = List<Map<String, dynamic>>.from(response);
@@ -88,6 +89,7 @@ class WebSystemRepository implements ISystemRepository {
           .from('alerts')
           .select()
           .eq('is_deleted', false)
+          .eq('is_active', true)
           .order('timestamp', ascending: false);
       
       List<Map<String, dynamic>> filtered = List<Map<String, dynamic>>.from(response);

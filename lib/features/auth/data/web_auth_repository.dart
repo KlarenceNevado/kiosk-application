@@ -1,19 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/models/user_model.dart';
 import '../domain/i_auth_repository.dart';
 import '../../../core/services/security/encryption_service.dart';
 
 
 /// Web-safe AuthRepository that uses Supabase directly.
-/// No DatabaseHelper, SyncService, EncryptionService, or dart:io.
+/// Persists session to SharedPreferences so browser reloads don't lose the user.
 class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   User? _currentUser;
   List<User> _users = [];
   bool _isLoading = false;
 
   final _supabase = Supabase.instance.client;
+  static const _sessionKey = 'pwa_session_user_id';
 
   @override
   User? get currentUser => _currentUser;
@@ -23,7 +25,63 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   bool get isLoading => _isLoading;
 
   WebAuthRepository() {
-    // No auto-load on web; user must log in explicitly.
+    // Restore session from SharedPreferences on construction
+    _restoreSession();
+  }
+
+  /// Restores the user session from SharedPreferences after a browser reload.
+  Future<void> _restoreSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedUserId = prefs.getString(_sessionKey);
+      if (storedUserId == null || storedUserId.isEmpty) return;
+
+      debugPrint("🔐 Restoring PWA session for user: $storedUserId");
+
+      // Re-fetch user from Supabase
+      final response = await _supabase
+          .from('patients')
+          .select()
+          .eq('id', storedUserId)
+          .maybeSingle();
+
+      if (response == null) {
+        debugPrint("⚠️ Session restore: User not found in database. Clearing session.");
+        await prefs.remove(_sessionKey);
+        return;
+      }
+
+      final restoredUser = User.fromMap(response);
+
+      // Fetch dependents
+      final depsResponse = await _supabase
+          .from('patients')
+          .select()
+          .eq('parent_id', restoredUser.id);
+
+      final dependents = (depsResponse as List)
+          .map((row) => User.fromMap(row))
+          .toList();
+
+      _users = [restoredUser, ...dependents];
+      _currentUser = restoredUser;
+      debugPrint("✅ Session restored: ${restoredUser.fullName}");
+      notifyListeners();
+    } catch (e) {
+      debugPrint("⚠️ Session restore failed: $e");
+    }
+  }
+
+  /// Saves the current user ID to SharedPreferences.
+  Future<void> _saveSession(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionKey, userId);
+  }
+
+  /// Clears the stored session.
+  Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionKey);
   }
 
   @override
@@ -96,6 +154,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
+        await _saveSession(cloudUser.id);
         _isLoading = false;
         notifyListeners();
         return null; // Success
@@ -160,6 +219,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
+        await _saveSession(cloudUser.id);
         _isLoading = false;
         notifyListeners();
         return null;
@@ -181,6 +241,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   Future<void> logout() async {
     _currentUser = null;
     _users.clear();
+    await _clearSession();
     notifyListeners();
   }
 

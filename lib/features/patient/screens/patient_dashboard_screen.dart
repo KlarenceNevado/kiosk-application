@@ -27,11 +27,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   StreamSubscription? _announcementSubscription;
   StreamSubscription? _alertSubscription;
   StreamSubscription? _vitalsSubscription;
+  bool _hasLoadedOnce = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _waitForSessionAndLoad());
 
     // LISTEN FOR REAL-TIME UPDATES
     _announcementSubscription = SyncEventBus.instance.announcementStream.listen((_) {
@@ -45,6 +46,34 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     _vitalsSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
       if (mounted) _loadData(forceSync: false);
     });
+
+    // Listen for auth changes (session restore from SharedPreferences)
+    final authRepo = context.read<IAuthRepository>();
+    authRepo.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    if (!_hasLoadedOnce && mounted) {
+      final user = context.read<IAuthRepository>().currentUser;
+      if (user != null) {
+        _loadData();
+      }
+    }
+  }
+
+  /// Wait for the session to be restored from SharedPreferences before loading data.
+  /// On a fresh reload, the async restore may take a moment.
+  Future<void> _waitForSessionAndLoad() async {
+    final authRepo = context.read<IAuthRepository>();
+    
+    // Give the async session restore up to 3 seconds
+    for (int i = 0; i < 15; i++) {
+      if (authRepo.currentUser != null) break;
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (!mounted) return;
+    }
+    
+    _loadData();
   }
 
   @override
@@ -52,6 +81,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     _announcementSubscription?.cancel();
     _alertSubscription?.cancel();
     _vitalsSubscription?.cancel();
+    try {
+      context.read<IAuthRepository>().removeListener(_onAuthChanged);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -62,12 +94,16 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       final systemRepo = context.read<ISystemRepository>();
       final user = authRepo.currentUser;
       if (user == null) {
-        setState(() {
-          _errorMessage = "User session expired. Please log in again.";
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = "User session expired. Please log in again.";
+            _isLoading = false;
+          });
+        }
         return;
       }
+      _hasLoadedOnce = true;
+      _errorMessage = '';
 
       // 1. Initial Local Fetch
       await historyRepo.loadUserHistory(user.id);
