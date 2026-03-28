@@ -15,8 +15,9 @@ class User {
   final DateTime? updatedAt;
   final bool isDeleted;
   final bool isActive; // NEW: Archiving support
-  final String? relation; // NEW: Relationship to parent
-  final String role; // NEW: RLS Role ('patient' or 'admin')
+  final String? relation; 
+  final String role; 
+  final String? deviceToken; // NEW: FCM/Push Token
 
   User({
     required this.id,
@@ -32,9 +33,10 @@ class User {
     this.isSynced = false,
     this.updatedAt,
     this.isDeleted = false,
-    this.isActive = true, // Default to active
+    this.isActive = true,
     this.relation,
     this.role = 'patient',
+    this.deviceToken,
   });
 
   String get fullName {
@@ -66,17 +68,17 @@ class User {
       'dateOfBirth': dateOfBirth.toIso8601String(),
       'gender': gender,
       'parentId': parentId,
-      'is_synced': isSynced ? 1 : 0, // Explicitly int for SQLite
+      'is_synced': isSynced ? 1 : 0, 
       'updated_at': updatedAt?.toIso8601String(),
-      'is_deleted': isDeleted ? 1 : 0, // Explicitly int for SQLite
-      'isActive': isActive ? 1 : 0, // NEW
+      'is_deleted': isDeleted ? 1 : 0, 
+      'isActive': isActive ? 1 : 0, 
       'relation': relation,
       'role': role,
+      'device_token': deviceToken,
     };
   }
 
   factory User.fromMap(Map<String, dynamic> map) {
-    // Robust bool parser for various data types (int, bool, null)
     bool parseBool(dynamic value, bool defaultValue) {
       if (value == null) return defaultValue;
       if (value is bool) return value;
@@ -104,6 +106,7 @@ class User {
       isActive: parseBool(map['isActive'] ?? map['is_active'], true),
       relation: map['relation'],
       role: map['role'] ?? 'patient',
+      deviceToken: map['deviceToken'] ?? map['device_token'],
     );
   }
 
@@ -126,6 +129,7 @@ class User {
     bool? isActive,
     String? relation,
     String? role,
+    String? deviceToken,
   }) {
     return User(
       id: id ?? this.id,
@@ -144,6 +148,7 @@ class User {
       isActive: isActive ?? this.isActive,
       relation: relation ?? this.relation,
       role: role ?? this.role,
+      deviceToken: deviceToken ?? this.deviceToken,
     );
   }
 

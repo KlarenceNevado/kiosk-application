@@ -100,62 +100,81 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
 
   void _setupRealtime(String currentUserId, String otherUserId) {
     _chatChannel?.unsubscribe();
+    _chatChannel = null;
 
-    late final RealtimeChannel channel;
-    channel = _supabase.channel('public:chat_messages:$otherUserId');
+    final String channelName = 'public:chat_user_${currentUserId.replaceAll('-', '_')}';
+    final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
     channel
         .onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'chat_messages',
-      callback: (payload) async {
-        final row = payload.newRecord;
-        if (payload.eventType == PostgresChangeEvent.delete) {
-          // Handle delete event
-          final deletedId = payload.oldRecord['id'];
-          if (deletedId != null) {
-            _messages.removeWhere((m) => m.id == deletedId);
-            notifyListeners();
-          }
-          return;
-        }
-
-        // Merge new record with existing local record to handle partial updates
-        final existingIndex = _messages.indexWhere((m) => m.id == row['id']);
-        Map<String, dynamic> fullData;
-        if (existingIndex != -1) {
-          fullData = {
-            ..._messages[existingIndex].toMap(),
-            ...row,
-            'is_synced': 1,
-          };
-        } else {
-          fullData = {
-            ...row,
-            'is_synced': 1,
-          };
-        }
-
-        final msg = ChatMessage.fromMap(fullData);
-
-        // Filter for relevant conversation
-        if ((msg.senderId == currentUserId && msg.receiverId == otherUserId) ||
-            (msg.senderId == otherUserId && msg.receiverId == currentUserId)) {
-          _handleIncomingMessage(msg);
-        }
-      },
-    )
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          // FILTER: Current user is the receiver (new incoming messages)
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'receiver_id',
+            value: currentUserId,
+          ),
+          callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          // FILTER: Current user is the sender (for reaction/status updates sync)
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'sender_id',
+            value: currentUserId,
+          ),
+          callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+        )
         .subscribe((status, [error]) {
-      debugPrint("📡 Chat Realtime ($otherUserId): Status is $status");
+      debugPrint("📡 Chat Realtime ($currentUserId): Status is $status");
       if (error != null) {
         debugPrint("❌ Chat Realtime Error: $error");
       }
-
-      // Supabase auto-reconnects on closed/error.
-      // Do not manually retry here to prevent channel thrashing and hitting connection limits.
     });
+  }
+
+  void _onRealtimeChange(PostgresChangePayload payload, String currentUserId, String otherUserId) async {
+    final row = payload.newRecord;
+    if (payload.eventType == PostgresChangeEvent.delete) {
+      final deletedId = payload.oldRecord['id'];
+      if (deletedId != null) {
+        _messages.removeWhere((m) => m.id == deletedId);
+        notifyListeners();
+      }
+      return;
+    }
+
+    // Merge new record with existing local record
+    final existingIndex = _messages.indexWhere((m) => m.id == row['id']);
+    Map<String, dynamic> fullData;
+    if (existingIndex != -1) {
+      fullData = {
+        ..._messages[existingIndex].toMap(),
+        ...row,
+        'is_synced': 1,
+      };
+    } else {
+      fullData = {
+        ...row,
+        'is_synced': 1,
+      };
+    }
+
+    final msg = ChatMessage.fromMap(fullData);
+
+    // Final client-side filter for THIS conversation view
+    final bool isRelevant = (msg.senderId == currentUserId && msg.receiverId == otherUserId) ||
+                            (msg.senderId == otherUserId && msg.receiverId == currentUserId);
+
+    if (isRelevant) {
+      _handleIncomingMessage(msg);
+    }
   }
 
   void _setupPresence(String userId) {

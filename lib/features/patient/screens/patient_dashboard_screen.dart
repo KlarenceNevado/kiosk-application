@@ -4,7 +4,6 @@ import '../../../../core/constants/app_colors.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../auth/domain/i_auth_repository.dart';
-import '../../../core/services/system/sync_event_bus.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../data/mobile_navigation_provider.dart';
 import '../../user_history/domain/i_history_repository.dart';
@@ -21,79 +20,19 @@ class PatientDashboardScreen extends StatefulWidget {
 class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   bool _isLoading = true;
   List<VitalSigns> _vitals = [];
-  Map<String, dynamic>? _latestAnnouncement;
-  List<Map<String, dynamic>> _activeAlerts = [];
   String _errorMessage = '';
-  StreamSubscription? _announcementSubscription;
-  StreamSubscription? _alertSubscription;
-  StreamSubscription? _vitalsSubscription;
-  bool _hasLoadedOnce = false;
   Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _waitForSessionAndLoad());
-
-    // LISTEN FOR REAL-TIME UPDATES with Debouncing
-    _announcementSubscription = SyncEventBus.instance.announcementStream.listen((_) {
-      _triggerDebouncedLoad();
-    });
-
-    _alertSubscription = SyncEventBus.instance.alertStream.listen((_) {
-      _triggerDebouncedLoad();
-    });
-
-    _vitalsSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
-      _triggerDebouncedLoad();
-    });
-
-    // Listen for auth changes (session restore from SharedPreferences)
-    final authRepo = context.read<IAuthRepository>();
-    authRepo.addListener(_onAuthChanged);
-  }
-
-  void _onAuthChanged() {
-    if (!_hasLoadedOnce && mounted) {
-      final user = context.read<IAuthRepository>().currentUser;
-      if (user != null) {
-        _loadData();
-      }
-    }
-  }
-
-  /// Wait for the session to be restored from SharedPreferences before loading data.
-  /// On a fresh reload, the async restore may take a moment.
-  Future<void> _waitForSessionAndLoad() async {
-    final authRepo = context.read<IAuthRepository>();
-    
-    // Give the async session restore up to 3 seconds
-    for (int i = 0; i < 15; i++) {
-      if (authRepo.currentUser != null) break;
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!mounted) return;
-    }
-    
     _loadData();
   }
 
   @override
   void dispose() {
-    _announcementSubscription?.cancel();
-    _alertSubscription?.cancel();
-    _vitalsSubscription?.cancel();
     _debounceTimer?.cancel();
-    try {
-      context.read<IAuthRepository>().removeListener(_onAuthChanged);
-    } catch (_) {}
     super.dispose();
-  }
-
-  void _triggerDebouncedLoad() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 1), () {
-      if (mounted) _loadData(forceSync: false);
-    });
   }
 
   Future<void> _loadData({bool forceSync = true}) async {
@@ -111,28 +50,14 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         }
         return;
       }
-      _hasLoadedOnce = true;
       _errorMessage = '';
 
       // 1. Initial Local Fetch
       await historyRepo.loadUserHistory(user.id);
-      final records = historyRepo.records;
       
-      final announcements =
-          await systemRepo.fetchAnnouncements(currentUser: user);
-      final alerts = await systemRepo.fetchAlerts(currentUser: user);
-
       if (mounted) {
         setState(() {
-          _vitals = records;
-          _activeAlerts = alerts;
-          if (announcements.isNotEmpty) {
-            // Because fetchAnnouncements now sorts by Priority then Time,
-            // taking .first correctly gives us the most important recent update.
-            _latestAnnouncement = announcements.first;
-          } else {
-            _latestAnnouncement = null;
-          }
+          _vitals = historyRepo.records;
         });
       }
 
@@ -144,17 +69,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
           historyRepo: historyRepo,
         );
 
-        // 3. Post-Sync Fetch
-        final updatedAnnouncements =
-            await systemRepo.fetchAnnouncements(currentUser: user);
-
         if (!mounted) return;
         setState(() {
-          if (updatedAnnouncements.isNotEmpty) {
-            _latestAnnouncement = updatedAnnouncements.first;
-          } else {
-            _latestAnnouncement = null;
-          }
+          _vitals = historyRepo.records;
           _isLoading = false;
         });
       } else {
@@ -177,6 +94,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = context.read<IAuthRepository>().currentUser;
+    final systemRepo = context.read<ISystemRepository>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -236,33 +154,39 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                 ),
               ),
               actions: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_none_rounded,
-                          color: Colors.white, size: 28),
-                      onPressed: () {
-                        context
-                            .read<MobileNavigationProvider>()
-                            .goToAnnouncements();
-                      },
-                    ),
-                    if (_latestAnnouncement != null)
-                      Positioned(
-                        right: 12,
-                        top: 12,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF5252), // Clinical Red
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: systemRepo.announcementStream,
+                  builder: (context, snapshot) {
+                    final hasUpdates = snapshot.hasData && snapshot.data!.isNotEmpty;
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.notifications_none_rounded,
+                              color: Colors.white, size: 28),
+                          onPressed: () {
+                            context
+                                .read<MobileNavigationProvider>()
+                                .goToAnnouncements();
+                          },
                         ),
-                      ),
-                  ],
+                        if (hasUpdates)
+                          Positioned(
+                            right: 12,
+                            top: 12,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF5252), // Clinical Red
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
                 ),
                 const SizedBox(width: 8),
               ],
@@ -276,10 +200,10 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildAlertBanner() {
-    if (_activeAlerts.isEmpty) return const SizedBox.shrink();
+  Widget _buildAlertBanner(List<Map<String, dynamic>> activeAlerts) {
+    if (activeAlerts.isEmpty) return const SizedBox.shrink();
 
-    final latestAlert = _activeAlerts.first;
+    final latestAlert = activeAlerts.first;
     final bool isEmergency =
         latestAlert['isEmergency'] == 1 || latestAlert['is_emergency'] == true;
 
@@ -298,7 +222,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            // Show alert detail or mark as read? For now just static
+            // Show alert detail
           },
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -368,10 +292,14 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     if (_vitals.isEmpty) return const SizedBox.shrink();
 
     // Find latest record that has remarks
-    final recordWithRemarks = _vitals.firstWhere(
-      (v) => v.remarks != null && v.remarks!.isNotEmpty,
-      orElse: () => _vitals.first,
-    );
+    VitalSigns? recordWithRemarks;
+    try {
+      recordWithRemarks = _vitals.firstWhere(
+        (v) => v.remarks != null && v.remarks!.isNotEmpty,
+      );
+    } catch (_) {
+      recordWithRemarks = _vitals.first;
+    }
 
     if (recordWithRemarks.remarks == null || recordWithRemarks.remarks!.isEmpty) {
       return const SizedBox.shrink();
@@ -490,6 +418,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   }
 
   Widget _buildBody() {
+    final systemRepo = context.read<ISystemRepository>();
     if (_isLoading) {
       return const SizedBox(
         height: 400,
@@ -544,10 +473,13 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_activeAlerts.isNotEmpty) ...[
-            _buildAlertBanner(),
-            const SizedBox(height: 20),
-          ],
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: systemRepo.alertStream,
+            builder: (context, snapshot) {
+              return _buildAlertBanner(snapshot.data ?? []);
+            },
+          ),
+          const SizedBox(height: 10),
           _buildDoctorRemarksCard(),
           const SizedBox(height: 20),
           Row(
@@ -568,7 +500,27 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          _buildLatestAnnouncementCard(),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: systemRepo.announcementStream,
+            builder: (context, snapshot) {
+              final list = snapshot.data ?? [];
+              final user = context.read<IAuthRepository>().currentUser;
+              
+              var filtered = list;
+              if (user != null) {
+                final int age = user.age;
+                filtered = list.where((a) {
+                  final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+                  if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
+                  if (target == 'SENIORS' && age >= 60) return true;
+                  if (target == 'CHILDREN' && age <= 12) return true;
+                  return false;
+                }).toList();
+              }
+              
+              return _buildLatestAnnouncementCard(filtered.isEmpty ? null : filtered.first);
+            },
+          ),
           const SizedBox(height: 24),
           if (_vitals.isEmpty) ...[
             SizedBox(
@@ -582,7 +534,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                       Container(
                         padding: const EdgeInsets.all(28),
                         decoration: const BoxDecoration(
-                          color: AppColors.brandGreenLight,
+                          color: Color(0xFFE8F5E9), // AppColors.brandGreenLight equivalent
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.monitor_heart_rounded,
@@ -1166,11 +1118,11 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     if (chartData.isEmpty) return const SizedBox.shrink();
 
     double minY =
-        (chartData.map((e) => e.diastolicBP).reduce(math.min) / 10).floor() *
+        (chartData.map((e) => e.diastolicBP.toDouble()).reduce(math.min) / 10).floor() *
                 10 -
             20;
     double maxY =
-        (chartData.map((e) => e.systolicBP).reduce(math.max) / 10).ceil() * 10 +
+        (chartData.map((e) => e.systolicBP.toDouble()).reduce(math.max) / 10).ceil() * 10 +
             20;
 
     return _buildTrendChart(
@@ -1290,8 +1242,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildLatestAnnouncementCard() {
-    if (_latestAnnouncement == null) {
+  Widget _buildLatestAnnouncementCard(Map<String, dynamic>? latestAnnouncement) {
+    if (latestAnnouncement == null) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -1340,9 +1292,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       );
     }
 
-    final title = _latestAnnouncement!['title'] ?? 'Announcement';
-    final content = _latestAnnouncement!['content'] ?? '';
-    final isUrgent = _latestAnnouncement!['target_group'] == 'BROADCAST_ALL';
+    final title = latestAnnouncement['title'] ?? 'Announcement';
+    final content = latestAnnouncement['content'] ?? '';
+    final isUrgent = latestAnnouncement['target_group'] == 'BROADCAST_ALL';
 
     return GestureDetector(
       onTap: () {
@@ -1488,7 +1440,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               decoration: BoxDecoration(
                 color: isHypertensive
                     ? Colors.red.shade50
-                    : AppColors.brandGreenLight,
+                    : const Color(0xFFE8F5E9), // AppColors.brandGreenLight equivalent
                 shape: BoxShape.circle,
               ),
               child: Icon(

@@ -5,45 +5,26 @@ import '../domain/i_system_repository.dart';
 class WebSystemRepository implements ISystemRepository {
   final _supabase = Supabase.instance.client;
 
-  // Helper: Emits immediately, then every [interval]
-  Stream<List<Map<String, dynamic>>> _pollingStream(
-      Future<List<Map<String, dynamic>>> Function() fetcher,
-      {Duration interval = const Duration(seconds: 15)}) async* {
-    // Emit once immediately
-    try {
-      yield await fetcher();
-    } catch (_) {
-      yield <Map<String, dynamic>>[];
-    }
-    // Then poll periodically
-    yield* Stream.periodic(interval).asyncMap((_) async {
-      try {
-        return await fetcher();
-      } catch (_) {
-        return <Map<String, dynamic>>[];
-      }
-    });
-  }
+  // Reactive streams using Supabase Realtime (No more polling!)
+  late final Stream<List<Map<String, dynamic>>> _announcementStream = _supabase
+      .from('announcements')
+      .stream(primaryKey: ['id'])
+      .order('timestamp', ascending: false)
+      .map((data) => data.where((a) => a['is_deleted'] == false && a['is_active'] == true).toList())
+      .asBroadcastStream();
 
-  // Cache streams so they aren't re-created on each property access
-  late final Stream<List<Map<String, dynamic>>> _announcementStream =
-      _pollingStream(() => fetchAnnouncements()).asBroadcastStream();
+  late final Stream<List<Map<String, dynamic>>> _alertStream = _supabase
+      .from('alerts')
+      .stream(primaryKey: ['id'])
+      .order('timestamp', ascending: false)
+      .map((data) => data.where((a) => a['is_deleted'] == false && a['is_active'] == true).toList())
+      .asBroadcastStream();
 
-  late final Stream<List<Map<String, dynamic>>> _alertStream =
-      _pollingStream(() => fetchAlerts()).asBroadcastStream();
-
-  late final Stream<List<Map<String, dynamic>>> _scheduleStream =
-      _pollingStream(() async {
-        try {
-          final response = await _supabase
-              .from('schedules')
-              .select()
-              .eq('is_deleted', false);
-          return List<Map<String, dynamic>>.from(response);
-        } catch (_) {
-          return <Map<String, dynamic>>[];
-        }
-      }).asBroadcastStream();
+  late final Stream<List<Map<String, dynamic>>> _scheduleStream = _supabase
+      .from('schedules')
+      .stream(primaryKey: ['id'])
+      .map((data) => data.where((a) => a['is_deleted'] == false).toList())
+      .asBroadcastStream();
 
   @override
   Stream<List<Map<String, dynamic>>> get announcementStream => _announcementStream;

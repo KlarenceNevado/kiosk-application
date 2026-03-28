@@ -62,7 +62,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 20, // BUMPED TO 20 FOR CHAT SCHEMA ALIGNMENT (patient_id, sender)
+      version: 21, // BUMPED TO 21 FOR PUSH TOKEN SUPPORT
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -99,7 +99,8 @@ class DatabaseHelper {
       is_deleted INTEGER DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1,
       is_synced INTEGER NOT NULL DEFAULT 0,
-      relation TEXT
+      relation TEXT,
+      device_token TEXT
     )
     ''');
 
@@ -449,6 +450,13 @@ class DatabaseHelper {
       ''');
       debugPrint("🚀 Database Upgraded to Version 18 (System Logs Table)");
     }
+    
+    if (oldVersion < 21) {
+      try {
+        await db.execute('ALTER TABLE patients ADD COLUMN device_token TEXT');
+        debugPrint("🚀 Database Upgraded to Version 21 (Push Token Architecture)");
+      } catch (_) {}
+    }
   }
 
   // --- ENCRYPTION HELPERS ---
@@ -698,6 +706,7 @@ class DatabaseHelper {
           (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
       'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
       'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
+      'device_token': map['device_token'] ?? map['deviceToken'],
     };
 
     await db.insert('patients', encryptedMap,
@@ -712,6 +721,7 @@ class DatabaseHelper {
       final decrypted = Map<String, dynamic>.from(json);
       decrypted['phoneNumber'] = _decrypt(json['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(json['pin_code']?.toString() ?? '');
+      decrypted['deviceToken'] = json['device_token'];
       // Ensure model mapping works with snake_case from DB
       return User.fromMap(decrypted);
     }).toList();
@@ -724,6 +734,7 @@ class DatabaseHelper {
       final decrypted = Map<String, dynamic>.from(maps.first);
       decrypted['phoneNumber'] = _decrypt(maps.first['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(maps.first['pin_code']?.toString() ?? '');
+      decrypted['deviceToken'] = maps.first['device_token'];
       return User.fromMap(decrypted);
     }
     return null;
@@ -749,6 +760,7 @@ class DatabaseHelper {
           (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
       'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
       'is_synced': 0, // Mark for re-sync
+      'device_token': map['device_token'] ?? map['deviceToken'],
     };
     await db.update('patients', encryptedMap,
         where: 'id = ?', whereArgs: [user.id]);

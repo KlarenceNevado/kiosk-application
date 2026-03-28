@@ -66,8 +66,19 @@ class ChatSyncHandler extends SyncHandler {
   @override
   Future<void> pull() async {
     try {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        debugPrint("ℹ️ ChatSyncHandler: No active session. Skipping pull.");
+        return;
+      }
+
       final lastSync = await _getLastSync();
-      var query = supabase.from('chat_messages').select();
+      
+      // SECURITY: Enforce participant filter in the query itself (Defense in depth)
+      var query = supabase.from('chat_messages')
+          .select()
+          .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}');
+          
       if (lastSync != null) {
         query = query.gt('updated_at', lastSync);
       }
@@ -79,23 +90,22 @@ class ChatSyncHandler extends SyncHandler {
         final exists = await dbHelper.systemDao.getChatMessageById(row['id']);
         if (exists == null) {
           final msg = ChatMessage.fromMap(row);
-          String senderName = "Health Worker";
           
-          if (msg.senderId != 'admin') {
+          // Only notify if someone ELSE sent the message
+          if (msg.senderId != user.id) {
+            String senderName = "Health Worker";
             final patient = await dbHelper.patientDao.getPatientById(msg.senderId);
             if (patient != null) {
               senderName = "${patient.firstName} ${patient.lastName}";
             }
+
+            final int notificationId = msg.senderId.hashCode.abs() % 10000;
+            NotificationService().showChatNotification(
+              senderName: senderName,
+              message: msg.content,
+              notificationId: notificationId,
+            );
           }
-
-          // Use a simple hash of senderId for notification ID grouping
-          final int notificationId = msg.senderId.hashCode.abs() % 10000;
-
-          NotificationService().showChatNotification(
-            senderName: senderName,
-            message: msg.content,
-            notificationId: notificationId,
-          );
         }
 
         await dbHelper.systemDao.upsertChatMessage(row);
@@ -124,14 +134,33 @@ class ChatSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
   void subscribe() {
     if (_channel != null) return;
-    _channel = supabase.channel('public:chat_messages_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'chat_messages',
-      callback: (payload) {
-        pull(); // Trigger a pull to fetch and notify
-      },
-    ).subscribe();
+    
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final String channelName = 'public:chat_sync_${user.id.replaceAll('-', '_')}';
+    _channel = supabase.channel(channelName);
+    
+    _channel!
+      .onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'chat_messages',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'receiver_id',
+          value: user.id,
+        ),
+        callback: (payload) {
+          debugPrint("🔔 ChatSync: Incoming message detected via Realtime.");
+          pull(); 
+        },
+      )
+      .subscribe((status, [error]) {
+        if (status == RealtimeSubscribeStatus.subscribed) {
+          debugPrint("✅ ChatSync: Filtered Realtime Subscribed.");
+        }
+      });
   }
 
   void unsubscribe() {

@@ -12,6 +12,7 @@ import '../../../core/services/notifications/chat_listener_service.dart';
 import '../../../core/services/notifications/system_alert_listener_service.dart';
 import '../../../core/services/notifications/vitals_listener_service.dart';
 import '../../../core/services/notifications/announcement_listener_service.dart';
+import '../../../core/services/security/notification_service.dart';
 import '../../../core/services/security/security_logger.dart';
 import '../../../core/services/system/system_log_service.dart';
 import '../domain/i_auth_repository.dart';
@@ -34,6 +35,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   List<User> get users => _users;
   @override
   bool get isLoading => _isLoading;
+  @override
+  Future<void> get initialization => Future.value();
 
   LocalAuthRepository() {
     _loadUsers();
@@ -291,8 +294,14 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     final encryptedId = EncryptionService().encryptData(_currentUser!.id);
     await prefs.setString('last_logged_in_user_id', encryptedId);
 
-    // EAGER SYNC
+    // EAGER SYNC & SESSION RESTART
+    SyncService().restartSync();
     SyncService().fullSyncForUser(_currentUser!.id);
+    
+    // Update cloud push token (Stub for native device token)
+    if (_currentUser!.deviceToken != null) {
+      await NotificationService().updateDeviceToken(_currentUser!.id, _currentUser!.deviceToken!);
+    }
 
     // Listeners
     ChatListenerService().startListening(_currentUser!.id);
@@ -425,13 +434,16 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         debugPrint("⚠️ Logout log failed (non-fatal): $e");
       }
 
+      // 1. CLEAR CLOUD PUSH TOKEN - Security Requirement
+      await NotificationService().clearDeviceToken(_currentUser!.id);
+
       // Stop background listeners
       ChatListenerService().stopListening();
       SystemAlertListenerService().stopListening();
 
       // Only stop sync listeners on mobile; Kiosk/Desktop should keep listening
       if (mode == AppMode.mobilePatient) {
-        SyncService().stopListening();
+        SyncService().reset(); // Use new reset() for full teardown
       }
 
       // Log session end

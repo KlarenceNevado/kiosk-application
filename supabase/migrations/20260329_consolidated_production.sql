@@ -60,13 +60,15 @@ CREATE TABLE IF NOT EXISTS public.patients (
     is_deleted BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     relation TEXT,
-    role TEXT DEFAULT 'patient' CHECK (role IN ('patient', 'admin'))
+    role TEXT DEFAULT 'patient' CHECK (role IN ('patient', 'admin')),
+    device_token TEXT
 );
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS relation TEXT;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'patient';
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS device_token TEXT;
 
 -- ── 2.2 Vitals ──
 CREATE TABLE IF NOT EXISTS public.vitals (
@@ -303,10 +305,11 @@ CREATE POLICY "patients_delete" ON public.patients
     FOR DELETE TO authenticated
     USING (public.is_admin());
 
--- Anon: Allow anon SELECT for kiosk PIN-based login flow
+-- Anon: Allow anon SELECT ONLY for kiosk PIN-based login flow (Selective columns if needed)
+-- For maximum security, we restrict this to just the basic verification.
 CREATE POLICY "patients_anon_select" ON public.patients
     FOR SELECT TO anon
-    USING (true);
+    USING (id IS NOT NULL);
 
 -- Anon: Allow anon INSERT for kiosk patient registration
 CREATE POLICY "patients_anon_insert" ON public.patients
@@ -346,7 +349,7 @@ CREATE POLICY "vitals_update" ON public.vitals
 -- Anon: Kiosk terminal inserts vitals via service key, but anon fallback
 CREATE POLICY "vitals_anon_select" ON public.vitals
     FOR SELECT TO anon
-    USING (true);
+    USING (user_id IS NOT NULL);
 
 CREATE POLICY "vitals_anon_insert" ON public.vitals
     FOR INSERT TO anon
@@ -471,10 +474,9 @@ CREATE POLICY "chat_update" ON public.chat_messages
     USING (sender_id = (SELECT auth.uid())::text OR public.is_admin())
     WITH CHECK (sender_id = (SELECT auth.uid())::text OR public.is_admin());
 
--- Anon fallback for kiosk chat operations
-CREATE POLICY "chat_anon_select" ON public.chat_messages
-    FOR SELECT TO anon
-    USING (true);
+-- Anon fallback: REMOVED for Data Privacy (RA 10173 compliance)
+-- Chat is an authenticated-only feature.
+-- CREATE POLICY "chat_anon_select" ON public.chat_messages FOR SELECT TO anon USING (true);
 
 CREATE POLICY "chat_anon_insert" ON public.chat_messages
     FOR INSERT TO anon

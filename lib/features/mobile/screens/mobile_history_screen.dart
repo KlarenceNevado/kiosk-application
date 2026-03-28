@@ -83,15 +83,18 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
               child: CircularProgressIndicator(color: AppColors.brandGreen))
           : _records.isEmpty
               ? _buildEmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.only(
-                      top: 16, bottom: 40, left: 16, right: 16),
-                  itemCount: _records.length,
-                  itemBuilder: (context, index) {
-                    final record = _records[index];
-
-                    return _buildHistoryCard(record);
-                  },
+              : RefreshIndicator(
+                  onRefresh: _fetchHistory,
+                  color: AppColors.brandGreen,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(
+                        top: 16, bottom: 40, left: 16, right: 16),
+                    itemCount: _records.length,
+                    itemBuilder: (context, index) {
+                      final record = _records[index];
+                      return _buildHistoryCard(record);
+                    },
+                  ),
                 ),
     );
   }

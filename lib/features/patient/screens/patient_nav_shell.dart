@@ -23,116 +23,138 @@ class PatientNavShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final navProvider = context.watch<MobileNavigationProvider>();
+    final authRepo = context.read<IAuthRepository>();
     final currentIndex = navProvider.currentIndex;
 
-    const List<Widget> screens = [
-      PatientDashboardScreen(),
-      MobileHistoryScreen(),
-      PatientChatScreen(), // NEW TAB
-      PatientAnnouncementsScreen(),
-      _PatientProfileTab(),
-    ];
-
-    return Scaffold(
-      body: FadeIndexedStack(
-        index: currentIndex,
-        children: screens,
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
+    return FutureBuilder(
+      future: authRepo.initialization,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: AppColors.brandGreen),
+                  SizedBox(height: 16),
+                  Text("Restoring session...",
+                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 70,
-            child: BottomNavigationBar(
-              currentIndex: currentIndex,
-              onTap: (index) => navProvider.setIndex(index),
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.white,
-              selectedItemColor: AppColors.brandGreen,
-              unselectedItemColor: Colors.grey.shade400,
-              selectedFontSize: 13,
-              unselectedFontSize: 12,
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-              iconSize: 28,
-              elevation: 0,
-              items: [
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.dashboard_rounded),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.dashboard_rounded),
-                  ),
-                  label: 'Dashboard',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.history_rounded),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.history_rounded),
-                  ),
-                  label: 'History',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Badge(
-                      label: Consumer<IChatRepository>(
-                        builder: (context, repo, _) =>
-                            Text("${repo.messages.length}"),
-                      ),
-                      isLabelVisible: false, // For now
-                      child: const Icon(Icons.chat_bubble_outline_rounded),
-                    ),
-                  ),
-                  activeIcon: const Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.chat_bubble_rounded),
-                  ),
-                  label: 'Inbox',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.campaign_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.campaign_rounded),
-                  ),
-                  label: 'Announcements',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.person_rounded),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.person_rounded),
-                  ),
-                  label: 'Profile',
+          );
+        }
+
+        final List<Widget> screens = [
+          const PatientDashboardScreen(),
+          const MobileHistoryScreen(),
+          const PatientChatScreen(), // NEW TAB
+          const PatientAnnouncementsScreen(),
+          const _PatientProfileTab(),
+        ];
+
+        return Scaffold(
+          body: FadeIndexedStack(
+            index: currentIndex,
+            children: screens,
+          ),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
                 ),
               ],
             ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                height: 70,
+                child: BottomNavigationBar(
+                  currentIndex: currentIndex,
+                  onTap: (index) => navProvider.setIndex(index),
+                  type: BottomNavigationBarType.fixed,
+                  backgroundColor: Colors.white,
+                  selectedItemColor: AppColors.brandGreen,
+                  unselectedItemColor: Colors.grey.shade400,
+                  selectedFontSize: 13,
+                  unselectedFontSize: 12,
+                  selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  iconSize: 28,
+                  elevation: 0,
+                  items: [
+                    const BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.dashboard_rounded),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.dashboard_rounded),
+                      ),
+                      label: 'Dashboard',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.history_rounded),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.history_rounded),
+                      ),
+                      label: 'History',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Badge(
+                          label: Consumer<IChatRepository>(
+                            builder: (context, repo, _) =>
+                                Text("${repo.messages.length}"),
+                          ),
+                          isLabelVisible: false, // For now
+                          child: const Icon(Icons.chat_bubble_outline_rounded),
+                        ),
+                      ),
+                      activeIcon: const Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.chat_bubble_rounded),
+                      ),
+                      label: 'Inbox',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.campaign_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.campaign_rounded),
+                      ),
+                      label: 'Announcements',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.person_rounded),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.person_rounded),
+                      ),
+                      label: 'Profile',
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -213,7 +235,6 @@ class _PatientProfileTab extends StatelessWidget {
 
             _buildLinkedAccountsSection(context),
             const SizedBox(height: 24),
-
 
             const SizedBox(height: 32),
 
@@ -637,7 +658,6 @@ class _PatientProfileTab extends StatelessWidget {
       child: child,
     );
   }
-
 }
 
 class FadeIndexedStack extends StatefulWidget {

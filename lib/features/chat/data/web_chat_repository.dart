@@ -96,13 +96,30 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
-    // 2. BROAD LISTENERS (Most compatible for anon users)
+    // 2. BROAD LISTENERS but ENFORCED FILTERS (Security layer on top of RLS)
     channel
+        .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'chat_messages',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'receiver_id',
+        value: currentUserId,
+      ),
+      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+    )
         .onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'chat_messages',
-      // No filter here; we filter locally in _onRealtimeChange for compatibility
+      // For updates/deletes we can't easily filter by receiver_id only if they are sender.
+      // But RLS will catch it. We add this second listener for self-sent message sync if needed.
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'sender_id',
+        value: currentUserId,
+      ),
       callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
     ).onBroadcast(
       // 3. BROADCAST SIGNAL (Immediate "New Message" ping)

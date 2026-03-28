@@ -8,6 +8,7 @@ abstract class IAuthRepository extends ChangeNotifier {
   User? get currentUser;
   List<User> get users;
   bool get isLoading;
+  Future<void> get initialization;
 
   Future<void> refreshUsers();
   

@@ -101,7 +101,8 @@ class SyncService with WidgetsBindingObserver {
     // PWA Optimization: Increase sync frequency for Web for better data reflection
     const syncInterval = kIsWeb ? Duration(seconds: 20) : Duration(minutes: 1);
 
-    Timer.periodic(syncInterval, (timer) async {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(syncInterval, (timer) async {
       await _attemptSync();
     });
 
@@ -112,11 +113,38 @@ class SyncService with WidgetsBindingObserver {
 
     chatHandler.subscribe();
 
-    ConnectionManager().statusStream.listen((status) {
+    _connectionSubscription?.cancel();
+    _connectionSubscription = ConnectionManager().statusStream.listen((status) {
       if (status == ConnectionStatus.online) {
         _attemptSync();
       }
     });
+  }
+
+  Timer? _syncTimer;
+  StreamSubscription? _connectionSubscription;
+
+  /// Full cleanup of all sync loops and real-time channels.
+  /// CRITICAL: Must be called on Logout to prevent data leaks.
+  void reset() {
+    debugPrint("🛑 SyncService: Resetting and unsubscribing all listeners...");
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    _connectionSubscription?.cancel();
+    _connectionSubscription = null;
+    
+    stopListening(); // Removes WidgetsBinding observer and unsubscribes most handlers
+    chatHandler.unsubscribe();
+    
+    _isSyncing = false;
+    _syncMutex = null;
+    _syncCallbacks.clear();
+  }
+
+  /// Restarts the entire sync engine for a new user session.
+  void restartSync() {
+    reset();
+    startSyncLoop();
   }
 
   Future<void> fullSyncForUser(String userId) async {

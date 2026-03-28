@@ -3,6 +3,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -425,5 +426,39 @@ class NotificationService {
   Future<void> cancelAllReminders() async {
     if (!_isSupported) return;
     await flutterLocalNotificationsPlugin.cancelAll();
+  }
+
+  /// REST & PUSH TOKEN MANAGEMENT
+  
+  /// Updates the device token in Supabase for the current user.
+  /// This ensures push notifications are routed to THIS device for THIS user.
+  Future<void> updateDeviceToken(String userId, String token) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase
+          .from('patients')
+          .update({'device_token': token})
+          .eq('id', userId);
+      
+      debugPrint("📡 NotificationService: Device token updated in cloud for $userId");
+    } catch (e) {
+      debugPrint("⚠️ NotificationService: Failed to update device token: $e");
+    }
+  }
+
+  /// Clears the device token from Supabase for the current user.
+  /// CRITICAL: Prevents User B from receiving User A's notifications on the same device.
+  Future<void> clearDeviceToken(String userId) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase
+          .from('patients')
+          .update({'device_token': null})
+          .eq('id', userId);
+      
+      debugPrint("📡 NotificationService: Device token cleared in cloud for $userId");
+    } catch (e) {
+      debugPrint("⚠️ NotificationService: Failed to clear device token: $e");
+    }
   }
 }

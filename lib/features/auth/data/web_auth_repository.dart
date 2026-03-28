@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/models/user_model.dart';
 import '../domain/i_auth_repository.dart';
 import '../../../core/services/security/encryption_service.dart';
+import '../../../core/services/security/notification_service.dart';
+import '../../../core/services/database/sync_service.dart';
 
 
 /// Web-safe AuthRepository that uses Supabase directly.
@@ -16,6 +18,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   final _supabase = Supabase.instance.client;
   static const _sessionKey = 'pwa_session_user_id';
+  final _restoreCompleter = Completer<void>();
 
   @override
   User? get currentUser => _currentUser;
@@ -23,6 +26,9 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   List<User> get users => _users;
   @override
   bool get isLoading => _isLoading;
+
+  @override
+  Future<void> get initialization => _restoreCompleter.future;
 
   WebAuthRepository() {
     // Restore session from SharedPreferences on construction
@@ -69,6 +75,10 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
       notifyListeners();
     } catch (e) {
       debugPrint("⚠️ Session restore failed: $e");
+    } finally {
+      if (!_restoreCompleter.isCompleted) {
+        _restoreCompleter.complete();
+      }
     }
   }
 
@@ -155,6 +165,14 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
         await _saveSession(cloudUser.id);
+
+        // RE-INITIALIZE SYSTEM LIFECYCLE
+        SyncService().restartSync();
+        // Assuming push token is available from a native service (stub for now)
+        if (cloudUser.deviceToken != null) {
+          await NotificationService().updateDeviceToken(cloudUser.id, cloudUser.deviceToken!);
+        }
+
         _isLoading = false;
         notifyListeners();
         return null; // Success
@@ -220,6 +238,10 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
         await _saveSession(cloudUser.id);
+
+        // RE-INITIALIZE SYSTEM LIFECYCLE
+        SyncService().restartSync();
+
         _isLoading = false;
         notifyListeners();
         return null;
@@ -239,9 +261,22 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   @override
   Future<void> logout() async {
+    final oldUser = _currentUser;
     _currentUser = null;
     _users.clear();
     await _clearSession();
+
+    // 1. CLEAR CLOUD PUSH TOKEN - Security Requirement
+    if (oldUser != null) {
+      await NotificationService().clearDeviceToken(oldUser.id);
+    }
+    
+    // 2. STOP ALL REAL-TIME DATA FLOW - Stability Requirement
+    SyncService().reset();
+
+    // 3. ACTUAL SUPABASE SIGNOUT
+    await _supabase.auth.signOut();
+
     notifyListeners();
   }
 
