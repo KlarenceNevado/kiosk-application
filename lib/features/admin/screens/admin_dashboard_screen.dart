@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:csv/csv.dart';
 
 
 import '../../../core/constants/app_colors.dart';
@@ -29,7 +26,8 @@ import 'tabs/admin_scheduling_tab.dart';
 import 'tabs/admin_alerts_tab.dart';
 import 'tabs/admin_reports_tab.dart';
 import 'tabs/admin_chat_tab.dart';
-import 'tabs/admin_hardware_tab.dart'; // NEW
+import 'tabs/admin_hardware_tab.dart';
+import '../../../core/services/system/export_service.dart';
 
 // NEW WIDGETS
 import '../widgets/admin_analytics_card.dart';
@@ -419,19 +417,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ]);
       }
 
-      String csv = const ListToCsvConverter().convert(rows);
-      final directory = await getApplicationDocumentsDirectory();
-      final String filePath =
-          '${directory.path}/kiosk_export_${DateTime.now().millisecondsSinceEpoch}.csv';
-      final File file = File(filePath);
-      await file.writeAsString(csv);
+      // PHASE 3: Use ExportService for AES-256 Encrypted Export (.csv.aes)
+      final fileName = 'kiosk_export_${DateTime.now().millisecondsSinceEpoch}';
+      final file = await ExportService().exportToEncryptedCsv(
+        fileName: fileName,
+        rows: rows,
+        actionLabel: 'All Vital Records',
+        userId: authRepo.currentUser?.id,
+      );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("Export saved to: $filePath"),
-        backgroundColor: AppColors.brandGreen,
-        duration: const Duration(seconds: 5),
-      ));
+      if (file != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("Encrypted export saved to: ${file.path}"),
+          backgroundColor: AppColors.brandGreen,
+          duration: const Duration(seconds: 5),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Export failed. Check logs."),
+            backgroundColor: Colors.red));
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

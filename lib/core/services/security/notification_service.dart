@@ -46,11 +46,16 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
+    
+    // Windows Specific Init
+    const LinuxInitializationSettings initializationSettingsLinux = 
+        LinuxInitializationSettings(defaultActionName: 'Open Application');
 
     const InitializationSettings initializationSettings =
         InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
+      linux: initializationSettingsLinux,
     );
 
     try {
@@ -333,6 +338,48 @@ class NotificationService {
         body,
         platformDetails,
         payload: 'system_alert',
+      );
+    }
+  }
+
+  Future<void> showHardwareAlert({
+    required String sensorName,
+    required String status,
+  }) async {
+    final isError = status.toLowerCase() == 'error' || status.toLowerCase() == 'disconnected';
+    
+    final AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'system_alerts_channel',
+      'System Alerts',
+      channelDescription: 'Hardware and system status alerts',
+      importance: Importance.max,
+      priority: Priority.high,
+      color: isError ? Colors.red : Colors.orange,
+      icon: 'ic_notification',
+      category: AndroidNotificationCategory.status,
+    );
+
+    final NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails, iOS: const DarwinNotificationDetails());
+
+    if (!_isSupported) return;
+    
+    final title = "Hardware Alert: $sensorName";
+    final body = "Sensor is now $status. Please check connections.";
+
+    if (await isNotificationsEnabled()) {
+      if (kIsWeb) {
+        showWebNotification(title, body, tag: 'hardware');
+        return;
+      }
+      
+      await flutterLocalNotificationsPlugin.show(
+        sensorName.hashCode, 
+        title,
+        body,
+        platformDetails,
+        payload: 'hardware_alert',
       );
     }
   }

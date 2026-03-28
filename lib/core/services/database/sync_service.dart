@@ -7,6 +7,7 @@ import 'sync/patient_sync_handler.dart';
 import 'sync/vitals_sync_handler.dart';
 import 'sync/system_sync_handler.dart';
 import 'sync/chat_sync_handler.dart';
+import 'sync/log_sync_handler.dart';
 import '../system/file_storage_service.dart';
 import 'database_helper.dart';
 import '../../../features/auth/models/user_model.dart';
@@ -20,19 +21,22 @@ class SyncService with WidgetsBindingObserver {
     VitalsSyncHandler? vHandler,
     SystemSyncHandler? sHandler,
     ChatSyncHandler? cHandler,
+    LogSyncHandler? lHandler,
   }) {
     // In unit tests, we may provide all handlers to bypass Supabase initialization
-    if (pHandler != null && vHandler != null && sHandler != null && cHandler != null) {
+    if (pHandler != null && vHandler != null && sHandler != null && cHandler != null && lHandler != null) {
       patientHandler = pHandler;
       vitalsHandler = vHandler;
       systemHandler = sHandler;
       chatHandler = cHandler;
+      logHandler = lHandler;
     } else {
       final client = Supabase.instance.client;
       patientHandler = pHandler ?? PatientSyncHandler(client);
       vitalsHandler = vHandler ?? VitalsSyncHandler(client);
       systemHandler = sHandler ?? SystemSyncHandler(client);
       chatHandler = cHandler ?? ChatSyncHandler(client);
+      logHandler = lHandler ?? LogSyncHandler(client);
     }
   }
 
@@ -64,6 +68,7 @@ class SyncService with WidgetsBindingObserver {
   late final VitalsSyncHandler vitalsHandler;
   late final SystemSyncHandler systemHandler;
   late final ChatSyncHandler chatHandler;
+  late final LogSyncHandler logHandler;
 
   bool _isSyncing = false;
   Completer<void>? _syncMutex;
@@ -206,6 +211,7 @@ class SyncService with WidgetsBindingObserver {
         vitalsHandler.push(),
         if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
+        logHandler.push(),
       ]);
 
       // Parallel Pull

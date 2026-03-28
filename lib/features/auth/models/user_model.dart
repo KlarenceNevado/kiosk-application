@@ -16,6 +16,7 @@ class User {
   final bool isDeleted;
   final bool isActive; // NEW: Archiving support
   final String? relation; // NEW: Relationship to parent
+  final String role; // NEW: RLS Role ('patient' or 'admin')
 
   User({
     required this.id,
@@ -33,6 +34,7 @@ class User {
     this.isDeleted = false,
     this.isActive = true, // Default to active
     this.relation,
+    this.role = 'patient',
   });
 
   String get fullName {
@@ -69,6 +71,7 @@ class User {
       'is_deleted': isDeleted ? 1 : 0, // Explicitly int for SQLite
       'isActive': isActive ? 1 : 0, // NEW
       'relation': relation,
+      'role': role,
     };
   }
 
@@ -100,6 +103,7 @@ class User {
       isDeleted: parseBool(map['is_deleted'], false),
       isActive: parseBool(map['isActive'] ?? map['is_active'], true),
       relation: map['relation'],
+      role: map['role'] ?? 'patient',
     );
   }
 
@@ -121,6 +125,7 @@ class User {
     bool? isDeleted,
     bool? isActive,
     String? relation,
+    String? role,
   }) {
     return User(
       id: id ?? this.id,
@@ -138,6 +143,7 @@ class User {
       isDeleted: isDeleted ?? this.isDeleted,
       isActive: isActive ?? this.isActive,
       relation: relation ?? this.relation,
+      role: role ?? this.role,
     );
   }
 

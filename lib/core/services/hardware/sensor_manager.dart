@@ -7,6 +7,7 @@ import 'drivers/sensor_hub_service.dart';
 import 'sensor_data_models.dart';
 import '../system/system_log_service.dart';
 import '../system/app_environment.dart';
+import '../security/notification_service.dart';
 
 class SensorManager {
   static final SensorManager _instance = SensorManager._internal();
@@ -77,7 +78,14 @@ class SensorManager {
 
       service.statusStream.listen((status) {
         _allDataController.add(SensorEvent(type: type, status: status));
+        
+        // Phase 2: Show OS-level notifications (Toasts) for failures
         if (status == SensorStatus.error || status == SensorStatus.disconnected) {
+          NotificationService().showHardwareAlert(
+            sensorName: type.toString().split('.').last.toUpperCase(),
+            status: status.toString().split('.').last,
+          );
+          
           SystemLogService().logAction(
             action: 'SENSOR_STATUS_CHANGE',
             module: 'HARDWARE',

@@ -6,8 +6,9 @@ import '../../../core/services/system/sync_event_bus.dart';
 import '../../../features/health_check/models/vital_signs_model.dart';
 import '../../../core/services/system/file_storage_service.dart';
 import 'package:open_file/open_file.dart';
-import 'dart:io';
-
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/i_history_repository.dart';
 
 class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepository {
@@ -49,7 +50,18 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
     Future.microtask(() => notifyListeners());
 
     try {
-      _records = await _dbHelper.getRecordsByUserId(userId);
+      if (kIsWeb) {
+        // Phase 4: PWA Cloud-only fetch (SQLite is not available on Web)
+        final response = await Supabase.instance.client
+            .from('vitals')
+            .select()
+            .eq('user_id', userId)
+            .order('timestamp', ascending: false);
+        
+        _records = (response as List).map((data) => VitalSigns.fromMap(data)).toList();
+      } else {
+        _records = await _dbHelper.getRecordsByUserId(userId);
+      }
     } catch (e) {
       debugPrint("Error loading user history: $e");
     } finally {
@@ -58,14 +70,24 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
     }
   }
 
-  /// Loads ALL data regardless of user
+  /// Loads ALL data regardless of user (Admin privilege required)
   @override
   Future<void> loadAllHistory() async {
     _isLoading = true;
     Future.microtask(() => notifyListeners());
 
     try {
-      _records = await _dbHelper.getAllRecords();
+      if (kIsWeb) {
+        // Phase 4: PWA Cloud-only fetch
+        final response = await Supabase.instance.client
+            .from('vitals')
+            .select()
+            .order('timestamp', ascending: false);
+        
+        _records = (response as List).map((data) => VitalSigns.fromMap(data)).toList();
+      } else {
+        _records = await _dbHelper.getAllRecords();
+      }
     } catch (e) {
       debugPrint("Error loading all history: $e");
     } finally {
