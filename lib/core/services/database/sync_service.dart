@@ -72,6 +72,7 @@ class SyncService with WidgetsBindingObserver {
 
   bool _isSyncing = false;
   Completer<void>? _syncMutex;
+  String? _userId;
 
   SupabaseClient get supabase => Supabase.instance.client;
 
@@ -107,11 +108,12 @@ class SyncService with WidgetsBindingObserver {
     });
 
     // Subscriptions
+    final activeId = _getCurrentUserId();
     systemHandler.subscribeAll();
     patientHandler.subscribe((_) => patientHandler.pull());
     vitalsHandler.subscribe((_) => vitalsHandler.pull());
 
-    chatHandler.subscribe();
+    chatHandler.subscribe(activeId);
 
     _connectionSubscription?.cancel();
     _connectionSubscription = ConnectionManager().statusStream.listen((status) {
@@ -142,7 +144,8 @@ class SyncService with WidgetsBindingObserver {
   }
 
   /// Restarts the entire sync engine for a new user session.
-  void restartSync() {
+  void restartSync([String? userId]) {
+    _userId = userId;
     reset();
     startSyncLoop();
   }
@@ -154,6 +157,7 @@ class SyncService with WidgetsBindingObserver {
         await patientHandler.pull();
         await systemHandler.pull();
         await vitalsHandler.pull();
+        await chatHandler.pull(userId);
         await _cacheFilesInBackground();
       } catch (e) {
         debugPrint("❌ SyncService: Full Sync Error: $e");
@@ -243,10 +247,12 @@ class SyncService with WidgetsBindingObserver {
       ]);
 
       // Parallel Pull
+      final activeId = _getCurrentUserId();
       await Future.wait([
         patientHandler.pull(),
         vitalsHandler.pull(),
         systemHandler.pull(),
+        chatHandler.pull(activeId),
       ]);
 
       await _cacheFilesInBackground();
@@ -343,5 +349,18 @@ class SyncService with WidgetsBindingObserver {
         await historyRepo.loadAllHistory();
       }
     });
+  }
+
+  /// Resolves the current user ID by checking Supabase Native Auth 
+  /// and falling back to the local database session (for PWA compatibility).
+  String? _getCurrentUserId() {
+    // 1. Explicitly set ID (from login/restart flow)
+    if (_userId != null) return _userId;
+
+    // 2. Check Native Supabase Auth
+    final nativeId = Supabase.instance.client.auth.currentUser?.id;
+    if (nativeId != null) return nativeId;
+
+    return null; 
   }
 }

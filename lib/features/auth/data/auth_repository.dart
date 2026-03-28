@@ -82,6 +82,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
           final lastUserId = EncryptionService().decryptData(encryptedLastUserId);
           _currentUser = _users.firstWhere((u) => u.id == lastUserId);
           if (_currentUser != null) {
+            SyncService().restartSync(_currentUser!.id);
             SyncService().fullSyncForUser(_currentUser!.id);
           }
         } catch (_) {
@@ -295,7 +296,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     await prefs.setString('last_logged_in_user_id', encryptedId);
 
     // EAGER SYNC & SESSION RESTART
-    SyncService().restartSync();
+    SyncService().restartSync(_currentUser!.id);
     SyncService().fullSyncForUser(_currentUser!.id);
     
     // Update cloud push token (Stub for native device token)

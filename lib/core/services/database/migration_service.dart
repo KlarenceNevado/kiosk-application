@@ -208,7 +208,8 @@ class MigrationService {
     if (pinCodeCol['notnull'] == 1 || hasLegacy) {
       debugPrint("🛠 [Migration] Reconstructing patients table to relax constraints...");
       await db.transaction((txn) async {
-        await txn.execute('CREATE TABLE patients_new ('
+        await txn.execute('DROP TABLE IF EXISTS patients_new');
+        await txn.execute('CREATE TABLE IF NOT EXISTS patients_new ('
             'id TEXT PRIMARY KEY, '
             'first_name TEXT, '
             'last_name TEXT, '
@@ -264,7 +265,8 @@ class MigrationService {
     if (colNames.contains('userId')) {
       debugPrint("🛠 [Migration] Reconstructing vitals table to remove legacy columns...");
       await db.transaction((txn) async {
-        await txn.execute('CREATE TABLE vitals_new ('
+        await txn.execute('DROP TABLE IF EXISTS vitals_new');
+        await txn.execute('CREATE TABLE IF NOT EXISTS vitals_new ('
             'id TEXT PRIMARY KEY, '
             'user_id TEXT NOT NULL, '
             'timestamp TEXT NOT NULL, '

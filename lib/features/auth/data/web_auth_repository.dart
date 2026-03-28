@@ -72,6 +72,10 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
       _users = [restoredUser, ...dependents];
       _currentUser = restoredUser;
       debugPrint("✅ Session restored: ${restoredUser.fullName}");
+
+      // RE-INITIALIZE DATA FLOW
+      SyncService().restartSync(restoredUser.id);
+
       notifyListeners();
     } catch (e) {
       debugPrint("⚠️ Session restore failed: $e");
@@ -240,7 +244,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
         await _saveSession(cloudUser.id);
 
         // RE-INITIALIZE SYSTEM LIFECYCLE
-        SyncService().restartSync();
+        SyncService().restartSync(cloudUser.id);
 
         _isLoading = false;
         notifyListeners();

@@ -83,7 +83,7 @@ class DatabaseHelper {
   Future _createDB(Database db, int version) async {
     // Patients Table
     await db.execute('''
-    CREATE TABLE patients (
+    CREATE TABLE IF NOT EXISTS patients (
       id TEXT PRIMARY KEY,
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
@@ -106,7 +106,7 @@ class DatabaseHelper {
 
     // Vitals Table
     await db.execute('''
-    CREATE TABLE vitals (
+    CREATE TABLE IF NOT EXISTS vitals (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       timestamp TEXT NOT NULL,
@@ -131,7 +131,7 @@ class DatabaseHelper {
 
     // Audit Logs Table
     await db.execute('''
-    CREATE TABLE audit_logs (
+    CREATE TABLE IF NOT EXISTS audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
       action TEXT NOT NULL,
@@ -146,6 +146,7 @@ class DatabaseHelper {
     ''');
 
     // SECURITY HARDENING: SQL TRIGGERS FOR IMMUTABILITY (WORM)
+    await db.execute('DROP TRIGGER IF EXISTS audit_logs_immutable_update');
     await db.execute('''
     CREATE TRIGGER audit_logs_immutable_update
     BEFORE UPDATE ON audit_logs
@@ -154,6 +155,7 @@ class DatabaseHelper {
     END;
     ''');
 
+    await db.execute('DROP TRIGGER IF EXISTS audit_logs_immutable_delete');
     await db.execute('''
     CREATE TRIGGER audit_logs_immutable_delete
     BEFORE DELETE ON audit_logs
@@ -164,7 +166,7 @@ class DatabaseHelper {
 
     // Announcements Table
     await db.execute('''
-    CREATE TABLE announcements (
+    CREATE TABLE IF NOT EXISTS announcements (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -181,7 +183,7 @@ class DatabaseHelper {
 
     // Schedules Table
     await db.execute('''
-    CREATE TABLE schedules (
+    CREATE TABLE IF NOT EXISTS schedules (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
       date TEXT NOT NULL,
@@ -196,7 +198,7 @@ class DatabaseHelper {
 
     // Alerts Table
     await db.execute('''
-    CREATE TABLE alerts (
+    CREATE TABLE IF NOT EXISTS alerts (
       id TEXT PRIMARY KEY,
       message TEXT NOT NULL,
       target_group TEXT NOT NULL,
@@ -212,7 +214,7 @@ class DatabaseHelper {
 
     // chat_messages Table
     await db.execute('''
-    CREATE TABLE chat_messages (
+    CREATE TABLE IF NOT EXISTS chat_messages (
       id TEXT PRIMARY KEY,
       sender_id TEXT NOT NULL,
       receiver_id TEXT NOT NULL,
@@ -237,7 +239,7 @@ class DatabaseHelper {
 
     // Reminders Table (NEW in v16)
     await db.execute('''
-    CREATE TABLE reminders (
+    CREATE TABLE IF NOT EXISTS reminders (
       id INTEGER PRIMARY KEY,
       title TEXT NOT NULL,
       time TEXT NOT NULL,
@@ -248,7 +250,7 @@ class DatabaseHelper {
 
     // Sync Metadata Table (NEW in v17)
     await db.execute('''
-    CREATE TABLE sync_metadata (
+    CREATE TABLE IF NOT EXISTS sync_metadata (
       table_name TEXT NOT NULL,
       record_id TEXT NOT NULL,
       last_error TEXT,
@@ -261,7 +263,7 @@ class DatabaseHelper {
 
     // System Logs Table (NEW in v18)
     await db.execute('''
-    CREATE TABLE system_logs (
+    CREATE TABLE IF NOT EXISTS system_logs (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       session_id TEXT,

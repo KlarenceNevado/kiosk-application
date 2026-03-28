@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -64,20 +65,20 @@ class ChatSyncHandler extends SyncHandler {
   }
 
   @override
-  Future<void> pull() async {
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) {
-        debugPrint("ℹ️ ChatSyncHandler: No active session. Skipping pull.");
-        return;
-      }
+  Future<void> pull([String? userId]) async {
+    final currentUserId = userId ?? supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      debugPrint("ℹ️ ChatSyncHandler: No active session. Skipping pull.");
+      return;
+    }
 
+    try {
       final lastSync = await _getLastSync();
       
       // SECURITY: Enforce participant filter in the query itself (Defense in depth)
       var query = supabase.from('chat_messages')
           .select()
-          .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}');
+          .or('sender_id.eq.$currentUserId,receiver_id.eq.$currentUserId');
           
       if (lastSync != null) {
         query = query.gt('updated_at', lastSync);
@@ -92,7 +93,7 @@ class ChatSyncHandler extends SyncHandler {
           final msg = ChatMessage.fromMap(row);
           
           // Only notify if someone ELSE sent the message
-          if (msg.senderId != user.id) {
+          if (msg.senderId != currentUserId) {
             String senderName = "Health Worker";
             final patient = await dbHelper.patientDao.getPatientById(msg.senderId);
             if (patient != null) {
@@ -132,35 +133,42 @@ class ChatSyncHandler extends SyncHandler {
   }
 
   RealtimeChannel? _channel;
-  void subscribe() {
+  void subscribe([String? userId]) {
     if (_channel != null) return;
     
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    final currentUserId = userId ?? supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      debugPrint("⚠️ ChatSyncHandler: No active session. Realtime disabled.");
+      return;
+    }
 
-    final String channelName = 'public:chat_sync_${user.id.replaceAll('-', '_')}';
+    final String channelName = 'public:chat_sync_${currentUserId.replaceAll('-', '_')}';
     _channel = supabase.channel(channelName);
     
     _channel!
-      .onPostgresChanges(
-        event: PostgresChangeEvent.insert,
-        schema: 'public',
-        table: 'chat_messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'receiver_id',
-          value: user.id,
-        ),
-        callback: (payload) {
-          debugPrint("🔔 ChatSync: Incoming message detected via Realtime.");
-          pull(); 
-        },
-      )
-      .subscribe((status, [error]) {
-        if (status == RealtimeSubscribeStatus.subscribed) {
-          debugPrint("✅ ChatSync: Filtered Realtime Subscribed.");
-        }
-      });
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'receiver_id',
+            value: currentUserId,
+          ),
+          callback: (payload) async {
+            if (payload.newRecord.isNotEmpty && 
+                payload.eventType == PostgresChangeEvent.insert) {
+              final row = payload.newRecord;
+              if (row['receiver_id'] == currentUserId) {
+                // Background pull to refresh local DB & Notify
+                unawaited(pull(currentUserId));
+              }
+            }
+          },
+        )
+        .subscribe();
+    
+    debugPrint("📡 ChatSyncHandler: Realtime Subscribed for $currentUserId");
   }
 
   void unsubscribe() {

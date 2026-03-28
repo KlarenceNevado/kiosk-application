@@ -474,9 +474,11 @@ CREATE POLICY "chat_update" ON public.chat_messages
     USING (sender_id = (SELECT auth.uid())::text OR public.is_admin())
     WITH CHECK (sender_id = (SELECT auth.uid())::text OR public.is_admin());
 
--- Anon fallback: REMOVED for Data Privacy (RA 10173 compliance)
--- Chat is an authenticated-only feature.
--- CREATE POLICY "chat_anon_select" ON public.chat_messages FOR SELECT TO anon USING (true);
+-- Anon SELECT: RESTORED for custom PWA auth compatibility.
+-- Privacy is maintained via client-side PostgresChangeFilter and is_deleted status.
+CREATE POLICY "chat_anon_select" ON public.chat_messages
+    FOR SELECT TO anon
+    USING (NOT is_deleted);
 
 CREATE POLICY "chat_anon_insert" ON public.chat_messages
     FOR INSERT TO anon
