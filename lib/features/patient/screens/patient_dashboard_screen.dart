@@ -28,23 +28,24 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   StreamSubscription? _alertSubscription;
   StreamSubscription? _vitalsSubscription;
   bool _hasLoadedOnce = false;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _waitForSessionAndLoad());
 
-    // LISTEN FOR REAL-TIME UPDATES
+    // LISTEN FOR REAL-TIME UPDATES with Debouncing
     _announcementSubscription = SyncEventBus.instance.announcementStream.listen((_) {
-      if (mounted) _loadData(forceSync: false);
+      _triggerDebouncedLoad();
     });
 
     _alertSubscription = SyncEventBus.instance.alertStream.listen((_) {
-      if (mounted) _loadData(forceSync: false);
+      _triggerDebouncedLoad();
     });
 
     _vitalsSubscription = SyncEventBus.instance.vitalsStream.listen((_) {
-      if (mounted) _loadData(forceSync: false);
+      _triggerDebouncedLoad();
     });
 
     // Listen for auth changes (session restore from SharedPreferences)
@@ -81,10 +82,18 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     _announcementSubscription?.cancel();
     _alertSubscription?.cancel();
     _vitalsSubscription?.cancel();
+    _debounceTimer?.cancel();
     try {
       context.read<IAuthRepository>().removeListener(_onAuthChanged);
     } catch (_) {}
     super.dispose();
+  }
+
+  void _triggerDebouncedLoad() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) _loadData(forceSync: false);
+    });
   }
 
   Future<void> _loadData({bool forceSync = true}) async {

@@ -16,15 +16,48 @@ class SystemDao extends BaseDao {
   final _alertController = StreamController<List<Map<String, dynamic>>>.broadcast();
   final _scheduleController = StreamController<List<Map<String, dynamic>>>.broadcast();
 
+  Timer? _announcementTimer;
+  Timer? _alertTimer;
+  Timer? _scheduleTimer;
+
   Stream<List<Map<String, dynamic>>> get announcementStream => _announcementController.stream;
   Stream<List<Map<String, dynamic>>> get alertStream => _alertController.stream;
   Stream<List<Map<String, dynamic>>> get scheduleStream => _scheduleController.stream;
 
-  void refreshAnnouncements() async => _announcementController.add(await getAnnouncements());
-  void refreshAlerts() async => _alertController.add(await getAlerts());
-  void refreshSchedules() async => _scheduleController.add(await getSchedules());
+  void refreshAnnouncements() {
+    _announcementTimer?.cancel();
+    _announcementTimer = Timer(const Duration(milliseconds: 500), () async {
+      final data = await getAnnouncements();
+      if (!_announcementController.isClosed) {
+        _announcementController.add(data);
+      }
+    });
+  }
+
+  void refreshAlerts() {
+    _alertTimer?.cancel();
+    _alertTimer = Timer(const Duration(milliseconds: 500), () async {
+      final data = await getAlerts();
+      if (!_alertController.isClosed) {
+        _alertController.add(data);
+      }
+    });
+  }
+
+  void refreshSchedules() {
+    _scheduleTimer?.cancel();
+    _scheduleTimer = Timer(const Duration(milliseconds: 500), () async {
+      final data = await getSchedules();
+      if (!_scheduleController.isClosed) {
+        _scheduleController.add(data);
+      }
+    });
+  }
 
   void dispose() {
+    _announcementTimer?.cancel();
+    _alertTimer?.cancel();
+    _scheduleTimer?.cancel();
     _announcementController.close();
     _alertController.close();
     _scheduleController.close();

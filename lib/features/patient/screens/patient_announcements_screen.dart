@@ -15,13 +15,52 @@ class PatientAnnouncementsScreen extends StatefulWidget {
 
 class _PatientAnnouncementsScreenState
     extends State<PatientAnnouncementsScreen> {
-  // Managed by StreamBuilder in build()
+  List<Map<String, dynamic>>? _initialData;
+  bool _isInitialLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final systemRepo = context.read<ISystemRepository>();
+      final authRepo = context.read<IAuthRepository>();
+      final data = await systemRepo.fetchAnnouncements(currentUser: authRepo.currentUser);
+      if (mounted) {
+        setState(() {
+          _initialData = data;
+          _isInitialLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isInitialLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final authRepo = context.watch<IAuthRepository>();
     final systemRepo = context.read<ISystemRepository>();
     final user = authRepo.currentUser;
+
+    if (_isInitialLoading && _initialData == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        appBar: AppBar(
+          title: const Text("Announcements",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: AppColors.brandGreen,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: const Center(child: CircularProgressIndicator(color: AppColors.brandGreen)),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -34,7 +73,10 @@ class _PatientAnnouncementsScreenState
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: systemRepo.announcementStream,
+        initialData: _initialData,
         builder: (context, snapshot) {
+          // If we have data (from initialData or Stream), show it.
+          // ConnectionState.waiting should only show a spinner if we have NO data yet.
           if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
           }
