@@ -69,8 +69,8 @@ class BackgroundServiceHelper {
       return;
     }
 
-    // 2. Initialize Notifications
-    await NotificationService().init();
+    // 2. Initialize Notifications (Skip permission requests in background isolate)
+    await NotificationService().init(showPermissionRequest: false);
 
     // 3. Set up Realtime Listeners
     final supabase = Supabase.instance.client;

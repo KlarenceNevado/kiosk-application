@@ -19,10 +19,10 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  bool get _isSupported => !kIsWeb && isNativeSupported;
+  bool get _isSupported => kIsWeb || isNativeSupported;
 
 
-  Future<void> init() async {
+  Future<void> init({bool showPermissionRequest = true}) async {
     // Only initialize on supported mobile platforms
     if (!_isSupported) {
       debugPrint("📢 NotificationService: Skipping init on this platform.");
@@ -62,9 +62,11 @@ class NotificationService {
       debugPrint("📢 NotificationService: Plugin initialization failed: $e");
     }
 
-    // Request Permissions on Android 13+
+    // Request Permissions on Android 13+ ONLY if specified (Main Isolate)
     try {
-      await _requestAndroidPermissions();
+      if (showPermissionRequest) {
+        await _requestAndroidPermissions();
+      }
       await _createNotificationChannels(); 
     } catch (e) {
       debugPrint("📢 NotificationService: Android setup failed: $e");
@@ -133,6 +135,11 @@ class NotificationService {
   Future<void> requestPermissions() async {
     if (!_isSupported) return;
     
+    if (kIsWeb) {
+      await requestWebPermission();
+      return;
+    }
+    
     if (isNativeAndroid) {
       await _requestAndroidPermissions();
     } else if (isNativeIOS) {
@@ -148,15 +155,14 @@ class NotificationService {
 
   Future<void> _requestAndroidPermissions() async {
     try {
-      await flutterLocalNotificationsPlugin
+      final androidPlugin = flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-
-      await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestExactAlarmsPermission();
+              AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidPlugin != null) {
+        await androidPlugin.requestNotificationsPermission();
+        await androidPlugin.requestExactAlarmsPermission();
+      }
     } catch (e) {
        debugPrint("⚠️ NotificationService: Android platform channel error: $e");
     }
@@ -193,6 +199,11 @@ class NotificationService {
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
+      if (kIsWeb) {
+        showWebNotification(title, body);
+        return;
+      }
+      
       await flutterLocalNotificationsPlugin.show(
         id,
         title,
@@ -266,6 +277,11 @@ class NotificationService {
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
+      if (kIsWeb) {
+        showWebNotification(title, body);
+        return;
+      }
+      
       await flutterLocalNotificationsPlugin.show(
         999, // Static ID for announcements to overwrite previous
         title,
@@ -301,6 +317,11 @@ class NotificationService {
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
+      if (kIsWeb) {
+        showWebNotification(title, body);
+        return;
+      }
+      
       await flutterLocalNotificationsPlugin.show(
         777, // Unique ID to keep alerts visible as a distinct stack
         title,
@@ -333,6 +354,11 @@ class NotificationService {
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
+      if (kIsWeb) {
+        showWebNotification("New Message from $senderName", message);
+        return;
+      }
+      
       await flutterLocalNotificationsPlugin.show(
         notificationId,
         "New Message from $senderName",
