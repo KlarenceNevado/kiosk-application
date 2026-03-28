@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:html';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,8 +34,14 @@ class DatabaseHelper {
 
     _dbInitCompleter = Completer<Database>();
 
+    if (kIsWeb) {
+      debugPrint("🌐 [DatabaseHelper] Web Platform detected. Local SQL storage is disabled.");
+      // On web we don't return a real database. The app will rely on Supabase directly.
+      throw UnsupportedError("Local SQLite is not supported on Web. Use Supabase directly.");
+    }
+
     try {
-      if (Platform.isWindows || Platform.isLinux) {
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
         sqfliteFfiInit();
         databaseFactory = databaseFactoryFfi;
       }
@@ -51,6 +57,8 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
+    if (kIsWeb) throw UnsupportedError("Cannot init DB on Web");
+
     // 1. Get a shared absolute path for both apps to use
     final directory = await getApplicationSupportDirectory();
     final path = join(directory.path, filePath);

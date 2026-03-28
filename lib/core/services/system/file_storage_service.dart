@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:html';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,8 +34,14 @@ class FileStorageService {
   }
 
   /// Gets a file from local cache or downloads it from Supabase.
-  Future<File?> getCachedFile(String? url, {String? localPathHint}) async {
+  Future<dynamic> getCachedFile(String? url, {String? localPathHint}) async {
     if (url == null || url.isEmpty) return null;
+
+    if (kIsWeb) {
+      // On web, we don't have a local filesystem to 'cache' an actual File object.
+      // We return the URL and let the browser handle it.
+      return null; // Return null so the caller uses the URL, or return the URL if the caller can handle it.
+    }
 
     try {
       // 1. Check local path hint if provided
@@ -77,6 +83,8 @@ class FileStorageService {
 
   /// Systematic background caching of a list of URLs.
   Future<void> prefetchFiles(List<String> urls) async {
+    if (kIsWeb) return; // Browsers handle their own caching via Service Workers/Cache API
+
     for (final url in urls) {
       await getCachedFile(url);
     }

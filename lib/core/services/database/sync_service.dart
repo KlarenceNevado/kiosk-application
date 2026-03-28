@@ -216,8 +216,16 @@ class SyncService with WidgetsBindingObserver {
       return;
     }
     await _withSyncMutex(() async {
-      // Ensure DB is initialized before handlers access DAOs
-      await DatabaseHelper.instance.database;
+      // 1. Database Initialization (Skip on Web as it's not supported)
+      if (!kIsWeb) {
+        try {
+          await DatabaseHelper.instance.database;
+        } catch (e) {
+          debugPrint("⚠️ SyncService: Local Database Init Failed: $e");
+          // On non-Web, we might still want to proceed if it's just a transient error,
+          // but usually DB failure is fatal for local persistence.
+        }
+      }
 
       if (ConnectionManager().currentStatus != ConnectionStatus.online) {
         return;
@@ -262,6 +270,8 @@ class SyncService with WidgetsBindingObserver {
   }
 
   Future<void> _cacheFilesInBackground() async {
+    if (kIsWeb) return; // Browsers handle their own caching
+
     try {
       // Ensure DB is initialized
       await DatabaseHelper.instance.database;
@@ -330,12 +340,12 @@ class SyncService with WidgetsBindingObserver {
   Future<void> reactToAnnouncement(String id, String emoji, String userId) => systemHandler.reactToAnnouncement(id, emoji, userId);
 
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
-    await DatabaseHelper.instance.database;
+    if (!kIsWeb) await DatabaseHelper.instance.database;
     return systemHandler.fetchAnnouncements(currentUser: currentUser);
   }
 
   Future<List<Map<String, dynamic>>> fetchAlerts({dynamic currentUser}) async {
-    await DatabaseHelper.instance.database;
+    if (!kIsWeb) await DatabaseHelper.instance.database;
     return systemHandler.fetchAlerts(currentUser: currentUser);
   }
 
