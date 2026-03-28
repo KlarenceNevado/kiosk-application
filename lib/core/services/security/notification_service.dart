@@ -72,8 +72,8 @@ class NotificationService {
     try {
       if (showPermissionRequest) {
         await _requestAndroidPermissions();
+        await _createNotificationChannels(); 
       }
-      await _createNotificationChannels(); 
     } catch (e) {
       debugPrint("📢 NotificationService: Android setup failed: $e");
     }

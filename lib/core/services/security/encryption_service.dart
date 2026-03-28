@@ -26,7 +26,13 @@ class EncryptionService {
 
     try {
       // 1. Load Primary Shared Key (from .env)
-      final envKey = dotenv.env['DB_ENCRYPTION_KEY'];
+      String? envKey;
+      try {
+        envKey = dotenv.env['DB_ENCRYPTION_KEY'];
+      } catch (e) {
+        debugPrint("🔐 Encryption: dotenv not initialized during primary key load. $e");
+      }
+
       if (envKey != null && envKey.isNotEmpty && envKey.length >= 32) {
         _primaryKey = encrypt.Key.fromUtf8(envKey.substring(0, 32));
         _primaryEncrypter = encrypt.Encrypter(encrypt.AES(_primaryKey!));

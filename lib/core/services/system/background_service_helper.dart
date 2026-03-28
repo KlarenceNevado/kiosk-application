@@ -56,12 +56,23 @@ class BackgroundServiceHelper {
       service.stopSelf();
     });
 
-    // 1. Initialize Supabase and Database in Background Isolate
-    final dbHelper = DatabaseHelper.instance;
-    await dbHelper.database; // Ensure local DB is ready
-
+    // 1. Load Environment Variables IMMEDIATELY (Required for Encryption and Supabase)
     try {
       await dotenv.load(fileName: "assets/.env");
+    } catch (e) {
+      debugPrint("📢 [BackgroundService] assets/.env failed, trying root .env...");
+      try {
+        await dotenv.load(fileName: ".env");
+      } catch (e2) {
+        debugPrint("⚠️ [BackgroundService] DotEnv Init Failed. Database may fail to initialize.");
+      }
+    }
+
+    // 2. Initialize Database and Supabase in Background Isolate
+    final dbHelper = DatabaseHelper.instance;
+    await dbHelper.database; // Ensure local DB is ready (Now safe because dotenv is loaded)
+
+    try {
       final url = dotenv.env['SUPABASE_URL'] ?? '';
       final key = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
       
@@ -71,7 +82,6 @@ class BackgroundServiceHelper {
       }
     } catch (e) {
       debugPrint("❌ [BackgroundService] Supabase Init Failed: $e");
-      return;
     }
 
     // 2. Initialize Notifications (Skip permission requests in background isolate)
