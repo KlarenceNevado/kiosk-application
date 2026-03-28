@@ -120,19 +120,32 @@ class SystemSyncHandler extends SyncHandler {
   Future<void> pushAlerts() async {
     try {
       final unsynced = await dbHelper.systemDao.getUnsyncedAlerts();
+      if (unsynced.isEmpty) return;
+      
       final List<String> syncedIds = [];
       for (final row in unsynced) {
-        await supabase.from('alerts').upsert({
-          'id': row['id'],
-          'message': row['message'],
-          'target_group': row['target_group'],
-          'is_emergency': row['is_emergency'] == 1,
-          'timestamp': row['timestamp'],
-          'is_deleted': row['is_deleted'] == 1,
-          'updated_at': row['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
-        });
-        syncedIds.add(row['id']);
-        await dbHelper.systemDao.clearSyncMetadata('alerts', row['id']);
+        try {
+          await supabase.from('alerts').upsert({
+            'id': row['id'],
+            'message': row['message'],
+            'target_group': row['target_group'],
+            'is_emergency': row['is_emergency'] == 1,
+            'is_active': row['is_active'] == 1 || row['is_active'] == true,
+            'timestamp': row['timestamp'],
+            'is_deleted': row['is_deleted'] == 1,
+            'updated_at': row['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
+          });
+          syncedIds.add(row['id']);
+          await dbHelper.systemDao.clearSyncMetadata('alerts', row['id']);
+        } on PostgrestException catch (e) {
+          if (e.code == '42501') {
+            // RLS policy violation — mark as synced to stop retrying
+            debugPrint("⚠️ Alerts: RLS policy blocked push for ${row['id']}. Marking synced to prevent retry.");
+            syncedIds.add(row['id']);
+          } else {
+            debugPrint("❌ SystemSyncHandler: Alert push error: $e");
+          }
+        }
       }
       if (syncedIds.isNotEmpty) {
         await dbHelper.markBatchAsSynced('alerts', syncedIds);

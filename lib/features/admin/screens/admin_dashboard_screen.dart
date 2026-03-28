@@ -1246,37 +1246,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: AppColors.brandDark)),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 200,
-                    height: 40,
-                    child: TextField(
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      decoration: InputDecoration(
-                        hintText: "Search patients...",
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        contentPadding: EdgeInsets.zero,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                BorderSide(color: Colors.grey.shade300)),
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 200),
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          onChanged: (val) => setState(() => _searchQuery = val),
+                          decoration: InputDecoration(
+                            hintText: "Search patients...",
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            contentPadding: EdgeInsets.zero,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300)),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _exportToCSV,
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text("Export"),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandGreen,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8))),
-                  )
-                ],
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _exportToCSV,
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text("Export"),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandGreen,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8))),
+                    )
+                  ],
+                ),
               )
             ],
           ),
