@@ -141,7 +141,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
         }
 
         final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 4)))).inSeconds;
-        debugPrint("🔄 Realtime retry ${_retryCount}/5 in ${delaySeconds}s...");
+        debugPrint("🔄 Realtime retry $_retryCount/5 in ${delaySeconds}s...");
         
         _retryTimer = Timer(Duration(seconds: delaySeconds), () {
           _setupRealtime(currentUserId, otherUserId);
