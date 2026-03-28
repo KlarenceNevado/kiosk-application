@@ -53,6 +53,8 @@ dependencies:
   # SYNC & BACKGROUND
   flutter_background_service: any
   flutter_background_service_android: any
+  web: ^1.1.1
+  js: ^0.6.7
 
 dev_dependencies:
   flutter_test:

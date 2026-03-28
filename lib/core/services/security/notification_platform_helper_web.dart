@@ -1,19 +1,24 @@
-import 'dart:html' as html;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
 
 bool get isNativeAndroid => false;
 bool get isNativeIOS => false;
-bool get isNativeSupported => html.Notification.permission != 'denied';
+bool get isNativeSupported => web.Notification.permission != 'denied';
 
 /// Requests notification permission on Web
 Future<void> requestWebPermission() async {
-  if (html.Notification.permission == 'default') {
-    await html.Notification.requestPermission();
+  if (web.Notification.permission == 'default') {
+    await web.Notification.requestPermission().toDart;
   }
 }
 
 /// Shows a browser notification
 void showWebNotification(String title, String body) {
-  if (html.Notification.permission == 'granted') {
-    html.Notification(title, body: body, icon: 'icons/Icon-192.png');
+  if (web.Notification.permission == 'granted') {
+    web.Notification(title, web.NotificationOptions(
+      body: body,
+      icon: 'icons/Icon-192.png',
+    ));
   }
 }
