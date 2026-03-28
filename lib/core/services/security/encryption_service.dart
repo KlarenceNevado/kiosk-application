@@ -58,12 +58,16 @@ class EncryptionService {
         }
       }
     } catch (e) {
-      debugPrint("CRITICAL: Encryption Init Failed: $e");
-      // Safety fallback
-      final safetyKey = encrypt.Key.fromUtf8('IslaVerdeKioskFixedKey2026!!!!!!'); 
-      _primaryKey = safetyKey;
-      _primaryEncrypter = encrypt.Encrypter(encrypt.AES(safetyKey));
+      debugPrint("Encryption Init Error: $e");
     }
+  }
+
+  /// FOR TESTING ONLY: Resets the singleton state to allow re-initialization with different keys/mocks.
+  @visibleForTesting
+  void resetForTesting() {
+    _primaryEncrypter = null;
+    _legacyEncrypter = null;
+    _primaryKey = null;
   }
 
   /// Encrypts data using the PRIMARY key.

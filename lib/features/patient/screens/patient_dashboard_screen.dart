@@ -127,6 +127,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
           _vitals = records;
           _activeAlerts = alerts;
           if (announcements.isNotEmpty) {
+            // Because fetchAnnouncements now sorts by Priority then Time,
+            // taking .first correctly gives us the most important recent update.
             _latestAnnouncement = announcements.first;
           } else {
             _latestAnnouncement = null;

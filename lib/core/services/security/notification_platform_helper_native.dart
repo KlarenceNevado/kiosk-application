@@ -5,4 +5,4 @@ bool get isNativeIOS => Platform.isIOS;
 bool get isNativeSupported => Platform.isAndroid || Platform.isIOS;
 
 Future<void> requestWebPermission() async {}
-void showWebNotification(String title, String body) {}
+void showWebNotification(String title, String body, {String? tag}) {}

@@ -296,6 +296,11 @@ class SystemDao extends BaseDao {
     return maps.isNotEmpty ? maps.first : null;
   }
 
+  Future<void> hardDeleteSchedule(String id) async {
+    await db.delete('schedules', where: 'id = ?', whereArgs: [id]);
+    refreshSchedules();
+  }
+
   // --- ALERTS ---
   Future<void> insertAlert(Map<String, dynamic> row) async {
     final dbRow = Map<String, dynamic>.from(row);

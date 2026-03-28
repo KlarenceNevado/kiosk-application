@@ -3,9 +3,10 @@ import '../database_helper.dart';
 
 abstract class SyncHandler {
   final SupabaseClient supabase;
-  final DatabaseHelper dbHelper = DatabaseHelper.instance;
+  final DatabaseHelper dbHelper;
 
-  SyncHandler(this.supabase);
+  SyncHandler(this.supabase, [DatabaseHelper? db])
+      : dbHelper = db ?? DatabaseHelper.instance;
 
   /// Standardized push logic (Local -> Cloud)
   Future<void> push();

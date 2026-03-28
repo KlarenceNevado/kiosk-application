@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'connection_manager.dart';
@@ -14,22 +15,55 @@ import '../system/app_environment.dart';
 import 'package:kiosk_application/core/services/security/security_logger.dart';
 
 class SyncService with WidgetsBindingObserver {
-  static final SyncService _instance = SyncService._internal();
-  factory SyncService() => _instance;
+  SyncService._internal({
+    PatientSyncHandler? pHandler,
+    VitalsSyncHandler? vHandler,
+    SystemSyncHandler? sHandler,
+    ChatSyncHandler? cHandler,
+  }) {
+    // In unit tests, we may provide all handlers to bypass Supabase initialization
+    if (pHandler != null && vHandler != null && sHandler != null && cHandler != null) {
+      patientHandler = pHandler;
+      vitalsHandler = vHandler;
+      systemHandler = sHandler;
+      chatHandler = cHandler;
+    } else {
+      final client = Supabase.instance.client;
+      patientHandler = pHandler ?? PatientSyncHandler(client);
+      vitalsHandler = vHandler ?? VitalsSyncHandler(client);
+      systemHandler = sHandler ?? SystemSyncHandler(client);
+      chatHandler = cHandler ?? ChatSyncHandler(client);
+    }
+  }
+
+  /// FOR TESTING ONLY: Reset the singleton with mock handlers
+  @visibleForTesting
+  static void setMockInstance(SyncService mock) {
+    _instance = mock;
+  }
+
+  @visibleForTesting
+  static SyncService createMocked({
+    required PatientSyncHandler p,
+    required VitalsSyncHandler v,
+    required SystemSyncHandler s,
+    required ChatSyncHandler c,
+  }) {
+    return SyncService._internal(
+      pHandler: p,
+      vHandler: v,
+      sHandler: s,
+      cHandler: c,
+    );
+  }
+  
+  static SyncService? _instance;
+  factory SyncService() => _instance ??= SyncService._internal();
 
   late final PatientSyncHandler patientHandler;
   late final VitalsSyncHandler vitalsHandler;
   late final SystemSyncHandler systemHandler;
   late final ChatSyncHandler chatHandler;
-
-  SyncService._internal() {
-    WidgetsBinding.instance.addObserver(this);
-    final client = Supabase.instance.client;
-    patientHandler = PatientSyncHandler(client);
-    vitalsHandler = VitalsSyncHandler(client);
-    systemHandler = SystemSyncHandler(client);
-    chatHandler = ChatSyncHandler(client);
-  }
 
   bool _isSyncing = false;
   Completer<void>? _syncMutex;
@@ -55,10 +89,14 @@ class SyncService with WidgetsBindingObserver {
   }
 
   void startSyncLoop() {
+    WidgetsBinding.instance.addObserver(this);
     debugPrint("🔄 SyncService: Starting sync loop and real-time listeners...");
     _attemptSync();
 
-    Timer.periodic(const Duration(minutes: 1), (timer) async {
+    // PWA Optimization: Increase sync frequency for Web for better data reflection
+    const syncInterval = kIsWeb ? Duration(seconds: 20) : Duration(minutes: 1);
+
+    Timer.periodic(syncInterval, (timer) async {
       await _attemptSync();
     });
 
@@ -134,7 +172,7 @@ class SyncService with WidgetsBindingObserver {
     vitalsHandler.unsubscribe();
   }
 
-  void triggerSync() => _attemptSync();
+  Future<void> triggerSync() => _attemptSync();
 
   Future<void> _attemptSync() async {
     if (_isSyncing) {

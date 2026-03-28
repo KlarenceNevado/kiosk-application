@@ -16,7 +16,7 @@ class VitalsSyncHandler extends SyncHandler {
   final _newRecordController = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get newRecordStream => _newRecordController.stream;
 
-  VitalsSyncHandler(super.supabase);
+  VitalsSyncHandler(super.supabase, [super.db]);
 
   @override
   Future<void> push() async {

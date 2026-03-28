@@ -22,7 +22,7 @@ class SystemSyncHandler extends SyncHandler {
   final _scheduleChangeController = StreamController<void>.broadcast();
   Stream<void> get scheduleStream => _scheduleChangeController.stream;
 
-  SystemSyncHandler(super.supabase);
+  SystemSyncHandler(super.supabase, [super.db]);
 
   @override
   Future<void> push() async {
@@ -383,6 +383,15 @@ class SystemSyncHandler extends SyncHandler {
       }
 
       filtered.sort((a, b) {
+        final targetA = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+        final targetB = (b['target_group'] ?? b['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+        
+        final isUrgentA = targetA == 'BROADCAST_ALL';
+        final isUrgentB = targetB == 'BROADCAST_ALL';
+
+        if (isUrgentA && !isUrgentB) return -1;
+        if (!isUrgentA && isUrgentB) return 1;
+
         final dtA = DateTime.tryParse(a['timestamp'] ?? '') ?? DateTime(2000);
         final dtB = DateTime.tryParse(b['timestamp'] ?? '') ?? DateTime(2000);
         return dtB.compareTo(dtA);

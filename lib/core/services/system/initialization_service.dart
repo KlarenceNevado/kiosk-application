@@ -20,6 +20,8 @@ import '../hardware/sensor_manager.dart';
 import '../hardware/sensor_service_interface.dart';
 import 'background_service_helper.dart';
 
+import 'package:permission_handler/permission_handler.dart';
+
 class InitializationService {
   static final InitializationService _instance = InitializationService._internal();
   factory InitializationService() => _instance;
@@ -51,6 +53,8 @@ class InitializationService {
 
     // 6. Mode-specific Services
     if (AppEnvironment().isMobilePatient) {
+       // Request OS permissions before initializing services
+       await _requestAppPermissions();
        await _initNotifications();
        await BackgroundServiceHelper.initializeService();
     }
@@ -77,6 +81,33 @@ class InitializationService {
     }
 
     debugPrint("✅ [InitializationService] Initialization complete.");
+  }
+
+  /// Centralized permission request flow for Mobile Patient mode
+  Future<void> _requestAppPermissions() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    try {
+      debugPrint("🔐 [InitializationService] Checking OS Permissions...");
+      
+      // 1. Notifications (Android 13+)
+      if (await Permission.notification.status.isDenied) {
+        await Permission.notification.request();
+      }
+
+      // 2. IGNORE BATTERY OPTIMIZATIONS (Crucial for sync stability)
+      if (Platform.isAndroid) {
+        if (await Permission.ignoreBatteryOptimizations.status.isDenied) {
+          debugPrint("⚡ [InitializationService] Requesting Battery Optimization Waiver...");
+          // This will open the system dialog or settings page
+          await Permission.ignoreBatteryOptimizations.request();
+        }
+      }
+
+      debugPrint("✅ [InitializationService] Permission flow completed.");
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] Permission request error: $e");
+    }
   }
 
   Future<void> _logInitialHealth() async {

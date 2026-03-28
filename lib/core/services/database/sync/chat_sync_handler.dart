@@ -7,7 +7,7 @@ import '../../../../features/chat/models/chat_message.dart';
 import '../../security/notification_service.dart';
 
 class ChatSyncHandler extends SyncHandler {
-  ChatSyncHandler(super.supabase);
+  ChatSyncHandler(super.supabase, [super.db]);
 
   @override
   Future<void> push() async {

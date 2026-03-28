@@ -14,7 +14,7 @@ class PatientSyncHandler extends SyncHandler {
   
   Stream<void> get stream => _changeController.stream;
 
-  PatientSyncHandler(super.supabase);
+  PatientSyncHandler(super.supabase, [super.db]);
 
   @override
   Future<void> push() async {

@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   flutter_libserialport
   flutter_secure_storage_windows
+  permission_handler_windows
   printing
   screen_retriever
   sqlite3_flutter_libs

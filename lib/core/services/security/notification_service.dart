@@ -192,6 +192,8 @@ class NotificationService {
       ledOnMs: 1000,
       ledOffMs: 500,
       icon: 'ic_notification',
+      category: AndroidNotificationCategory.status,
+      styleInformation: BigTextStyleInformation(''),
     );
 
     const NotificationDetails platformChannelSpecifics =
@@ -200,7 +202,7 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       if (kIsWeb) {
-        showWebNotification(title, body);
+        showWebNotification(title, body, tag: 'alert');
         return;
       }
       
@@ -235,6 +237,7 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       color: Color(0xFF2E7D32),
+      category: AndroidNotificationCategory.reminder,
     );
 
     const NotificationDetails platformChannelSpecifics =
@@ -270,6 +273,8 @@ class NotificationService {
       priority: Priority.high,
       color: Color(0xFF2E7D32),
       icon: 'ic_notification',
+      category: AndroidNotificationCategory.event,
+      styleInformation: BigTextStyleInformation(''),
     );
 
     const NotificationDetails platformDetails = NotificationDetails(
@@ -278,7 +283,7 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       if (kIsWeb) {
-        showWebNotification(title, body);
+        showWebNotification(title, body, tag: 'announcement');
         return;
       }
       
@@ -318,7 +323,7 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       if (kIsWeb) {
-        showWebNotification(title, body);
+        showWebNotification(title, body, tag: 'system_alert');
         return;
       }
       
@@ -347,6 +352,7 @@ class NotificationService {
       color: Color(0xFF2E7D32),
       styleInformation: BigTextStyleInformation(''),
       icon: 'ic_notification',
+      category: AndroidNotificationCategory.message,
     );
 
     const NotificationDetails platformDetails = NotificationDetails(
@@ -355,7 +361,7 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       if (kIsWeb) {
-        showWebNotification("New Message from $senderName", message);
+        showWebNotification("New Message from $senderName", message, tag: 'chat');
         return;
       }
       
