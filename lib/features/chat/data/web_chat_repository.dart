@@ -113,7 +113,10 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
       },
     )
         .subscribe((status, [error]) {
-      debugPrint("📡 Web Chat Realtime ($currentUserId): Status is $status");
+      // Only log first status change to reduce noise
+      if (_retryCount == 0) {
+        debugPrint("📡 Web Chat Realtime: $status");
+      }
       
       if (status == RealtimeSubscribeStatus.subscribed) {
         _retryCount = 0; 
@@ -123,29 +126,22 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
       }
       
       if (status == RealtimeSubscribeStatus.channelError || status == RealtimeSubscribeStatus.timedOut) {
-        if (error != null) debugPrint("❌ Realtime Error: $error");
         _isRealtimeOperational = false;
-        
         _retryCount++;
         
-        // FALLBACK: Start polling immediately on state error 3
-        final isClosedError = error?.toString().contains('state error: 3') ?? false;
-        if (isClosedError) {
-          _startPolling(currentUserId, otherUserId, interval: 3);
-        } else if (_retryCount >= 3) {
-          _startPolling(currentUserId, otherUserId, interval: 3);
-        }
+        // Start polling immediately
+        _startPolling(currentUserId, otherUserId, interval: 3);
 
         // CAP RETRIES: After 5 failures, give up on Realtime entirely
         if (_retryCount >= 5) {
-          debugPrint("🛑 Web Chat: WebSocket permanently unavailable. Using REST polling only.");
+          debugPrint("🛑 Web Chat: WebSocket unavailable. Using REST polling only.");
           _chatChannel?.unsubscribe();
           _chatChannel = null;
-          return; // Stop retrying
+          return;
         }
 
         final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 4)))).inSeconds;
-        debugPrint("🔄 Retrying Realtime in ${delaySeconds}s (Attempt $_retryCount/5)...");
+        debugPrint("🔄 Realtime retry ${_retryCount}/5 in ${delaySeconds}s...");
         
         _retryTimer = Timer(Duration(seconds: delaySeconds), () {
           _setupRealtime(currentUserId, otherUserId);
@@ -155,20 +151,23 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   }
 
   int _pollCount = 0;
+  int _activePollingInterval = 0;
   
   void _startPolling(String currentUserId, String otherUserId, {int interval = 10}) {
-    // If interval changed, restart
-    if (_pollingTimer != null) {
-      _pollingTimer?.cancel();
-      _pollingTimer = null;
-    }
+    // Skip if already polling at this interval
+    if (_pollingTimer != null && _activePollingInterval == interval) return;
     
-    debugPrint("⚠️ Web Chat: Engaging Polling Fallback (${interval}s interval)...");
+    // If interval changed, restart
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    
+    _activePollingInterval = interval;
+    debugPrint("⚡ Web Chat: REST polling active (${interval}s).");
     _pollingTimer = Timer.periodic(Duration(seconds: interval), (_) {
       if (!_isRealtimeOperational) {
         _pollCount++;
-        if (_pollCount % 10 == 1) {
-          debugPrint("⏱️ Web Chat: Polling active (${interval}s)...");
+        if (_pollCount % 20 == 1) {
+          debugPrint("⏱️ Web Chat: Poll #$_pollCount...");
         }
         _syncDownCloudMessages(currentUserId, otherUserId);
       }

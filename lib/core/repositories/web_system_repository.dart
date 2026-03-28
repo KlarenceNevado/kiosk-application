@@ -10,21 +10,29 @@ class WebSystemRepository implements ISystemRepository {
       Future<List<Map<String, dynamic>>> Function() fetcher,
       {Duration interval = const Duration(seconds: 15)}) async* {
     // Emit once immediately
-    yield await fetcher();
+    try {
+      yield await fetcher();
+    } catch (_) {
+      yield <Map<String, dynamic>>[];
+    }
     // Then poll periodically
-    yield* Stream.periodic(interval).asyncMap((_) => fetcher());
+    yield* Stream.periodic(interval).asyncMap((_) async {
+      try {
+        return await fetcher();
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    });
   }
 
-  @override
-  Stream<List<Map<String, dynamic>>> get announcementStream =>
-      _pollingStream(() => fetchAnnouncements());
+  // Cache streams so they aren't re-created on each property access
+  late final Stream<List<Map<String, dynamic>>> _announcementStream =
+      _pollingStream(() => fetchAnnouncements()).asBroadcastStream();
 
-  @override
-  Stream<List<Map<String, dynamic>>> get alertStream =>
-      _pollingStream(() => fetchAlerts());
+  late final Stream<List<Map<String, dynamic>>> _alertStream =
+      _pollingStream(() => fetchAlerts()).asBroadcastStream();
 
-  @override
-  Stream<List<Map<String, dynamic>>> get scheduleStream =>
+  late final Stream<List<Map<String, dynamic>>> _scheduleStream =
       _pollingStream(() async {
         try {
           final response = await _supabase
@@ -35,7 +43,16 @@ class WebSystemRepository implements ISystemRepository {
         } catch (_) {
           return <Map<String, dynamic>>[];
         }
-      });
+      }).asBroadcastStream();
+
+  @override
+  Stream<List<Map<String, dynamic>>> get announcementStream => _announcementStream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> get alertStream => _alertStream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> get scheduleStream => _scheduleStream;
 
   @override
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
