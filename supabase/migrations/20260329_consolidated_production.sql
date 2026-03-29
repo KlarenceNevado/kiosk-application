@@ -172,7 +172,7 @@ END $$;
 -- ── 2.7 System Logs (DPA 2012 / HIPAA Audit Standard) ──
 CREATE TABLE IF NOT EXISTS public.system_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id),
+    user_id TEXT, -- Relaxed: Allows UUID, 'local_' IDs, and 'SYSTEM'
     session_id TEXT,
     action TEXT NOT NULL,
     timestamp TIMESTAMPTZ DEFAULT now(),
@@ -183,14 +183,14 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Recovery: Force UUID type if column existed as TEXT from a previous failed run
+-- Recovery: Force TEXT type for user_id to ensure compatibility with all ID types
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'system_logs' AND column_name = 'user_id' AND data_type = 'text'
+        WHERE table_name = 'system_logs' AND column_name = 'user_id'
     ) THEN
-        ALTER TABLE public.system_logs ALTER COLUMN user_id TYPE UUID USING user_id::UUID;
+        ALTER TABLE public.system_logs ALTER COLUMN user_id TYPE TEXT;
     END IF;
 END $$;
 

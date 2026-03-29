@@ -34,14 +34,9 @@ class LogSyncHandler extends SyncHandler {
     // Supabase specific mapping: exclude local sync flag
     data.remove('is_synced');
     
-    // Ensure 'user_id' is a valid UUID or NULL. 
-    // In local logs, it might be 'SYSTEM', which must be NULL in Supabase for UUID compatibility.
+    // Pass 'user_id' as-is (Text compatibility in Supabase allows for UUID, local_, or 'SYSTEM')
     if (data['user_id'] != null) {
-      final String uid = data['user_id'].toString();
-      final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
-      if (!uuidRegex.hasMatch(uid)) {
-        data['user_id'] = null; // Map 'SYSTEM' or other non-UUIDs to NULL
-      }
+      data['user_id'] = data['user_id'].toString();
     }
     
     // RLS will handle permission check (Allow insert for authenticated/anon)
