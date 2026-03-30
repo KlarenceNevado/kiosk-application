@@ -99,8 +99,8 @@ class SyncService with WidgetsBindingObserver {
     debugPrint("🔄 SyncService: Starting sync loop and real-time listeners...");
     _attemptSync();
 
-    // PWA Optimization: Increase sync frequency for Web for better data reflection
-    const syncInterval = kIsWeb ? Duration(seconds: 20) : Duration(minutes: 1);
+    // PWA Optimization: High-frequency sync for Web to provide 'near-realtime' feel
+    const syncInterval = kIsWeb ? Duration(seconds: 10) : Duration(minutes: 1);
 
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(syncInterval, (timer) async {
@@ -217,14 +217,13 @@ class SyncService with WidgetsBindingObserver {
     }
     await _withSyncMutex(() async {
       // 1. Database Initialization (Skip on Web as it's not supported)
-      if (!kIsWeb) {
-        try {
-          await DatabaseHelper.instance.database;
-        } catch (e) {
-          debugPrint("⚠️ SyncService: Local Database Init Failed: $e");
-          // On non-Web, we might still want to proceed if it's just a transient error,
-          // but usually DB failure is fatal for local persistence.
-        }
+      // Initialize database locally first (Now supported on all platforms including Web)
+      try {
+        await DatabaseHelper.instance.database;
+      } catch (e) {
+        debugPrint("⚠️ SyncService: Local Database Init Failed: $e");
+        // On non-Web, we might still want to proceed if it's just a transient error,
+        // but usually DB failure is fatal for local persistence.
       }
 
       if (ConnectionManager().currentStatus != ConnectionStatus.online) {
@@ -337,15 +336,20 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> deleteScheduleCloud(String id) => systemHandler.deleteScheduleCloud(id);
 
+  Future<void> pushAlert({required String id, required String message, required String targetGroup, required bool isEmergency, required DateTime timestamp, required bool isActive}) =>
+      systemHandler.pushAlert(id: id, message: message, targetGroup: targetGroup, isEmergency: isEmergency, timestamp: timestamp, isActive: isActive);
+
+  Future<void> deleteAlert(String id) => systemHandler.deleteAlert(id);
+
   Future<void> reactToAnnouncement(String id, String emoji, String userId) => systemHandler.reactToAnnouncement(id, emoji, userId);
 
   Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
-    if (!kIsWeb) await DatabaseHelper.instance.database;
+    await DatabaseHelper.instance.database;
     return systemHandler.fetchAnnouncements(currentUser: currentUser);
   }
 
   Future<List<Map<String, dynamic>>> fetchAlerts({dynamic currentUser}) async {
-    if (!kIsWeb) await DatabaseHelper.instance.database;
+    await DatabaseHelper.instance.database;
     return systemHandler.fetchAlerts(currentUser: currentUser);
   }
 

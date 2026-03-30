@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'app_environment.dart';
 import 'config_service.dart';
@@ -44,7 +47,18 @@ class InitializationService {
     await _initDotEnv();
     await ConfigService().loadSettings();
 
-    // 4. Core Logic & Security Services
+    // 4. Initialize Firebase (Real OS-Level Push)
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        await Firebase.initializeApp();
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+        debugPrint("🔥 [InitializationService] Firebase Initialized.");
+      }
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] Firebase Init Error: $e");
+    }
+
+    // 5. Core Logic & Security Services
     ErrorHandler.init();
     await EncryptionService().init();
 
@@ -72,6 +86,8 @@ class InitializationService {
          // 6.3. Background service (Non-blocking)
          try {
            await BackgroundServiceHelper.initializeService();
+           // deduplication: tell background service we are active in UI
+           FlutterBackgroundService().invoke('set_ui_active', {'active': true});
          } catch (e) {
            debugPrint("❌ [InitializationService] Background Service Critical Error: $e");
          }
@@ -273,5 +289,52 @@ class InitializationService {
         debugPrint("⚠️ InitializationService (WindowManager): $e");
       }
     }
+  }
+}
+
+/// TOP LEVEL FUNCTION FOR FIREBASE BACKGROUND MESSAGES
+/// Must be outside any class to work on Android terminated state.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // If we receive a message while terminated, this wakes the CPU.
+  await Firebase.initializeApp();
+  debugPrint("📩 [Firebase] Handling background message: ${message.messageId}");
+
+  final data = message.data;
+  final String? type = data['type'];
+  
+  if (type == 'chat' || type == 'alert' || type == 'system_alert') {
+     // Decrypt if necessary
+     String? body = data['body'] ?? message.notification?.body;
+     if (body != null && body.contains(':')) {
+       try {
+         final encryption = EncryptionService();
+         await encryption.init();
+         body = encryption.decryptData(body);
+       } catch (_) {}
+     }
+
+     if (body != null) {
+       final notificationService = NotificationService();
+       await notificationService.init(showPermissionRequest: false);
+       
+       if (type == 'chat') {
+         await notificationService.showChatNotification(
+           senderName: 'Health Worker',
+           message: body,
+         );
+       } else if (type == 'system_alert') {
+          await notificationService.showSystemAlertNotification(
+            title: data['title'] ?? "System Alert",
+            body: body,
+          );
+       } else {
+          await notificationService.showInstantNotification(
+            id: message.hashCode,
+            title: data['title'] ?? "Alert",
+             body: body,
+          );
+       }
+     }
   }
 }

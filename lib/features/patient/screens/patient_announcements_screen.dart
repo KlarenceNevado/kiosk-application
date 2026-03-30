@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -15,6 +16,35 @@ class PatientAnnouncementsScreen extends StatefulWidget {
 
 class _PatientAnnouncementsScreenState
     extends State<PatientAnnouncementsScreen> {
+  List<Map<String, dynamic>>? _initialData;
+  bool _isInitialLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    final authRepo = context.read<IAuthRepository>();
+    final systemRepo = context.read<ISystemRepository>();
+    
+    // 1. Load local data immediately for offline speed
+    try {
+      final local = await systemRepo.fetchAnnouncements(currentUser: authRepo.currentUser);
+      if (mounted) {
+        setState(() {
+          _initialData = local;
+          _isInitialLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isInitialLoading = false);
+    }
+
+    // 2. Trigger sync in the background
+    unawaited(systemRepo.syncNow(authRepo: authRepo));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,10 +64,10 @@ class _PatientAnnouncementsScreenState
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: systemRepo.announcementStream,
+        initialData: _initialData,
         builder: (context, snapshot) {
-          // If we have data (from initialData or Stream), show it.
-          // ConnectionState.waiting should only show a spinner if we have NO data yet.
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          // Show spinner only on the very first local load
+          if (_isInitialLoading && !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
           }
 

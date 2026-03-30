@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../security/notification_service.dart';
 import 'sync_handler.dart';
 import '../../system/sync_event_bus.dart';
+import '../../system/app_environment.dart';
 
 class SystemSyncHandler extends SyncHandler {
   RealtimeChannel? _announcementsChannel;
@@ -254,27 +255,36 @@ class SystemSyncHandler extends SyncHandler {
     required bool isActive,
   }) async {
     try {
-      await supabase.from('announcements').upsert({
+      // 1. LOCAL FIRST: Persist to DAO with is_synced = 0
+      await dbHelper.systemDao.insertAnnouncement({
         'id': id,
         'title': title,
         'content': content,
         'target_group': targetGroup,
         'timestamp': timestamp.toIso8601String(),
-        'is_active': isActive,
+        'is_active': isActive ? 1 : 0,
+        'is_synced': 0,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
-      await dbHelper.markAnnouncementAsSynced(id);
-      await dbHelper.systemDao.clearSyncMetadata('announcements', id);
+      
+      // 2. TRIGGER UI: Dao.insertAnnouncement already calls refreshAnnouncements()
+      
+      // 3. CLOUD SYNC: Trigger immediate push in background
+      unawaited(pushAnnouncements());
     } catch (e) {
-      debugPrint("⚠️ SystemSyncHandler: Announcement push failed. $e");
+      debugPrint("⚠️ SystemSyncHandler: Announcement local persist failed. $e");
     }
   }
 
   Future<void> deleteAnnouncement(String id) async {
     try {
-      await supabase.from('announcements').delete().eq('id', id);
+      // 1. LOCAL FIRST: Mark as deleted and unsynced
+      await dbHelper.systemDao.deleteAnnouncement(id);
+      
+      // 2. CLOUD SYNC: Trigger immediate push in background
+      unawaited(pushAnnouncements());
     } catch (e) {
-      debugPrint("⚠️ SystemSyncHandler: Announcement delete failed. $e");
+      debugPrint("⚠️ SystemSyncHandler: Announcement local delete failed. $e");
     }
   }
 
@@ -287,27 +297,76 @@ class SystemSyncHandler extends SyncHandler {
     required int colorValue,
   }) async {
     try {
-      await supabase.from('schedules').upsert({
+      // 1. LOCAL FIRST
+      await dbHelper.systemDao.insertSchedule({
         'id': id,
         'type': type,
         'date': date.toIso8601String(),
         'location': location,
         'assigned': assigned,
         'color_value': colorValue,
+        'is_synced': 0,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
-      await dbHelper.markScheduleAsSynced(id);
-      await dbHelper.systemDao.clearSyncMetadata('schedules', id);
+      
+      // 2. CLOUD SYNC
+      unawaited(pushSchedules());
     } catch (e) {
-      debugPrint("⚠️ SystemSyncHandler: Schedule push failed. $e");
+      debugPrint("⚠️ SystemSyncHandler: Schedule local persist failed. $e");
     }
   }
 
   Future<void> deleteScheduleCloud(String id) async {
     try {
-      await supabase.from('schedules').delete().eq('id', id);
+      // 1. LOCAL FIRST (Soft Delete)
+      await dbHelper.systemDao.deleteSchedule(id);
+      
+      // 2. CLOUD SYNC
+      unawaited(pushSchedules());
     } catch (e) {
-      debugPrint("⚠️ SystemSyncHandler: Schedule delete failed. $e");
+      debugPrint("⚠️ SystemSyncHandler: Schedule local delete failed. $e");
+    }
+  }
+
+  // --- ALERTS MANIPULATION ---
+
+  Future<void> pushAlert({
+    required String id,
+    required String message,
+    required String targetGroup,
+    required bool isEmergency,
+    required DateTime timestamp,
+    required bool isActive,
+  }) async {
+    try {
+      // 1. LOCAL FIRST
+      await dbHelper.systemDao.insertAlert({
+        'id': id,
+        'message': message,
+        'target_group': targetGroup,
+        'is_emergency': isEmergency ? 1 : 0,
+        'timestamp': timestamp.toIso8601String(),
+        'is_active': isActive ? 1 : 0,
+        'is_synced': 0,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      
+      // 2. CLOUD SYNC
+      unawaited(pushAlerts());
+    } catch (e) {
+      debugPrint("⚠️ SystemSyncHandler: Alert local persist failed. $e");
+    }
+  }
+
+  Future<void> deleteAlert(String id) async {
+    try {
+      // 1. LOCAL FIRST (Hard delete from cloud often preferred for Alerts to stop noise)
+      await dbHelper.systemDao.deleteAlert(id);
+      
+      // 2. CLOUD SYNC
+      unawaited(pushAlerts());
+    } catch (e) {
+      debugPrint("⚠️ SystemSyncHandler: Alert local delete failed. $e");
     }
   }
 
@@ -537,6 +596,9 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   void _handleNewAnnouncementNotification(Map<String, dynamic> row) {
+    // SECURITY: Admins do not need to be notified of their own announcements via push logic
+    if (AppEnvironment().isDesktopAdmin) return;
+
     final target = (row['target_group'] ?? row['targetGroup'])?.toString() ?? 'all';
     final title = row['title'] ?? "New Announcement";
     final body = row['content'] ?? "Tap to view details";

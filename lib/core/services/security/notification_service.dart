@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
@@ -6,6 +7,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'encryption_service.dart';
 
 // Use conditional imports to avoid dart:io on Web
 import 'notification_platform_helper.dart'
@@ -19,6 +22,8 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  
+  final Completer<void> _initCompleter = Completer<void>();
 
   bool get _isSupported => kIsWeb || isNativeSupported;
 
@@ -60,23 +65,103 @@ class NotificationService {
     );
 
     try {
+      // In background isolate, we only initialize the plugin shell to allow .show()
+      // We skip permission checks and token cloud updates.
       await flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
         onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
       );
     } catch (e) {
       debugPrint("📢 NotificationService: Plugin initialization failed: $e");
+    } finally {
+      if (!_initCompleter.isCompleted) _initCompleter.complete();
     }
 
-    // Request Permissions on Android 13+ ONLY if specified (Main Isolate)
+    // Skip permission and Firebase flow if in background or explicit skip
+    if (!showPermissionRequest) {
+      debugPrint("📢 NotificationService: Skipping UI flows (Background Mode).");
+      return;
+    }
+
     try {
-      if (showPermissionRequest) {
-        await _requestAndroidPermissions();
-        await _createNotificationChannels(); 
+      await _requestAndroidPermissions();
+      await _createNotificationChannels();
+
+      // --- NEW: Firebase Messaging Setup ---
+      if (!kIsWeb && (isNativeAndroid || isNativeIOS)) {
+        await _setupFirebaseMessaging();
       }
     } catch (e) {
-      debugPrint("📢 NotificationService: Android setup failed: $e");
+      debugPrint("📢 NotificationService: Setup failed: $e");
     }
+  }
+
+  Future<void> _setupFirebaseMessaging() async {
+    final messaging = FirebaseMessaging.instance;
+
+    // 1. Request Permission (iOS / Android 13+)
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      criticalAlert: true,
+    );
+
+    debugPrint("🔥 [Firebase] Permission status: ${settings.authorizationStatus}");
+
+    // 2. Foreground Message Handling
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      debugPrint("🔥 [Firebase] Foreground Message: ${message.notification?.title}");
+      
+      if (message.notification != null) {
+        final type = message.data['type'] ?? 'announcement';
+        
+        // Decrypt the message if it appears to be encrypted
+        String displayBody = message.notification!.body ?? "";
+        if (displayBody.contains(':')) {
+           try {
+             final encryption = EncryptionService();
+             await encryption.init();
+             displayBody = encryption.decryptData(displayBody);
+           } catch (_) {}
+        }
+        
+        switch (type) {
+          case 'alert':
+            showInstantNotification(
+              id: message.hashCode,
+              title: message.notification!.title ?? "Alert",
+              body: displayBody,
+            );
+            break;
+          case 'system_alert':
+            showSystemAlertNotification(
+              title: message.notification!.title ?? "System Alert",
+              body: displayBody,
+            );
+             break;
+          default:
+            if (type == 'chat') {
+              showChatNotification(
+                senderName: 'Health Worker',
+                message: displayBody,
+              );
+            } else {
+              showAnnouncementNotification(
+                title: message.notification!.title ?? "Announcement",
+                body: displayBody,
+              );
+            }
+        }
+      }
+    });
+
+    // 3. Handle Token Refresh
+    messaging.onTokenRefresh.listen((newToken) async {
+       // Note: We'll need a way to get the current user ID here 
+       // if we want to update it automatically.
+       debugPrint("🔥 [Firebase] Token Refreshed: $newToken");
+    });
   }
 
   Future<void> _createNotificationChannels() async {
@@ -95,13 +180,16 @@ class NotificationService {
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
+          enableLights: true,
+          showBadge: true,
         ),
         AndroidNotificationChannel(
           'announcements_channel',
           'Announcements',
           description: 'Official barangay announcements',
-          importance: Importance.max,
+          importance: Importance.max, // Wakes phone
           playSound: true,
+          enableVibration: true,
         ),
         AndroidNotificationChannel(
           'chat_messages_channel',
@@ -109,6 +197,7 @@ class NotificationService {
           description: 'Messages from Health Workers',
           importance: Importance.max,
           playSound: true,
+          enableVibration: true,
         ),
         AndroidNotificationChannel(
           'system_alerts_channel',
@@ -116,6 +205,8 @@ class NotificationService {
           description: 'High-priority emergency broadcasting',
           importance: Importance.max,
           playSound: true,
+          enableVibration: true,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
         ),
       ];
 
@@ -126,8 +217,14 @@ class NotificationService {
   }
 
   Future<bool> isNotificationsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('notifications_enabled') ?? true;
+    if (kIsWeb) return true; // Web doesn't use SharedPreferences here yet
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('notifications_enabled') ?? true;
+    } catch (e) {
+      // Background isolate might fail to get SharedPreferences in some environments
+      return true; 
+    }
   }
 
   Future<void> setNotificationsEnabled(bool enabled) async {
@@ -183,22 +280,25 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'patient_alerts_channel',
       'Patient Alerts',
       channelDescription: 'Emergency and status alerts for patients',
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max, // URGENT
       showWhen: true,
       enableVibration: true,
       playSound: true,
-      color: Color(0xFF1B5E20), // Darker Green
+      fullScreenIntent: true, // Wakes screen
+      color: Color(0xFF1B5E20),
       ledColor: Color(0xFF1B5E20),
       ledOnMs: 1000,
       ledOffMs: 500,
       icon: 'ic_notification',
-      category: AndroidNotificationCategory.status,
+      category: AndroidNotificationCategory.alarm,
       styleInformation: BigTextStyleInformation(''),
     );
 
@@ -227,6 +327,8 @@ class NotificationService {
     required String medicationName,
     required TimeOfDay time,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     final now = tz.TZDateTime.now(tz.local);
     var scheduledDate = tz.TZDateTime(
         tz.local, now.year, now.month, now.day, time.hour, time.minute);
@@ -270,6 +372,8 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'announcements_channel',
@@ -307,6 +411,8 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'system_alerts_channel',
@@ -347,6 +453,8 @@ class NotificationService {
     required String sensorName,
     required String status,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     final isError = status.toLowerCase() == 'error' || status.toLowerCase() == 'disconnected';
     
     final AndroidNotificationDetails androidDetails =
@@ -390,6 +498,8 @@ class NotificationService {
     required String message,
     int notificationId = 888,
   }) async {
+    if (!_initCompleter.isCompleted) await _initCompleter.future;
+
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'chat_messages_channel',
@@ -426,6 +536,19 @@ class NotificationService {
   Future<void> cancelAllReminders() async {
     if (!_isSupported) return;
     await flutterLocalNotificationsPlugin.cancelAll();
+  }
+
+  /// Returns the Firebase Messaging token for this device.
+  Future<String?> getDeviceToken() async {
+    if (kIsWeb) return null;
+    if (!isNativeAndroid && !isNativeIOS) return null;
+    
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (e) {
+      debugPrint("⚠️ NotificationService: Failed to get FCM token: $e");
+      return null;
+    }
   }
 
   /// REST & PUSH TOKEN MANAGEMENT

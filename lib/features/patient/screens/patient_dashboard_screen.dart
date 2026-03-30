@@ -58,29 +58,26 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       if (mounted) {
         setState(() {
           _vitals = historyRepo.records;
+          _isLoading = false; // SHOW DATA IMMEDIATELY
         });
       }
 
-      // 2. Only sync with Cloud if forced (e.g. on Init or Pull-to-Refresh)
+      // 2. Only sync with Cloud in the background if forced
       if (forceSync) {
-        debugPrint("📱 Dashboard: Triggering full cloud sync...");
-        await systemRepo.syncNow(
+        debugPrint("📱 Dashboard: Triggering background cloud sync...");
+        // Non-blocking background sync
+        systemRepo.syncNow(
           authRepo: authRepo,
           historyRepo: historyRepo,
-        );
-
-        if (!mounted) return;
-        setState(() {
-          _vitals = historyRepo.records;
-          _isLoading = false;
+        ).then((_) {
+          if (mounted) {
+            setState(() {
+              _vitals = historyRepo.records;
+            });
+          }
+        }).catchError((e) {
+          debugPrint("⚠️ Dashboard: Background sync error: $e");
         });
-      } else {
-        // Just stop loading if we were using it for a local refresh
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -89,6 +86,16 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  List<VitalSigns> _getCleanedVitals() {
+    // Filter out records where critical fields are 0 (likely noise/failed sensor reads)
+    return _vitals.where((v) {
+      final bool hasBP = v.systolicBP > 40 && v.diastolicBP > 30;
+      final bool hasHR = v.heartRate > 30;
+      final bool hasOxy = v.oxygen > 60;
+      return hasBP || hasHR || hasOxy;
+    }).toList();
   }
 
   @override
@@ -565,11 +572,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             const SizedBox(height: 24),
             _buildLatestMetricsCard(),
             const SizedBox(height: 24),
-            _buildBpTrend(),
-            _buildHeartRateTrend(),
-            _buildSpo2Trend(),
-            _buildTempTrend(),
-            _buildBmiTrend(),
+            _buildTrendsSection(),
             const SizedBox(height: 24),
             _buildSectionHeader("Recent Checkups", Icons.history_rounded),
             const SizedBox(height: 12),
@@ -953,9 +956,101 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     }
   }
 
+  Widget _buildTrendsSection() {
+    final cleanedVitals = _getCleanedVitals();
+    if (cleanedVitals.isEmpty) return const SizedBox.shrink();
+
+    return DefaultTabController(
+      length: 5,
+      child: Container(
+        height: 380,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.insights_rounded,
+                      color: AppColors.brandGreen, size: 22),
+                  const SizedBox(width: 8),
+                  const Text(
+                    "Health Progress",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandGreen.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "${cleanedVitals.length} Checkups",
+                      style: const TextStyle(
+                        color: AppColors.brandGreen,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelPadding: EdgeInsets.symmetric(horizontal: 16),
+              indicatorSize: TabBarIndicatorSize.label,
+              indicatorColor: AppColors.brandGreen,
+              indicatorWeight: 3,
+              labelColor: AppColors.brandGreen,
+              unselectedLabelColor: Colors.grey,
+              labelStyle:
+                  TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              tabs: [
+                Tab(text: "Blood Pressure"),
+                Tab(text: "Heart Rate"),
+                Tab(text: "Oxygen"),
+                Tab(text: "Temperature"),
+                Tab(text: "BMI"),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildBpTrend(cleanedVitals),
+                  _buildHeartRateTrend(cleanedVitals),
+                  _buildSpo2Trend(cleanedVitals),
+                  _buildTempTrend(cleanedVitals),
+                  _buildBmiTrend(cleanedVitals),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTrendChart({
-    required String title,
-    required IconData icon,
     required List<VitalSigns> chartData,
     required List<LineChartBarData> lineBarsData,
     required List<Map<String, dynamic>> legend,
@@ -963,70 +1058,33 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     double? maxY,
   }) {
     if (chartData.length < 2) {
-      return Container(
-        height: 160,
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4)),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_rounded, color: Colors.grey.shade300, size: 48),
+            const SizedBox(height: 8),
+            const Text("More data needed for trend.",
+                style: TextStyle(color: Colors.grey, fontSize: 13)),
           ],
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.bar_chart_rounded,
-                  color: Colors.grey.shade300, size: 48),
-              const SizedBox(height: 8),
-              Text("Need at least 2 checkups for $title trend.",
-                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            ],
-          ),
         ),
       );
     }
 
-    return Container(
-      height: 240,
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 12),
-            child: Row(
-              children: [
-                Icon(icon, color: AppColors.brandGreen, size: 20),
-                const SizedBox(width: 8),
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandDark)),
-                const Spacer(),
-                ...legend.map((item) => Padding(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: legend
+                .map((item) => Padding(
                       padding: const EdgeInsets.only(left: 12),
                       child: _buildLegendDot(item['color'], item['label']),
-                    )),
-              ],
-            ),
+                    ))
+                .toList(),
           ),
+          const SizedBox(height: 12),
           Expanded(
             child: LineChart(
               LineChartData(
@@ -1036,7 +1094,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.withValues(alpha: 0.15),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     strokeWidth: 1,
                   ),
                 ),
@@ -1048,19 +1106,13 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 42,
+                      reservedSize: 35,
                       getTitlesWidget: (value, meta) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: Text(
-                            value.toStringAsFixed(
-                                meta.max == meta.min || value == value.toInt()
-                                    ? 0
-                                    : 1),
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 10),
-                            textAlign: TextAlign.right,
-                          ),
+                        return Text(
+                          value.toInt().toString(),
+                          style:
+                              const TextStyle(color: Colors.grey, fontSize: 9),
+                          textAlign: TextAlign.right,
                         );
                       },
                     ),
@@ -1073,12 +1125,17 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                         if (index < 0 || index >= chartData.length) {
                           return const SizedBox.shrink();
                         }
+                        // Only show every few labels if data is dense
+                        if (chartData.length > 7 && index % (chartData.length ~/ 4) != 0 && index != chartData.length-1) {
+                          return const SizedBox.shrink();
+                        }
+
                         final date = chartData[index].timestamp;
                         return Padding(
-                          padding: const EdgeInsets.only(top: 6.0),
+                          padding: const EdgeInsets.only(top: 8.0),
                           child: Text("${date.month}/${date.day}",
                               style: const TextStyle(
-                                  color: Colors.grey, fontSize: 10)),
+                                  color: Colors.grey, fontSize: 9)),
                         );
                       },
                       interval: 1,
@@ -1095,11 +1152,11 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                       return touchedSpots.map((spot) {
                         final label = legend[spot.barIndex]['label'];
                         return LineTooltipItem(
-                          "${spot.y.toStringAsFixed(spot.y == spot.y.toInt() ? 0 : 1)} $label",
+                          "${spot.y.toStringAsFixed(0)} $label",
                           TextStyle(
                               color: legend[spot.barIndex]['color'],
                               fontWeight: FontWeight.bold,
-                              fontSize: 12),
+                              fontSize: 11),
                         );
                       }).toList();
                     },
@@ -1113,23 +1170,16 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildBpTrend() {
-    final chartData = _vitals.reversed.toList();
+  Widget _buildBpTrend(List<VitalSigns> cleanedVitals) {
+    final chartData = cleanedVitals.reversed.where((v) => v.systolicBP > 0).toList();
     if (chartData.isEmpty) return const SizedBox.shrink();
 
-    double minY =
-        (chartData.map((e) => e.diastolicBP.toDouble()).reduce(math.min) / 10).floor() *
-                10 -
-            20;
-    double maxY =
-        (chartData.map((e) => e.systolicBP.toDouble()).reduce(math.max) / 10).ceil() * 10 +
-            20;
+    double minY = (chartData.map((e) => e.diastolicBP.toDouble()).reduce(math.min) / 10).floor() * 10 - 20;
+    double maxY = (chartData.map((e) => e.systolicBP.toDouble()).reduce(math.max) / 10).ceil() * 10 + 20;
 
     return _buildTrendChart(
-      title: "Blood Pressure",
-      icon: Icons.favorite_rounded,
       chartData: chartData,
-      minY: minY,
+      minY: minY < 0 ? 0 : minY,
       maxY: maxY,
       legend: [
         {'color': Colors.redAccent, 'label': 'Systolic'},
@@ -1156,11 +1206,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildHeartRateTrend() {
-    final chartData = _vitals.reversed.toList();
+  Widget _buildHeartRateTrend(List<VitalSigns> cleanedVitals) {
+    final chartData = cleanedVitals.reversed.where((v) => v.heartRate > 0).toList();
     return _buildTrendChart(
-      title: "Heart Rate",
-      icon: Icons.monitor_heart_rounded,
       chartData: chartData,
       legend: [
         {'color': Colors.purple.shade400, 'label': 'BPM'}
@@ -1178,12 +1226,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildSpo2Trend() {
-    final chartData = _vitals.reversed.toList();
+  Widget _buildSpo2Trend(List<VitalSigns> cleanedVitals) {
+    final chartData = cleanedVitals.reversed.where((v) => v.oxygen > 0).toList();
     return _buildTrendChart(
-      title: "Oxygen Level (SpO₂)",
-      icon: Icons.water_drop_rounded,
       chartData: chartData,
+      maxY: 105,
+      minY: (chartData.isEmpty) ? 80 : (chartData.map((e) => e.oxygen.toDouble()).reduce(math.min) - 5),
       legend: [
         {'color': Colors.blue.shade400, 'label': '%'}
       ],
@@ -1199,11 +1247,11 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildTempTrend() {
-    final chartData = _vitals.reversed.toList();
+  Widget _buildTempTrend(List<VitalSigns> cleanedVitals) {
+    final chartData = cleanedVitals.reversed.where((v) => v.temperature > 0).toList();
+    if (chartData.isEmpty) return const SizedBox.shrink();
+
     return _buildTrendChart(
-      title: "Temperature",
-      icon: Icons.thermostat_rounded,
       chartData: chartData,
       legend: [
         {'color': Colors.orange.shade400, 'label': '°C'}
@@ -1221,23 +1269,25 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildBmiTrend() {
-    final chartData = _vitals.reversed.where((e) => e.bmi != null).toList();
+  Widget _buildBmiTrend(List<VitalSigns> cleanedVitals) {
+    final chartData = cleanedVitals.reversed
+        .where((v) => v.bmi != null && v.bmi! > 0)
+        .toList();
+    if (chartData.isEmpty) return const SizedBox.shrink();
+
     return _buildTrendChart(
-      title: "BMI Index",
-      icon: Icons.accessibility_new_rounded,
       chartData: chartData,
       legend: [
-        {'color': AppColors.brandGreen, 'label': 'BMI'}
+        {'color': Colors.teal.shade400, 'label': 'BMI'}
       ],
       lineBarsData: [
         _createLineData(
             chartData
                 .asMap()
                 .entries
-                .map((e) => FlSpot(e.key.toDouble(), e.value.bmi!))
+                .map((e) => FlSpot(e.key.toDouble(), e.value.bmi!.toDouble()))
                 .toList(),
-            AppColors.brandGreen),
+            Colors.teal.shade400),
       ],
     );
   }

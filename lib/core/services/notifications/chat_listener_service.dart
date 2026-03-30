@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../security/notification_service.dart';
+import '../security/encryption_service.dart';
 
 class ChatListenerService {
   static final ChatListenerService _instance = ChatListenerService._internal();
@@ -26,19 +27,34 @@ class ChatListenerService {
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: 'chat_messages',
-      callback: (payload) {
+      callback: (payload) async {
         final data = payload.newRecord;
 
         // Dart-side filtering to avoid Supabase Realtime multiplexing bug
         if (data['receiver_id'] == patientId || data['receiver'] == patientId) {
           // Only notify if the sender is 'admin' (don't notify own messages)
           if (data['sender_id'] == 'admin' || data['sender'] == 'admin') {
-            final String message =
+            final String rawMessage =
                 data['message'] ?? data['content'] ?? 'You have a new message.';
+            
+            String displayMessage = rawMessage;
+            
+            // Decrypt the message if it appears to be encrypted (contains colon marker)
+            if (rawMessage.contains(':')) {
+              try {
+                // Ensure encryption service is initialized
+                await EncryptionService().init();
+                displayMessage = EncryptionService().decryptData(rawMessage);
+              } catch (e) {
+                debugPrint("🔐 [ChatListener] Decryption failed: $e");
+                // Fallback to generic message if decryption fails for safety
+                displayMessage = "You have a new message from the Health Worker.";
+              }
+            }
 
             NotificationService().showChatNotification(
               senderName: 'Health Worker',
-              message: message,
+              message: displayMessage,
             );
           }
         }

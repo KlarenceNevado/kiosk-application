@@ -135,12 +135,9 @@ class AdminRepository extends ChangeNotifier {
     _announcements.insert(0, announcement);
     notifyListeners();
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        final map = announcement.toMap();
-        map['updated_at'] = DateTime.now().toUtc().toIso8601String();
-        await _dbHelper.insertAnnouncement(map);
         await SyncService().pushAnnouncement(
           id: announcement.id,
           title: announcement.title,
@@ -149,11 +146,9 @@ class AdminRepository extends ChangeNotifier {
           timestamp: announcement.timestamp,
           isActive: announcement.isActive,
         );
-        debugPrint(
-            "✅ Background: Announcement '${announcement.title}' persisted and pushed.");
+        debugPrint("✅ Admin: Announcement '${announcement.title}' queued for sync.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to persist announcement: $e");
-        // Rollback? Usually not needed for simple apps, but good to know
+        debugPrint("❌ Admin: Failed to queue announcement: $e");
       }
     }());
   }
@@ -166,15 +161,13 @@ class AdminRepository extends ChangeNotifier {
       notifyListeners();
     }
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        await _dbHelper.deleteAnnouncement(id);
-        // Supabase soft-deletion
-        await SyncService().supabase.from('announcements').delete().eq('id', id);
-        debugPrint("✅ Background: Announcement '$id' deleted.");
+        await SyncService().deleteAnnouncement(id);
+        debugPrint("✅ Admin: Announcement '$id' marked for deletion sync.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to delete announcement: $e");
+        debugPrint("❌ Admin: Failed to mark announcement for deletion: $e");
       }
     }());
   }
@@ -196,15 +189,9 @@ class AdminRepository extends ChangeNotifier {
       notifyListeners();
     }
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        final map = announcement.toMap();
-        map['is_active'] = isActive ? 1 : 0;
-        map['is_synced'] = 0;
-        map['updated_at'] = DateTime.now().toUtc().toIso8601String();
-        await _dbHelper.updateAnnouncement(map);
-
         await SyncService().pushAnnouncement(
           id: announcement.id,
           title: announcement.title,
@@ -213,9 +200,9 @@ class AdminRepository extends ChangeNotifier {
           timestamp: announcement.timestamp,
           isActive: isActive,
         );
-        debugPrint("✅ Background: Announcement status toggled.");
+        debugPrint("✅ Admin: Announcement status toggle queued.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to toggle announcement: $e");
+        debugPrint("❌ Admin: Failed to queue toggle: $e");
       }
     }());
   }
@@ -247,10 +234,9 @@ class AdminRepository extends ChangeNotifier {
     _schedules.insert(0, schedule);
     notifyListeners();
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        await _dbHelper.insertSchedule(schedule.toMap());
         await SyncService().pushSchedule(
           id: schedule.id,
           type: schedule.type,
@@ -259,10 +245,9 @@ class AdminRepository extends ChangeNotifier {
           assigned: schedule.assigned,
           colorValue: schedule.color.toARGB32(),
         );
-        debugPrint(
-            "✅ Background: Schedule '${schedule.type}' persisted and pushed.");
+        debugPrint("✅ Admin: Schedule '${schedule.id}' queued for sync.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to persist schedule: $e");
+        debugPrint("❌ Admin: Failed to queue schedule: $e");
       }
     }());
   }
@@ -275,18 +260,13 @@ class AdminRepository extends ChangeNotifier {
       notifyListeners();
     }
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        await _dbHelper.deleteSchedule(id);
-        // Supabase soft-deletion
-        await SyncService().supabase.from('schedules').update({
-          'is_deleted': true,
-          'updated_at': DateTime.now().toUtc().toIso8601String()
-        }).eq('id', id);
-        debugPrint("✅ Background: Schedule '$id' deleted.");
+        await SyncService().deleteScheduleCloud(id);
+        debugPrint("✅ Admin: Schedule '$id' marked for deletion sync.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to delete schedule: $e");
+        debugPrint("❌ Admin: Failed to mark schedule for deletion: $e");
       }
     }());
   }
@@ -311,22 +291,23 @@ class AdminRepository extends ChangeNotifier {
       timestamp: DateTime.now(),
       isActive: true, // newly added
     );
-    await _dbHelper.insertAlert(alert.toMap());
-
-    // Mirror to Supabase Cloud
-    unawaited(SyncService().supabase.from('alerts').upsert({
-      'id': alert.id,
-      'message': alert.message,
-      'target_group': alert.targetGroup,
-      'is_emergency': alert.isEmergency,
-      'timestamp': alert.timestamp.toUtc().toIso8601String(),
-      'is_active': alert.isActive,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).catchError((e) {
-      debugPrint("⚠️ Failed to push Alert to cloud: $e");
-      return null;
-    }));
-
+    // PERSIST VIA SYNC SERVICE (Local-First)
+    unawaited(() async {
+      try {
+        await SyncService().pushAlert(
+          id: alert.id,
+          message: alert.message,
+          targetGroup: alert.targetGroup,
+          isEmergency: alert.isEmergency,
+          timestamp: alert.timestamp,
+          isActive: alert.isActive,
+        );
+        debugPrint("✅ Admin: Alert queued for sync.");
+      } catch (e) {
+        debugPrint("❌ Admin: Failed to queue alert: $e");
+      }
+    }());
+    
     await fetchAlerts();
   }
 
@@ -338,15 +319,13 @@ class AdminRepository extends ChangeNotifier {
       notifyListeners();
     }
 
-    // PERSIST IN BACKGROUND
+    // PERSIST VIA SYNC SERVICE (Local-First)
     unawaited(() async {
       try {
-        await _dbHelper.deleteAlert(id);
-        // Supabase hard-deletion triggers immediate Realtime removal for clients
-        await SyncService().supabase.from('alerts').delete().eq('id', id);
-        debugPrint("✅ Background: Alert '$id' hard deleted from cloud.");
+        await SyncService().deleteAlert(id);
+        debugPrint("✅ Admin: Alert '$id' marked for deletion sync.");
       } catch (e) {
-        debugPrint("❌ Background: Failed to delete alert: $e");
+        debugPrint("❌ Admin: Failed to mark alert for deletion: $e");
       }
     }());
   }

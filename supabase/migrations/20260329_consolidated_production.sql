@@ -186,9 +186,13 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
 -- Recovery: Force TEXT type for user_id to ensure compatibility with all ID types
 DO $$
 BEGIN
+    -- 1. Drop existing FK constraint if it exists (it targets UUID and blocks TEXT conversion)
+    ALTER TABLE IF EXISTS public.system_logs DROP CONSTRAINT IF EXISTS system_logs_user_id_fkey;
+
+    -- 2. Alter the column type to TEXT
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'system_logs' AND column_name = 'user_id'
+        WHERE table_name = 'system_logs' AND table_schema = 'public' AND column_name = 'user_id'
     ) THEN
         ALTER TABLE public.system_logs ALTER COLUMN user_id TYPE TEXT;
     END IF;

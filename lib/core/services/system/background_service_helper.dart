@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../security/notification_service.dart';
 import '../database/database_helper.dart';
 import '../database/sync/system_sync_handler.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 @pragma('vm:entry-point')
 class BackgroundServiceHelper {
@@ -21,7 +22,8 @@ class BackgroundServiceHelper {
           isForegroundMode: true,
           notificationChannelId: 'system_alerts_channel', // High priority
           initialNotificationTitle: 'Kiosk Sync Active',
-          initialNotificationContent: 'Monitoring for alerts & announcements...',
+          initialNotificationContent:
+              'Monitoring for alerts & announcements...',
           foregroundServiceNotificationId: 888,
         ),
         iosConfiguration: IosConfiguration(
@@ -47,6 +49,13 @@ class BackgroundServiceHelper {
   static void onStart(ServiceInstance service) async {
     DartPluginRegistrant.ensureInitialized();
 
+    // 0. Initialize Firebase in this isolate if on Mobile
+    try {
+      await Firebase.initializeApp();
+    } catch (_) {}
+
+    bool uiActive = false;
+
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
@@ -54,6 +63,12 @@ class BackgroundServiceHelper {
 
       service.on('setAsBackground').listen((event) {
         service.setAsBackgroundService();
+      });
+
+      service.on('set_ui_active').listen((event) {
+        uiActive = event?['active'] == true;
+        debugPrint(
+            "🔔 [BackgroundService] Isolate write-mode: ${uiActive ? 'SUPPRESSED (UI ACTIVE)' : 'ENABLED (BACKGROUND)'}");
       });
     }
 
@@ -65,22 +80,26 @@ class BackgroundServiceHelper {
     try {
       await dotenv.load(fileName: "assets/.env");
     } catch (e) {
-      debugPrint("📢 [BackgroundService] assets/.env failed, trying root .env...");
+      debugPrint(
+          "📢 [BackgroundService] assets/.env failed, trying root .env...");
       try {
         await dotenv.load(fileName: ".env");
       } catch (e2) {
-        debugPrint("⚠️ [BackgroundService] DotEnv Init Failed. Database may fail to initialize.");
+        debugPrint(
+            "⚠️ [BackgroundService] DotEnv Init Failed. Database may fail to initialize.");
       }
     }
 
     // 2. Initialize Database and Supabase in Background Isolate
     final dbHelper = DatabaseHelper.instance;
-    await dbHelper.database; // Ensure local DB is ready (Now safe because dotenv is loaded)
+    dbHelper.setIsBackground(true); // Isolate-safety: Skip migrations in background
+    await dbHelper
+        .database; // Ensure local DB is ready (Now safe because dotenv is loaded)
 
     try {
       final url = dotenv.env['SUPABASE_URL'] ?? '';
       final key = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-      
+
       if (url.isNotEmpty && key.isNotEmpty) {
         await Supabase.initialize(url: url, anonKey: key);
         debugPrint("🔔 [BackgroundService] Supabase Initialized.");
@@ -99,7 +118,8 @@ class BackgroundServiceHelper {
     final supabase = Supabase.instance.client;
 
     // Listen to Announcements
-    supabase.channel('bg_announcements')
+    supabase
+        .channel('bg_announcements')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -107,7 +127,7 @@ class BackgroundServiceHelper {
           callback: (payload) async {
             if (payload.eventType == PostgresChangeEvent.delete) {
               final id = payload.oldRecord['id']?.toString();
-              if (id != null) {
+              if (id != null && !uiActive) {
                 await dbHelper.systemDao.hardDeleteAnnouncement(id);
                 debugPrint("🧹 Background: Removed deleted announcement $id");
               }
@@ -116,11 +136,13 @@ class BackgroundServiceHelper {
 
             final row = payload.newRecord;
             if (row.isNotEmpty) {
-              await dbHelper.systemDao.insertAnnouncement({
-                ...row,
-                'is_synced': 1,
-              });
-              
+              if (!uiActive) {
+                await dbHelper.systemDao.insertAnnouncement({
+                  ...row,
+                  'is_synced': 1,
+                });
+              }
+
               if (payload.eventType == PostgresChangeEvent.insert) {
                 _showAnnouncementNotification(row);
               }
@@ -130,7 +152,8 @@ class BackgroundServiceHelper {
         .subscribe();
 
     // Listen to Alerts
-    supabase.channel('bg_alerts')
+    supabase
+        .channel('bg_alerts')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -138,7 +161,7 @@ class BackgroundServiceHelper {
           callback: (payload) async {
             if (payload.eventType == PostgresChangeEvent.delete) {
               final id = payload.oldRecord['id']?.toString();
-              if (id != null) {
+              if (id != null && !uiActive) {
                 await dbHelper.systemDao.hardDeleteAlert(id);
                 debugPrint("🧹 Background: Removed deleted alert $id");
               }
@@ -148,16 +171,18 @@ class BackgroundServiceHelper {
             if (payload.eventType == PostgresChangeEvent.insert) {
               final row = payload.newRecord;
               if (row.isNotEmpty) {
-                 await dbHelper.systemDao.insertAlert({
-                   ...row,
-                   'is_synced': 1,
-                 });
-                 
-                 NotificationService().showInstantNotification(
-                   id: 777,
-                   title: "🚨 URGENT ALERT",
-                   body: row['message'] ?? "New alert received.",
-                 );
+                if (!uiActive) {
+                  await dbHelper.systemDao.insertAlert({
+                    ...row,
+                    'is_synced': 1,
+                  });
+                }
+
+                NotificationService().showInstantNotification(
+                  id: 777,
+                  title: "🚨 URGENT ALERT",
+                  body: row['message'] ?? "New alert received.",
+                );
               }
             }
           },
@@ -165,46 +190,50 @@ class BackgroundServiceHelper {
         .subscribe();
 
     // Listen to Schedules
-    supabase.channel('bg_schedules')
+    supabase
+        .channel('bg_schedules')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'schedules',
           callback: (payload) async {
-             if (payload.eventType == PostgresChangeEvent.delete) {
-               final id = payload.oldRecord['id']?.toString();
-               if (id != null) {
-                 await dbHelper.systemDao.hardDeleteSchedule(id);
-               }
-             } else if (payload.newRecord.isNotEmpty) {
-               await dbHelper.systemDao.insertSchedule({
-                 ...payload.newRecord,
-                 'is_synced': 1,
-               });
-             }
-             debugPrint("📅 Background: Schedule change synchronized");
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              final id = payload.oldRecord['id']?.toString();
+              if (id != null) {
+                await dbHelper.systemDao.hardDeleteSchedule(id);
+              }
+            } else if (payload.newRecord.isNotEmpty) {
+              await dbHelper.systemDao.insertSchedule({
+                ...payload.newRecord,
+                'is_synced': 1,
+              });
+            }
+            debugPrint("📅 Background: Schedule change synchronized");
           },
         )
         .subscribe();
 
     // Listen to Vitals (For High Risk notifications)
-    supabase.channel('bg_vitals')
+    supabase
+        .channel('bg_vitals')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'vitals',
           callback: (payload) {
-             final row = payload.newRecord;
-             if (row.isNotEmpty) {
-               final status = row['status']?.toString().toUpperCase() ?? 'NORMAL';
-               if (status.contains('HIGH') || status.contains('EMERGENCY')) {
-                 NotificationService().showInstantNotification(
-                   id: 999,
-                   title: "🏥 CRITICAL HEALTH UPDATE",
-                   body: "A high-risk health screening has been recorded. Please check reports.",
-                 );
-               }
-             }
+            final row = payload.newRecord;
+            if (row.isNotEmpty) {
+              final status =
+                  row['status']?.toString().toUpperCase() ?? 'NORMAL';
+              if (status.contains('HIGH') || status.contains('EMERGENCY')) {
+                NotificationService().showInstantNotification(
+                  id: 999,
+                  title: "🏥 CRITICAL HEALTH UPDATE",
+                  body:
+                      "A high-risk health screening has been recorded. Please check reports.",
+                );
+              }
+            }
           },
         )
         .subscribe();
@@ -212,13 +241,15 @@ class BackgroundServiceHelper {
     // 5. Periodic Heartbeat Pull (Parity Sync)
     // Runs every 15 minutes to catch missed realtime events
     Timer.periodic(const Duration(minutes: 15), (timer) async {
-       debugPrint("🔄 Background: Heartbeat Sync Starting...");
-       try {
-         await systemHandler.pullAnnouncements();
-         await systemHandler.pullAlerts();
-       } catch (e) {
-         debugPrint("⚠️ Background Heartbeat Failed: $e");
-       }
+      if (uiActive) return; // Skip parity pull if UI app is doing it
+      
+      debugPrint("🔄 Background: Heartbeat Sync Starting...");
+      try {
+        await systemHandler.pullAnnouncements();
+        await systemHandler.pullAlerts();
+      } catch (e) {
+        debugPrint("⚠️ Background Heartbeat Failed: $e");
+      }
     });
 
     debugPrint("🔔 [BackgroundService] Sync Isolate Ready.");

@@ -89,109 +89,116 @@ class MigrationService {
 
   /// Perform a deep sanity check for critical columns that might be missing across versions
   Future<void> performSanityCheck(Database db) async {
-    final tables = [
-      'patients',
-      'vitals',
-      'announcements',
-      'alerts',
-      'schedules',
-      'reminders',
-      'chat_messages'
-    ];
+    debugPrint("📂 [MigrationService] Starting structural sanity check...");
+    
+    await db.transaction((txn) async {
+      final tables = [
+        'patients',
+        'vitals',
+        'announcements',
+        'alerts',
+        'schedules',
+        'reminders',
+        'chat_messages'
+      ];
 
-    for (var table in tables) {
-      final columns = await db.rawQuery('PRAGMA table_info($table)');
-      final columnNames = columns.map((c) => c['name'].toString()).toList();
+      for (var table in tables) {
+        debugPrint("🔍 [MigrationService] Checking table: $table");
+        final columns = await txn.rawQuery('PRAGMA table_info($table)');
+        final columnNames = columns.map((c) => c['name'].toString()).toList();
 
-      // Ensure 'is_active' exists in core tables
-      if (!columnNames.contains('is_active')) {
-        await db.execute(
-            'ALTER TABLE $table ADD COLUMN is_active INTEGER DEFAULT 1');
+        // Ensure 'is_active' exists in core tables
+        if (!columnNames.contains('is_active')) {
+          await txn.execute(
+              'ALTER TABLE $table ADD COLUMN is_active INTEGER DEFAULT 1');
+        }
+
+        // Ensure 'is_synced' exists
+        if (!columnNames.contains('is_synced')) {
+          await txn.execute(
+              'ALTER TABLE $table ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
       }
 
-      // Ensure 'is_synced' exists
-      if (!columnNames.contains('is_synced')) {
-        await db.execute(
-            'ALTER TABLE $table ADD COLUMN is_synced INTEGER DEFAULT 0');
+      // Specific check for Patients 'created_at'
+      final patientCols = await txn.rawQuery('PRAGMA table_info(patients)');
+      final patientColNames = patientCols.map((c) => c['name'].toString()).toList();
+      if (!patientColNames.contains('created_at')) {
+        await txn.execute('ALTER TABLE patients ADD COLUMN created_at TEXT');
       }
-    }
+      if (!patientColNames.contains('relation')) {
+        await txn.execute('ALTER TABLE patients ADD COLUMN relation TEXT');
+      }
 
-    // Specific check for Patients 'created_at'
-    final patientCols = await db.rawQuery('PRAGMA table_info(patients)');
-    final patientColNames = patientCols.map((c) => c['name'].toString()).toList();
-    if (!patientColNames.contains('created_at')) {
-      await db.execute('ALTER TABLE patients ADD COLUMN created_at TEXT');
-    }
-    if (!patientColNames.contains('relation')) {
-      await db.execute('ALTER TABLE patients ADD COLUMN relation TEXT');
-    }
+      // Vitals missing columns
+      final vitalsCols = await txn.rawQuery('PRAGMA table_info(vitals)');
+      final vitalsColNames = vitalsCols.map((c) => c['name'].toString()).toList();
+      if (!vitalsColNames.contains('created_at')) {
+        await txn.execute('ALTER TABLE vitals ADD COLUMN created_at TEXT');
+        await txn.execute("UPDATE vitals SET created_at = datetime('now') WHERE created_at IS NULL");
+      }
+      if (!vitalsColNames.contains('report_path')) {
+        await txn.execute('ALTER TABLE vitals ADD COLUMN report_path TEXT');
+      }
+      if (!vitalsColNames.contains('report_url')) {
+        await txn.execute('ALTER TABLE vitals ADD COLUMN report_url TEXT');
+      }
 
-    // Vitals missing columns
-    final vitalsCols = await db.rawQuery('PRAGMA table_info(vitals)');
-    final vitalsColNames = vitalsCols.map((c) => c['name'].toString()).toList();
-    if (!vitalsColNames.contains('created_at')) {
-      await db.execute('ALTER TABLE vitals ADD COLUMN created_at TEXT');
-      await db.execute("UPDATE vitals SET created_at = datetime('now') WHERE created_at IS NULL");
-    }
-    if (!vitalsColNames.contains('report_path')) {
-      await db.execute('ALTER TABLE vitals ADD COLUMN report_path TEXT');
-    }
-    if (!vitalsColNames.contains('report_url')) {
-      await db.execute('ALTER TABLE vitals ADD COLUMN report_url TEXT');
-    }
+      // Announcements missing columns
+      final annCols = await txn.rawQuery('PRAGMA table_info(announcements)');
+      final annColNames = annCols.map((c) => c['name'].toString()).toList();
+      if (!annColNames.contains('created_at')) {
+        await txn.execute('ALTER TABLE announcements ADD COLUMN created_at TEXT');
+        await txn.execute("UPDATE announcements SET created_at = datetime('now') WHERE created_at IS NULL");
+      }
+      if (!annColNames.contains('media_url')) {
+        await txn.execute('ALTER TABLE announcements ADD COLUMN media_url TEXT');
+      }
+      if (!annColNames.contains('media_path')) {
+        await txn.execute('ALTER TABLE announcements ADD COLUMN media_path TEXT');
+      }
 
-    // Announcements missing columns
-    final annCols = await db.rawQuery('PRAGMA table_info(announcements)');
-    final annColNames = annCols.map((c) => c['name'].toString()).toList();
-    if (!annColNames.contains('created_at')) {
-      await db.execute('ALTER TABLE announcements ADD COLUMN created_at TEXT');
-      await db.execute("UPDATE announcements SET created_at = datetime('now') WHERE created_at IS NULL");
-    }
-    if (!annColNames.contains('media_url')) {
-      await db.execute('ALTER TABLE announcements ADD COLUMN media_url TEXT');
-    }
-    if (!annColNames.contains('media_path')) {
-      await db.execute('ALTER TABLE announcements ADD COLUMN media_path TEXT');
-    }
+      // Alerts missing columns
+      final alertsCols = await txn.rawQuery('PRAGMA table_info(alerts)');
+      if (!alertsCols.any((c) => c['name'] == 'created_at')) {
+        await txn.execute('ALTER TABLE alerts ADD COLUMN created_at TEXT');
+        await txn.execute(
+            "UPDATE alerts SET created_at = datetime('now') WHERE created_at IS NULL");
+      }
 
-    // Alerts missing columns
-    final alertsCols = await db.rawQuery('PRAGMA table_info(alerts)');
-    if (!alertsCols.any((c) => c['name'] == 'created_at')) {
-      await db.execute('ALTER TABLE alerts ADD COLUMN created_at TEXT');
-      await db.execute(
-          "UPDATE alerts SET created_at = datetime('now') WHERE created_at IS NULL");
-    }
-
-    // chat_messages missing columns
-    final chatCols = await db.rawQuery('PRAGMA table_info(chat_messages)');
-    final chatColNames = chatCols.map((c) => c['name'].toString()).toList();
-    if (!chatColNames.contains('created_at')) {
-      await db.execute("ALTER TABLE chat_messages ADD COLUMN created_at TEXT");
-      await db.execute(
-          "UPDATE chat_messages SET created_at = datetime('now') WHERE created_at IS NULL");
-    }
-    if (!chatColNames.contains('media_url')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN media_url TEXT');
-    }
-    if (!chatColNames.contains('media_path')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN media_path TEXT');
-    }
-    if (!chatColNames.contains('is_active')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN is_active INTEGER DEFAULT 1');
-    }
-    if (!chatColNames.contains('patient_id')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN patient_id TEXT');
-    }
-    if (!chatColNames.contains('sender')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN sender TEXT');
-    }
-    if (!chatColNames.contains('message')) {
-      await db.execute('ALTER TABLE chat_messages ADD COLUMN message TEXT');
-    }
+      // chat_messages missing columns
+      final chatCols = await txn.rawQuery('PRAGMA table_info(chat_messages)');
+      final chatColNames = chatCols.map((c) => c['name'].toString()).toList();
+      if (!chatColNames.contains('created_at')) {
+        await txn.execute("ALTER TABLE chat_messages ADD COLUMN created_at TEXT");
+        await txn.execute(
+            "UPDATE chat_messages SET created_at = datetime('now') WHERE created_at IS NULL");
+      }
+      if (!chatColNames.contains('media_url')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN media_url TEXT');
+      }
+      if (!chatColNames.contains('media_path')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN media_path TEXT');
+      }
+      if (!chatColNames.contains('is_active')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN is_active INTEGER DEFAULT 1');
+      }
+      if (!chatColNames.contains('patient_id')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN patient_id TEXT');
+      }
+      if (!chatColNames.contains('sender')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN sender TEXT');
+      }
+      if (!chatColNames.contains('message')) {
+        await txn.execute('ALTER TABLE chat_messages ADD COLUMN message TEXT');
+      }
+    });
 
     // --- RECONSTRUCTION FIX FOR NOT NULL & LEGACY COLUMNS ---
     await _reconstructPatientsTable(db);
     await _reconstructVitalsTable(db);
+    
+    debugPrint("✅ [MigrationService] structural sanity check complete.");
   }
 
   Future<void> _reconstructPatientsTable(Database db) async {

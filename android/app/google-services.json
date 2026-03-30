@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "180125630549",
+    "project_id": "isla-verde-health",
+    "storage_bucket": "isla-verde-health.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:180125630549:android:2543a7b62ae7a98127d4dc",
+        "android_client_info": {
+          "package_name": "com.islaverde.health"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCEaFBaKkraHk4D-wVMe-gn9ji3LKjny8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

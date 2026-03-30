@@ -299,9 +299,14 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     SyncService().restartSync(_currentUser!.id);
     SyncService().fullSyncForUser(_currentUser!.id);
     
-    // Update cloud push token (Stub for native device token)
-    if (_currentUser!.deviceToken != null) {
-      await NotificationService().updateDeviceToken(_currentUser!.id, _currentUser!.deviceToken!);
+    // Update cloud push token (REAL FCM TOKEN)
+    try {
+      final token = await NotificationService().getDeviceToken();
+      if (token != null) {
+        await NotificationService().updateDeviceToken(_currentUser!.id, token);
+      }
+    } catch (e) {
+      debugPrint("⚠️ AuthRepository: Token sync failed: $e");
     }
 
     // Listeners

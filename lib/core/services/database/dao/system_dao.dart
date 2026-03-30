@@ -254,6 +254,11 @@ class SystemDao extends BaseDao {
   Future<void> updateAnnouncement(Map<String, dynamic> row) async {
     final dbRow = Map<String, dynamic>.from(row);
     if (dbRow['reactions'] is Map) dbRow['reactions'] = json.encode(dbRow['reactions']);
+    
+    // Always mark as unsynced and update timestamp on local edit
+    dbRow['is_synced'] = 0;
+    dbRow['updated_at'] = DateTime.now().toUtc().toIso8601String();
+    
     await db.update('announcements', dbRow, where: 'id = ?', whereArgs: [dbRow['id']]);
     refreshAnnouncements();
   }
@@ -329,7 +334,11 @@ class SystemDao extends BaseDao {
   }
 
   Future<void> updateAlert(Map<String, dynamic> row) async {
-    await db.update('alerts', row, where: 'id = ?', whereArgs: [row['id']]);
+    final dbRow = Map<String, dynamic>.from(row);
+    dbRow['is_synced'] = 0;
+    dbRow['updated_at'] = DateTime.now().toUtc().toIso8601String();
+    
+    await db.update('alerts', dbRow, where: 'id = ?', whereArgs: [dbRow['id']]);
     refreshAlerts();
   }
 
