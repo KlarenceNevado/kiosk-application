@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../security/notification_service.dart';
 import '../database/database_helper.dart';
 import '../database/sync/system_sync_handler.dart';
+import '../database/sync/chat_sync_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 @pragma('vm:entry-point')
@@ -19,6 +20,7 @@ class BackgroundServiceHelper {
         androidConfiguration: AndroidConfiguration(
           onStart: onStart,
           autoStart: true,
+          autoStartOnBoot: true,
           isForegroundMode: true,
           notificationChannelId: 'system_alerts_channel', // High priority
           initialNotificationTitle: 'Kiosk Sync Active',
@@ -111,10 +113,7 @@ class BackgroundServiceHelper {
     // 2. Initialize Notifications (Skip permission requests in background isolate)
     await NotificationService().init(showPermissionRequest: false);
 
-    // 3. Set up Sync Handler for Background
-    final systemHandler = SystemSyncHandler(Supabase.instance.client);
-
-    // 4. Set up Realtime Listeners
+    // 3. Set up Realtime Listeners (Isolate Context)
     final supabase = Supabase.instance.client;
 
     // Listen to Announcements
@@ -141,6 +140,12 @@ class BackgroundServiceHelper {
                   ...row,
                   'is_synced': 1,
                 });
+              }
+
+              final isArchived = (row['is_archived'] == true || row['isArchived'] == true);
+              if (isArchived) {
+                 debugPrint("🔇 Background: Skipping notification for archived announcement");
+                 return;
               }
 
               if (payload.eventType == PostgresChangeEvent.insert) {
@@ -213,6 +218,25 @@ class BackgroundServiceHelper {
         )
         .subscribe();
 
+    // NEW: Listen to Chats (Direct Messages)
+    supabase
+        .channel('bg_chats')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'chat_messages',
+          callback: (payload) async {
+             // We use a broader Sync-then-Notify approach in ChatSyncHandler.pull()
+             // for security and decryption safety
+             final userId = supabase.auth.currentUser?.id;
+             if (userId != null && payload.newRecord['receiver_id'] == userId) {
+                final chatHandler = ChatSyncHandler(supabase);
+                await chatHandler.pull(userId);
+             }
+          },
+        )
+        .subscribe();
+
     // Listen to Vitals (For High Risk notifications)
     supabase
         .channel('bg_vitals')
@@ -238,15 +262,24 @@ class BackgroundServiceHelper {
         )
         .subscribe();
 
-    // 5. Periodic Heartbeat Pull (Parity Sync)
-    // Runs every 15 minutes to catch missed realtime events
-    Timer.periodic(const Duration(minutes: 15), (timer) async {
+    // 5. Periodic Heartbeat Pull (Parity Sync & Offline Recovery)
+    // Runs every 5 minutes (more aggressive for chats) to catch missed events
+    Timer.periodic(const Duration(minutes: 5), (timer) async {
       if (uiActive) return; // Skip parity pull if UI app is doing it
       
-      debugPrint("🔄 Background: Heartbeat Sync Starting...");
+      debugPrint("🔄 Background: Heartbeat Sync Starting (Offline Catch-up)...");
       try {
-        await systemHandler.pullAnnouncements();
-        await systemHandler.pullAlerts();
+        final userId = supabase.auth.currentUser?.id;
+        if (userId != null) {
+           // 1. Pull missed chats (notifies automatically in ChatSyncHandler)
+           final chatHandlerInside = ChatSyncHandler(supabase);
+           await chatHandlerInside.pull(userId);
+        }
+        
+        // 2. Pull missed system updates (notifies automatically in SystemSyncHandler)
+        final systemHandlerInside = SystemSyncHandler(supabase, isBackground: true);
+        await systemHandlerInside.pullAnnouncements();
+        await systemHandlerInside.pullAlerts();
       } catch (e) {
         debugPrint("⚠️ Background Heartbeat Failed: $e");
       }

@@ -190,7 +190,7 @@ class _PatientAnnouncementsScreenState
     final timestamp =
         DateTime.tryParse(item['timestamp'] ?? '') ?? DateTime.now();
     final isUrgent =
-        (item['targetGroup'] ?? item['target_group']) == 'BROADCAST_ALL';
+        (item['target_group'] ?? item['targetGroup'])?.toString().toUpperCase() == 'BROADCAST_ALL';
     final formatter = DateFormat('MMMM d, yyyy • h:mm a');
 
     return Container(

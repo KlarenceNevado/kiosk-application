@@ -20,9 +20,20 @@ class SystemDao extends BaseDao {
   Timer? _alertTimer;
   Timer? _scheduleTimer;
 
-  Stream<List<Map<String, dynamic>>> get announcementStream => _announcementController.stream;
-  Stream<List<Map<String, dynamic>>> get alertStream => _alertController.stream;
-  Stream<List<Map<String, dynamic>>> get scheduleStream => _scheduleController.stream;
+  Stream<List<Map<String, dynamic>>> get announcementStream async* {
+    yield await getAnnouncements();
+    yield* _announcementController.stream;
+  }
+  
+  Stream<List<Map<String, dynamic>>> get alertStream async* {
+    yield await getAlerts();
+    yield* _alertController.stream;
+  }
+  
+  Stream<List<Map<String, dynamic>>> get scheduleStream async* {
+    yield await getSchedules();
+    yield* _scheduleController.stream;
+  }
 
   void refreshAnnouncements() {
     _announcementTimer?.cancel();

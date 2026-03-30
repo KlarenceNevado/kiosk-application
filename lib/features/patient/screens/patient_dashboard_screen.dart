@@ -513,10 +513,15 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               final list = snapshot.data ?? [];
               final user = context.read<IAuthRepository>().currentUser;
               
-              var filtered = list;
+              var filtered = list.where((a) {
+                final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
+                final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
+                return isActive && !isDeleted;
+              }).toList();
+
               if (user != null) {
                 final int age = user.age;
-                filtered = list.where((a) {
+                filtered = filtered.where((a) {
                   final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
                   if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
                   if (target == 'SENIORS' && age >= 60) return true;

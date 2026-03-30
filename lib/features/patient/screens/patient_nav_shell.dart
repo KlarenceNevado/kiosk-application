@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
@@ -464,10 +465,39 @@ class _PatientProfileTab extends StatelessWidget {
     String selectedGender = "Male";
     String relation = "Child"; // Default
 
+    DateTime? selectedDob;
+    
     showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (context, setState) {
+        return StatefulBuilder(builder: (context, setInternalState) {
+          
+          Future<void> selectDate() async {
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)), // Default to 18 years ago
+              firstDate: DateTime(1900),
+              lastDate: DateTime.now(),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: AppColors.brandGreen,
+                      onPrimary: Colors.white,
+                      onSurface: Colors.black,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null && picked != selectedDob) {
+              setInternalState(() {
+                selectedDob = picked;
+                dobCtrl.text = DateFormat('MMMM dd, yyyy').format(picked);
+              });
+            }
+          }
           return AlertDialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -493,11 +523,19 @@ class _PatientProfileTab extends StatelessWidget {
                         labelText: "Last Name", border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: dobCtrl,
-                    decoration: const InputDecoration(
-                        labelText: "Date of Birth (YYYY-MM-DD)",
-                        border: OutlineInputBorder()),
+                  InkWell(
+                    onTap: selectDate,
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: dobCtrl,
+                        decoration: const InputDecoration(
+                          labelText: "Date of Birth",
+                          hintText: "Select birth date",
+                          prefixIcon: Icon(Icons.calendar_today),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -507,7 +545,7 @@ class _PatientProfileTab extends StatelessWidget {
                     items: ["Male", "Female", "Other"].map((g) {
                       return DropdownMenuItem(value: g, child: Text(g));
                     }).toList(),
-                    onChanged: (val) => setState(() => selectedGender = val!),
+                    onChanged: (val) => setInternalState(() => selectedGender = val!),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -536,7 +574,7 @@ class _PatientProfileTab extends StatelessWidget {
                     ].map((r) {
                       return DropdownMenuItem(value: r, child: Text(r));
                     }).toList(),
-                    onChanged: (val) => setState(() => relation = val!),
+                    onChanged: (val) => setInternalState(() => relation = val!),
                   ),
                 ],
               ),
@@ -562,7 +600,7 @@ class _PatientProfileTab extends StatelessWidget {
                     middleInitial: "",
                     sitio: activeUser.sitio, // Inherit from parent
                     pinCode: activeUser.pinCode, // Inherit from parent
-                    dateOfBirth: DateTime.parse(dobCtrl.text),
+                    dateOfBirth: selectedDob ?? DateTime.now(),
                     gender: selectedGender,
                     phoneNumber: phoneCtrl.text,
                     relation: relation,

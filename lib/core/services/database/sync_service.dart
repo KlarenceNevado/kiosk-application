@@ -77,12 +77,12 @@ class SyncService with WidgetsBindingObserver {
   SupabaseClient get supabase => Supabase.instance.client;
 
   // --- PUBLIC STREAMS (Delegated) ---
-  Stream<void> get announcementStream => systemHandler.announcementStream;
+  Stream<List<Map<String, dynamic>>> get announcementStream => systemHandler.announcementStream;
   Stream<Map<String, dynamic>> get newAnnouncementStream => systemHandler.newAnnouncementStream;
   Stream<Map<String, dynamic>> get newVitalStream => vitalsHandler.newRecordStream;
   Stream<Map<String, dynamic>> get newAlertStream => systemHandler.newAlertStream;
-  Stream<void> get scheduleStream => systemHandler.scheduleStream;
-  Stream<void> get alertStream => systemHandler.alertStream;
+  Stream<List<Map<String, dynamic>>> get scheduleStream => systemHandler.scheduleStream;
+  Stream<List<Map<String, dynamic>>> get alertStream => systemHandler.alertStream;
   Stream<void> get patientStream => patientHandler.stream;
   Stream<void> get vitalsStream => vitalsHandler.stream;
 
