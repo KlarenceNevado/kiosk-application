@@ -28,4 +28,5 @@ class AppRoutes {
   static const String patientDashboard = '/patient/dashboard';
   static const String patientHome = '/patient/home';
   static const String patientSplash = '/patient/splash';
+  static const String publicResult = '/results/:id';
 }

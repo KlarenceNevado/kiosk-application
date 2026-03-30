@@ -196,6 +196,19 @@ class VitalsSyncHandler extends SyncHandler {
     }
   }
 
+  /// NEW: Fetch a single record by its cloud ID (for QR Deep Linking)
+  Future<VitalSigns?> fetchVitalSignById(String id) async {
+    try {
+      final data = await supabase.from('vitals').select().eq('id', id).single();
+      // We prepare it for 'offline-ready' logic which also handles decryption
+      final processed = _prepareRowForSqlite(data);
+      return VitalSigns.fromMap(processed);
+    } catch (e) {
+      debugPrint("❌ VitalsSyncHandler: fetchVitalSignById Error: $e");
+      return null;
+    }
+  }
+
   Future<List<VitalSigns>> fetchPatientVitalsLocal(String userId) async {
     return await dbHelper.getRecordsByUserId(userId);
   }

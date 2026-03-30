@@ -2,6 +2,9 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'dart:math';
 
 class EncryptionService {
   static final EncryptionService _instance = EncryptionService._internal();
@@ -150,5 +153,22 @@ class EncryptionService {
   /// Returns the raw primary key bytes as a string.
   String getSecureKey() {
     return _primaryKey?.base64 ?? "";
+  }
+
+  // --- NEW: ZERO-KNOWLEDGE HASHING ---
+
+  /// Generates a random 16-byte salt for a new user.
+  String generateSalt() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (i) => random.nextInt(256));
+    return base64.encode(bytes);
+  }
+
+  /// Hashes a PIN with a salt using SHA-256.
+  /// This is one-way and cannot be reversed.
+  String hashPin(String pin, String salt) {
+    final bytes = utf8.encode(pin + salt);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
   }
 }

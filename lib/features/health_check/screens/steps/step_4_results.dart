@@ -7,11 +7,13 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/config/routes.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../../../core/widgets/vital_sign_display.dart';
+import '../../../../core/utils/vital_validator.dart';
 
 // LOGIC & DATA
 import '../../logic/health_wizard_provider.dart';
 import '../../../user_history/domain/i_history_repository.dart';
 import '../../../auth/domain/i_auth_repository.dart';
+import '../../../../core/services/database/sync_service.dart';
 
 class Step4Results extends StatefulWidget {
   const Step4Results({super.key});
@@ -20,38 +22,55 @@ class Step4Results extends StatefulWidget {
   State<Step4Results> createState() => _Step4ResultsState();
 }
 
-class _Step4ResultsState extends State<Step4Results> {
+class _Step4ResultsState extends State<Step4Results>
+    with SingleTickerProviderStateMixin {
   bool _isSaving = false;
+  late AnimationController _animationController;
+  late List<Animation<double>> _cardAnimations;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _cardAnimations = List.generate(5, (index) {
+      final start = index * 0.15;
+      final end = start + 0.4;
+      return CurvedAnimation(
+        parent: _animationController,
+        curve: Interval(start, end.clamp(0.0, 1.0), curve: Curves.easeOutBack),
+      );
+    });
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleSave() async {
     setState(() => _isSaving = true);
-
     try {
-      // 1. Get Current User ID
       final authRepo = context.read<IAuthRepository>();
       final currentUser = authRepo.currentUser;
+      if (currentUser == null) throw Exception("No user logged in");
 
-      if (currentUser == null) {
-        throw Exception("No user logged in");
-      }
-
-      // 2. Stop Hardware
       context.read<HealthWizardProvider>().stopHealthCheck();
-
-      // 3. Generate Data Packet with User ID
       final result = context
           .read<HealthWizardProvider>()
           .generateFinalResult(currentUser.id);
 
-      // 4. Save to SQLite
       await context.read<IHistoryRepository>().addRecord(result);
+      SyncService().triggerSync();
 
-      // 5. Navigate
-      if (mounted) {
-        context.go(AppRoutes.summary);
-      }
+      if (mounted) context.go(AppRoutes.summary);
     } catch (e) {
-      debugPrint("Save Error: $e");
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
@@ -64,92 +83,119 @@ class _Step4ResultsState extends State<Step4Results> {
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
 
-    // ... (Rest of UI build method remains same as previous version)
-    // Just copying the essential parts to keep response concise,
-    // but the key logic change is in _handleSave above.
-
     final int heartRate = provider.currentHeartRate;
-    final String bp =
-        "${provider.currentSystolic}/${provider.currentDiastolic}";
-    final String spo2 = "${provider.currentSpO2}";
-    final String temp = provider.currentTemp.toStringAsFixed(1);
-    final String bmi = provider.bmi.toStringAsFixed(1);
+    final int sys = provider.currentSystolic;
+    final int dia = provider.currentDiastolic;
+    final int spo2 = provider.currentSpO2;
+    final double temp = provider.currentTemp;
+    final double bmi = provider.bmi;
 
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        children: [
-          const Text(
-            "Your Results",
-            style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark),
-          ),
-          const SizedBox(height: 40),
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              childAspectRatio: 2.5,
-              crossAxisSpacing: 20,
-              mainAxisSpacing: 20,
-              children: [
-                _buildResultCard(
-                    child: VitalSignDisplay(
-                        icon: Icons.favorite,
-                        iconColor: Colors.red,
-                        label: "Heart Rate",
-                        value: "$heartRate",
-                        unit: "bpm")),
-                _buildResultCard(
-                    child: VitalSignDisplay(
-                        icon: Icons.speed,
-                        iconColor: Colors.blue,
-                        label: "Blood Pressure",
-                        value: bp,
-                        unit: "mmHg")),
-                _buildResultCard(
-                    child: VitalSignDisplay(
-                        icon: Icons.air,
-                        iconColor: Colors.cyan,
-                        label: "Oxygen",
-                        value: spo2,
-                        unit: "%")),
-                _buildResultCard(
-                    child: VitalSignDisplay(
-                        icon: Icons.thermostat,
-                        iconColor: Colors.orange,
-                        label: "Temperature",
-                        value: temp,
-                        unit: "°C")),
-                _buildResultCard(
-                    child: VitalSignDisplay(
-                        icon: Icons.scale,
-                        iconColor: Colors.purple,
-                        label: "BMI Score",
-                        value: bmi,
-                        unit: provider.bmiCategory)),
-              ],
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FlowAnimatedButton(
-                child: _buildButtonContainer(Colors.white, "Discard",
-                    Colors.red, () => context.go(AppRoutes.home)),
+    // Evaluations
+    final hrEval = VitalValidator.evaluateHR(heartRate);
+    final bpEval = VitalValidator.evaluateBP(sys, dia);
+    final oxyEval = VitalValidator.evaluateSpO2(spo2);
+    final tempEval = VitalValidator.evaluateTemp(temp);
+    final bmiEval = VitalValidator.evaluateBMI(bmi);
+
+    final results = [
+      _ResultData(Icons.favorite_rounded, "Heart Rate", "$heartRate", "bpm", hrEval),
+      _ResultData(Icons.speed_rounded, "Blood Pressure", "$sys/$dia", "mmHg", bpEval),
+      _ResultData(Icons.air_rounded, "Oxygen", "$spo2", "%", oxyEval),
+      _ResultData(Icons.thermostat_rounded, "Temperature", temp.toStringAsFixed(1), "°C", tempEval),
+      _ResultData(Icons.scale_rounded, "BMI Score", bmi.toStringAsFixed(1), "kg/m²", bmiEval),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 40),
+        child: Column(
+          children: [
+            // Dashboard Header
+            FadeTransition(
+              opacity: _animationController,
+              child: Column(
+                children: [
+                  const Text(
+                    "Your Health Dashboard",
+                    style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.brandDark,
+                        letterSpacing: -0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Real-time analysis complete. Review your vitals below.",
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
               ),
-              const SizedBox(width: 24),
-              if (_isSaving)
-                const CircularProgressIndicator(color: AppColors.brandGreen)
-              else
-                FlowAnimatedButton(
-                  child: _buildButtonContainer(AppColors.brandGreen,
-                      "Save & Finish", Colors.white, _handleSave),
+            ),
+            const SizedBox(height: 48),
+
+            // Animated Results Grid
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1.3,
+                  crossAxisSpacing: 24,
+                  mainAxisSpacing: 24,
                 ),
-            ],
-          ),
-        ],
+                itemCount: results.length,
+                itemBuilder: (context, index) {
+                  final data = results[index];
+                  return AnimatedBuilder(
+                    animation: _cardAnimations[index],
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, 50 * (1 - _cardAnimations[index].value)),
+                        child: Opacity(
+                          opacity: _cardAnimations[index].value,
+                          child: VitalSignDisplay(
+                            icon: data.icon,
+                            label: data.label,
+                            value: data.value,
+                            unit: data.unit,
+                            evaluation: data.evaluation,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+
+            // Action Buttons
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FlowAnimatedButton(
+                    child: _buildButtonContainer(Colors.white, "Discard",
+                        Colors.red, () => context.go(AppRoutes.home)),
+                  ),
+                  const SizedBox(width: 32),
+                  if (_isSaving)
+                    const CircularProgressIndicator(color: AppColors.brandGreen)
+                  else
+                    FlowAnimatedButton(
+                      child: _buildButtonContainer(AppColors.brandGreen,
+                          "Save & Finish", Colors.white, _handleSave),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -191,22 +237,14 @@ class _Step4ResultsState extends State<Step4Results> {
       ),
     );
   }
+}
 
-  Widget _buildResultCard({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
-        ],
-      ),
-      child: Center(child: child),
-    );
-  }
+class _ResultData {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String unit;
+  final VitalEvaluation evaluation;
+
+  _ResultData(this.icon, this.label, this.value, this.unit, this.evaluation);
 }

@@ -11,10 +11,15 @@ class AppEnvironment {
 
   AppMode _mode = AppMode.kiosk; // Default
   bool _useSimulation = true; // Default to true so user can work without hardware
+  String _pwaUrl = "https://islaverde.health"; // Default fallback
 
 
   void setMode(AppMode mode) {
     _mode = mode;
+  }
+
+  void setPwaUrl(String url) {
+    _pwaUrl = url;
   }
 
   void setSimulation(bool simulate) {
@@ -23,6 +28,7 @@ class AppEnvironment {
 
   AppMode get mode => _mode;
   bool get useSimulation => _useSimulation;
+  String get pwaUrl => _pwaUrl;
 
   bool get isKiosk => _mode == AppMode.kiosk;
   bool get isDesktopAdmin => _mode == AppMode.desktopAdmin;

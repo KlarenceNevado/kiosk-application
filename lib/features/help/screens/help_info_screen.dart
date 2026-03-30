@@ -145,8 +145,8 @@ class HelpInfoScreen extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 40),
 
-          // --- 3. TROUBLESHOOTING GUIDE (New Section) ---
-          const Text("Troubleshooting",
+          // --- 3. TROUBLESHOOTING GUIDE ---
+          const Text("Troubleshooting & System Status",
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -154,25 +154,30 @@ class HelpInfoScreen extends StatelessWidget {
           const SizedBox(height: 24),
 
           const FaqTile(
-            question: "The sensor isn't reading.",
+            question: "The sensor isn't starting or reading.",
             answer:
-                "Ensure the sensor is plugged in. For the finger clip, make sure your finger is fully inserted. For the IR sensor, move closer (5cm).",
+                "Ensure the device (BP Cuff or finger clip) is properly connected and there are no loose cables. For Temperature, stay 5cm away. For BP, keep the cuff at heart level and do not talk.",
           ),
           const FaqTile(
-            question: "My Blood Pressure reading failed.",
+            question: "My login failing with 'Security Lock'.",
             answer:
-                "This happens if you move or talk. Relax your arm on the table, keep the cuff at heart level, and try again.",
+                "For your protection, the system locks accounts for 5 minutes after 5 failed PIN attempts. Please wait for the lockout to expire before trying again.",
           ),
           const FaqTile(
-            question: "The results seem incorrect.",
+            question: "What does the 'Sync' icon mean?",
             answer:
-                "External factors like stress, caffeine, or running can affect results. Rest for 5 minutes and try again.",
+                "🟢 Green: All data is safely backed up to the cloud.\n🟡 Yellow: Data is saved locally but waiting for internet to sync.\n🔴 Red: There is a connection issue; alert a health worker.",
+          ),
+          const FaqTile(
+            question: "The touch screen is not responsive.",
+            answer:
+                "Ensure your hands are dry. If the system hangs, please ask the Barangay Health Worker (BHW) to restart the terminal.",
           ),
 
           const SizedBox(height: 40),
 
           // --- 4. GENERAL FAQs ---
-          const Text("Common Questions",
+          const Text("Security & Privacy FAQ",
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -182,12 +187,22 @@ class HelpInfoScreen extends StatelessWidget {
           const FaqTile(
             question: "Is my personal data safe?",
             answer:
-                "Yes. Your data is stored locally on this secure kiosk and is only accessible by authorized health personnel.",
+                "Yes. We use 'Zero-Knowledge' encryption. Your PIN is stored as a non-reversible SHA-256 hash. Even we cannot see your raw PIN. All data is handled according to the Philippine Data Privacy Act (DPA 2012).",
           ),
           const FaqTile(
-            question: "Can I get a copy of my results?",
+            question: "I forgot my PIN. What should I do?",
             answer:
-                "Yes! At the end of the check-up, you can print a receipt or scan a QR code to save a digital copy.",
+                "Because of our security model, we cannot 'recover' your PIN. Please see the authorized Barangay Health Worker (BHW) to verify your identity and help you reset your account access.",
+          ),
+          const FaqTile(
+            question: "Where can I see my historical results?",
+            answer:
+                "Your results are instantly synced to your Patient Portal. Scan the QR code at the end of your session or visit the Isla Verde Health Web App to see your full history.",
+          ),
+          const FaqTile(
+            question: "Can I register my family members?",
+            answer:
+                "Yes! You can register as a Head of Household and add dependents. Their data will be linked to your account for easy health monitoring.",
           ),
 
           const SizedBox(height: 60),
@@ -207,16 +222,16 @@ class HelpInfoScreen extends StatelessWidget {
                 color: Colors.transparent,
                 child: Column(
                   children: [
-                    const Icon(Icons.settings_system_daydream,
-                        color: Colors.grey, size: 24),
+                    const Icon(Icons.verified_user_rounded,
+                        color: AppColors.brandGreen, size: 24),
                     const SizedBox(height: 8),
                     Text(
-                      "System Version 1.0.2 • Secure Build",
+                      "System Version 3.1.0 • Secure Build",
                       style: TextStyle(
                           color: Colors.grey[400], fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      "(Authorized Personnel Only)",
+                      "(Zero-Knowledge Virtual Vault Active)",
                       style: TextStyle(color: Colors.grey[300], fontSize: 12),
                     ),
                   ],

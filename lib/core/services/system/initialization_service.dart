@@ -22,6 +22,7 @@ import '../system/system_log_service.dart';
 import '../hardware/sensor_manager.dart';
 import '../hardware/sensor_service_interface.dart';
 import 'background_service_helper.dart';
+import '../database/database_helper.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
@@ -63,58 +64,74 @@ class InitializationService {
     await EncryptionService().init();
 
     // 5. Initialize Supabase (Offline-First Cloud Sync)
-    await _initSupabase();
+    try {
+      await _initSupabase().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] Supabase Initialization Failed/Timed Out: $e");
+      // We continue anyway so the app can run in offline mode.
+    }
 
     // 6. Mode-specific Services (Resilient Startup)
     if (AppEnvironment().isMobilePatient) {
-       try {
-         debugPrint("📦 [InitializationService] Phase: Mobile Patient Setup");
-         // 6.1. Permissions
+       // CRITICAL: Skip UI/Foreground-only services if running in a background isolate
+       if (DatabaseHelper.isBackground) {
+         debugPrint("📢 [InitializationService] Isolate write-mode: SUPPRESSED (Background Mode).");
+       } else {
+         debugPrint("📦 [InitializationService] Phase: Mobile Patient Setup (Main Isolate)");
          try {
+           // 6.1. Permissions (Requires UI Thread)
            await _requestAppPermissions();
-         } catch (e) {
-           debugPrint("⚠️ [InitializationService] Permissions Error: $e");
-         }
-         
-         // 6.2. Notifications
-         try {
+           
+           // 6.2. Notifications (Requires UI Thread)
            await _initNotifications();
-         } catch (e) {
-           debugPrint("⚠️ [InitializationService] Notifications Error: $e");
-         }
 
-         // 6.3. Background service (Non-blocking)
-         try {
+           // 6.3. Background service (Must only be initialized from Main Isolate)
            await BackgroundServiceHelper.initializeService();
-           // deduplication: tell background service we are active in UI
            FlutterBackgroundService().invoke('set_ui_active', {'active': true});
          } catch (e) {
-           debugPrint("❌ [InitializationService] Background Service Critical Error: $e");
+           debugPrint("⚠️ [InitializationService] Mobile Setup Error: $e");
          }
-       } catch (e) {
-         debugPrint("⚠️ [InitializationService] Global Mobile Setup Error: $e");
        }
+    } else {
+       debugPrint("📦 [InitializationService] Phase: Hardware/Kiosk Setup (Skipping Background Service)");
     }
 
     // 7. UI Configuration
-    _configureUI(mode);
+    try {
+      _configureUI(mode);
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] UI Configuration Error: $e");
+    }
 
     // 8. Desktop Window Configuration (Linux/Windows/macOS)
     if (AppEnvironment().isDesktopAdmin || AppEnvironment().mode == AppMode.kiosk) {
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        await _initDesktopWindow();
+        try {
+          debugPrint("🪟 [InitializationService] Configuring Desktop Window...");
+          await _initDesktopWindow().timeout(const Duration(seconds: 5));
+        } catch (e) {
+          debugPrint("⚠️ [InitializationService] Desktop Window Initialization Error/Timeout: $e");
+        }
       }
     }
 
     // 9. Sync & Connectivity Services
-    ConnectionManager().startMonitoring();
-    if (!AppEnvironment().isDesktopAdmin) {
-      SyncService().startSyncLoop();
+    try {
+      ConnectionManager().startMonitoring();
+      if (!AppEnvironment().isDesktopAdmin) {
+        SyncService().startSyncLoop();
+      }
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] Sync Startup Error: $e");
     }
 
     // 10. Initial Uptime & Health Log (H2 Validation)
     if (mode == AppMode.kiosk) {
-      _logInitialHealth();
+        try {
+          _logInitialHealth();
+        } catch (e) {
+          debugPrint("⚠️ [InitializationService] Health Log Error: $e");
+        }
     }
 
     debugPrint("✅ [InitializationService] Initialization complete.");
@@ -199,6 +216,13 @@ class InitializationService {
       } catch (e2) {
         debugPrint("⚠️ InitializationService (DotEnv): Both load attempts failed. Using hardcoded fallbacks.");
       }
+    }
+
+    // Capture PWA URL from env or fallback
+    final pwaUrl = dotenv.env['PWA_URL'];
+    if (pwaUrl != null && pwaUrl.isNotEmpty) {
+      AppEnvironment().setPwaUrl(pwaUrl);
+      debugPrint("📢 InitializationService: PWA Domain set to $pwaUrl");
     }
   }
 

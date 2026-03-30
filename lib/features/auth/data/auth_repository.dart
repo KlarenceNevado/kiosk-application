@@ -23,7 +23,15 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   bool _isLoading = false;
   bool _isRefreshing = false; // NEW: Prevent concurrent refreshes
   StreamSubscription? _patientSyncSub;
-  Timer? _refreshDebounce; // NEW: Debounce multiple sync events
+  Timer? _refreshDebounce; 
+  
+  // NEW: SECURITY HARDENING
+  final Map<String, int> _failedAttempts = {};
+  DateTime? _lockoutUntil;
+  Timer? _sessionTimeout;
+  static const int _maxAttempts = 5;
+  static const int _lockoutMinutes = 5;
+  static const int _sessionMinutes = 10;
 
   // STORAGE KEYS
   static const String _migrationKey = 'sqlite_migration_done';
@@ -321,9 +329,66 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       familyIds: getLinkedAccounts().map((u) => u.id).toList(),
     );
 
+    _resetSessionTimer();
     _isLoading = false;
     notifyListeners();
     return null;
+  }
+
+  // --- NEW: SESSION & LOCKOUT HELPERS ---
+
+  void _resetSessionTimer() {
+    _sessionTimeout?.cancel();
+    _sessionTimeout = Timer(const Duration(minutes: _sessionMinutes), () {
+      debugPrint("🕰️ Session Timeout ($_sessionMinutes minutes): Logging out...");
+      logout();
+    });
+  }
+
+  Future<bool> _isLockedOut() async {
+    if (_lockoutUntil != null) {
+      if (DateTime.now().isBefore(_lockoutUntil!)) {
+        return true;
+      } else {
+        _lockoutUntil = null;
+        _failedAttempts.clear();
+      }
+    }
+    return false;
+  }
+
+  void _recordFailure(String phone) {
+    _failedAttempts[phone] = (_failedAttempts[phone] ?? 0) + 1;
+    if (_failedAttempts[phone]! >= _maxAttempts) {
+      _lockoutUntil = DateTime.now().add(const Duration(minutes: _lockoutMinutes));
+      debugPrint("🚨 BRUTE FORCE DETECTED: Locking out phone $phone for $_lockoutMinutes minutes.");
+    }
+  }
+
+  /// Zero-Knowledge PIN Verification with Legacy Fallback
+  Future<bool> _verifyUserPin(User user, String enteredPin) async {
+    final security = EncryptionService();
+    
+    // 1. If user already has a hash (Modern Security)
+    if (user.pinHash != null && user.pinSalt != null) {
+      final challengeHash = security.hashPin(enteredPin, user.pinSalt!);
+      return challengeHash == user.pinHash;
+    }
+
+    // 2. Legacy Fallback: Verify against encrypted pinCode
+    if (user.pinCode == enteredPin) {
+      // UPGRADE: Immediate auto-migration to Hash
+      debugPrint("🔐 AuthRepository: Migrating legacy user ${user.id} to SHA-256 Hash.");
+      final newSalt = security.generateSalt();
+      final newHash = security.hashPin(enteredPin, newSalt);
+      final upgradedUser = user.copyWith(pinHash: newHash, pinSalt: newSalt);
+      
+      // Persist the upgrade
+      await DatabaseHelper.instance.updatePatient(upgradedUser);
+      return true;
+    }
+
+    return false;
   }
 
 
@@ -378,56 +443,80 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   // --- MOBILE COMPANION APP LOGIN ---
   @override
   Future<String?> loginPatientDevice(String phone, String pin) async {
+    if (await _isLockedOut()) {
+      return "Security Lock: Too many failed attempts. Please try again in $_lockoutMinutes minutes.";
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
+      // 1. Authenticate via Cloud (Supabase)
+      // Standard auth (handles initial handshake)
       final cloudUser = await SyncService().authenticatePatient(phone, pin);
+      
       if (cloudUser != null) {
-        // Fetch Dependents for the logged-in parent
-        final dependents = await SyncService().fetchDependents(cloudUser.id);
+        // SECONDARY SECURITY: Zero-Knowledge Match Check
+        // On cloudUser, we check if the PIN matches (and migrate if needed)
+        final pinMatch = await _verifyUserPin(cloudUser, pin);
+        if (!pinMatch) {
+          _recordFailure(phone);
+          _isLoading = false;
+          notifyListeners();
+          return "Identity Verification Failed. Invalid PIN.";
+        }
 
-        _users = [cloudUser, ...dependents];
+        _failedAttempts.remove(phone); // Success: Reset failure count
+        
+        // Ensure the cloud user has a hash locally
+        var localUser = cloudUser;
+        if (localUser.pinHash == null) {
+           final security = EncryptionService();
+           final salt = security.generateSalt();
+           final hash = security.hashPin(pin, salt);
+           localUser = localUser.copyWith(pinHash: hash, pinSalt: salt);
+        }
 
-        // Save to SQLite for persistence
-        await DatabaseHelper.instance.insertPatient(cloudUser);
+        // Fetch Dependents
+        final dependents = await SyncService().fetchDependents(localUser.id);
+        _users = [localUser, ...dependents];
+
+        // Save to SQLite
+        await DatabaseHelper.instance.insertPatient(localUser);
         for (final dependent in dependents) {
           await DatabaseHelper.instance.insertPatient(dependent);
         }
 
-        _currentUser = cloudUser;
+        _currentUser = localUser;
         _isLoading = false;
-        // Start background listeners
+        
+        // Start Security Session
         ChatListenerService().startListening(_currentUser!.id);
         SystemLogService().startSession(_currentUser!.id);
-        SystemAlertListenerService().startListening(
-          userRole: 'patient',
-          sitio: _currentUser!.sitio,
-        );
-
+        SystemAlertListenerService().startListening(userRole: 'patient', sitio: _currentUser!.sitio);
+        SyncService().syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
+        
+        _resetSessionTimer();
         notifyListeners();
-
-        // Sync all family vitals for offline access
-        SyncService()
-            .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
-
-        return null; // Navigation will trigger
+        return null; 
       } else {
+        _recordFailure(phone);
         _isLoading = false;
         notifyListeners();
-        return "Invalid Phone Number or PIN. Please try again or contact your BHW.";
+        return "Invalid Phone Number or PIN. Remaining attempts: ${_maxAttempts - (_failedAttempts[phone] ?? 0)}";
       }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return "Network Error: Could not reach the server.";
+      return "Identity Verification Failed ($e). Please check your connection.";
     }
   }
 
-  // Legacy locking logic removed as there is no password to fail.
-
   @override
   Future<void> logout() async {
+    _sessionTimeout?.cancel();
+    _sessionTimeout = null;
+    
     final mode = AppEnvironment().mode;
 
     if (_currentUser != null) {

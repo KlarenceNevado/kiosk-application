@@ -29,6 +29,8 @@ class PatientDao extends BaseDao {
           ? 1
           : 0,
       'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
+      'pin_hash': map['pin_hash'],
+      'pin_salt': map['pin_salt'],
     };
 
     await db.insert('patients', encryptedMap,
@@ -42,6 +44,8 @@ class PatientDao extends BaseDao {
       final decrypted = Map<String, dynamic>.from(json);
       decrypted['phoneNumber'] = decrypt(json['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = decrypt(json['pin_code']?.toString() ?? '');
+      decrypted['pin_hash'] = json['pin_hash'];
+      decrypted['pin_salt'] = json['pin_salt'];
       return User.fromMap(decrypted);
     }).toList();
   }
@@ -52,6 +56,8 @@ class PatientDao extends BaseDao {
       final decrypted = Map<String, dynamic>.from(maps.first);
       decrypted['phoneNumber'] = decrypt(maps.first['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = decrypt(maps.first['pin_code']?.toString() ?? '');
+      decrypted['pin_hash'] = maps.first['pin_hash'];
+      decrypted['pin_salt'] = maps.first['pin_salt'];
       return User.fromMap(decrypted);
     }
     return null;
@@ -80,6 +86,8 @@ class PatientDao extends BaseDao {
           ? 1
           : 0,
       'is_synced': 0, // Mark for re-sync
+      'pin_hash': map['pin_hash'],
+      'pin_salt': map['pin_salt'],
     };
     await db.update('patients', encryptedMap,
         where: 'id = ?', whereArgs: [user.id]);
@@ -107,6 +115,8 @@ class PatientDao extends BaseDao {
       final decrypted = Map<String, dynamic>.from(map);
       decrypted['phoneNumber'] = decrypt(map['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = decrypt(map['pin_code']?.toString() ?? '');
+      decrypted['pin_hash'] = map['pin_hash'];
+      decrypted['pin_salt'] = map['pin_salt'];
       return User.fromMap(decrypted);
     }).toList();
   }

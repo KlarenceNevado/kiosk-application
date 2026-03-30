@@ -7,17 +7,19 @@ class User {
   final String lastName;
   final String sitio;
   final String phoneNumber;
-  final String pinCode; // NEW: Mobile Companion Auth
-  final DateTime dateOfBirth; // NEW
-  final String gender; // NEW
-  final String? parentId; // NEW: Family Dependents mapping
+  final String pinCode; // LEGACY: For migration only
+  final String? pinHash; // NEW: One-way security
+  final String? pinSalt; // NEW: Unique user salt
+  final DateTime dateOfBirth; 
+  final String gender; 
+  final String? parentId; 
   final bool isSynced;
   final DateTime? updatedAt;
   final bool isDeleted;
-  final bool isActive; // NEW: Archiving support
+  final bool isActive; 
   final String? relation; 
   final String role; 
-  final String? deviceToken; // NEW: FCM/Push Token
+  final String? deviceToken;
 
   User({
     required this.id,
@@ -27,6 +29,8 @@ class User {
     required this.sitio,
     required this.phoneNumber,
     required this.pinCode,
+    this.pinHash,
+    this.pinSalt,
     required this.dateOfBirth,
     required this.gender,
     this.parentId,
@@ -65,6 +69,8 @@ class User {
       'sitio': sitio,
       'phoneNumber': phoneNumber,
       'pinCode': pinCode,
+      'pin_hash': pinHash,
+      'pin_salt': pinSalt,
       'dateOfBirth': dateOfBirth.toIso8601String(),
       'gender': gender,
       'parentId': parentId,
@@ -95,6 +101,8 @@ class User {
       sitio: map['sitio'] ?? '',
       phoneNumber: map['phoneNumber'] ?? map['phone_number'] ?? '',
       pinCode: map['pinCode'] ?? map['pin_code'] ?? '123456',
+      pinHash: map['pin_hash'] ?? map['pinHash'],
+      pinSalt: map['pin_salt'] ?? map['pinSalt'],
       dateOfBirth:
           DateTime.tryParse(map['dateOfBirth'] ?? map['date_of_birth'] ?? '') ??
               DateTime.now(),
@@ -120,6 +128,8 @@ class User {
     String? sitio,
     String? phoneNumber,
     String? pinCode,
+    String? pinHash,
+    String? pinSalt,
     DateTime? dateOfBirth,
     String? gender,
     String? parentId,
@@ -139,6 +149,8 @@ class User {
       sitio: sitio ?? this.sitio,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       pinCode: pinCode ?? this.pinCode,
+      pinHash: pinHash ?? this.pinHash,
+      pinSalt: pinSalt ?? this.pinSalt,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       gender: gender ?? this.gender,
       parentId: parentId ?? this.parentId,

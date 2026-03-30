@@ -31,6 +31,8 @@ class DatabaseHelper {
     debugPrint("📂 [DatabaseHelper] Mode set to: ${_isBackground ? 'BACKGROUND' : 'MAIN UI'}");
   }
 
+  static bool get isBackground => _isBackground;
+
   late final PatientDao patientDao;
   late final VitalsDao vitalsDao;
   late final SystemDao systemDao;
@@ -92,7 +94,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 21, // BUMPED TO 21 FOR PUSH TOKEN SUPPORT
+      version: 22, // BUMPED TO 22 FOR PIN HASHING (Zero Knowledge)
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -134,7 +136,9 @@ class DatabaseHelper {
       is_active INTEGER NOT NULL DEFAULT 1,
       is_synced INTEGER NOT NULL DEFAULT 0,
       relation TEXT,
-      device_token TEXT
+      device_token TEXT,
+      pin_hash TEXT,
+      pin_salt TEXT
     )
     ''');
 
@@ -487,10 +491,11 @@ class DatabaseHelper {
       debugPrint("🚀 Database Upgraded to Version 18 (System Logs Table)");
     }
     
-    if (oldVersion < 21) {
+    if (oldVersion < 22) {
       try {
-        await db.execute('ALTER TABLE patients ADD COLUMN device_token TEXT');
-        debugPrint("🚀 Database Upgraded to Version 21 (Push Token Architecture)");
+        await db.execute('ALTER TABLE patients ADD COLUMN pin_hash TEXT');
+        await db.execute('ALTER TABLE patients ADD COLUMN pin_salt TEXT');
+        debugPrint("🚀 Database Upgraded to Version 22 (Zero-Knowledge Architecture)");
       } catch (_) {}
     }
   }
@@ -743,6 +748,8 @@ class DatabaseHelper {
       'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
       'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
       'device_token': map['device_token'] ?? map['deviceToken'],
+      'pin_hash': map['pin_hash'] ?? map['pinHash'],
+      'pin_salt': map['pin_salt'] ?? map['pinSalt'],
     };
 
     await db.insert('patients', encryptedMap,
@@ -757,6 +764,8 @@ class DatabaseHelper {
       final decrypted = Map<String, dynamic>.from(json);
       decrypted['phoneNumber'] = _decrypt(json['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(json['pin_code']?.toString() ?? '');
+      decrypted['pin_hash'] = json['pin_hash'];
+      decrypted['pin_salt'] = json['pin_salt'];
       decrypted['deviceToken'] = json['device_token'];
       // Ensure model mapping works with snake_case from DB
       return User.fromMap(decrypted);
@@ -770,6 +779,8 @@ class DatabaseHelper {
       final decrypted = Map<String, dynamic>.from(maps.first);
       decrypted['phoneNumber'] = _decrypt(maps.first['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(maps.first['pin_code']?.toString() ?? '');
+      decrypted['pin_hash'] = maps.first['pin_hash'];
+      decrypted['pin_salt'] = maps.first['pin_salt'];
       decrypted['deviceToken'] = maps.first['device_token'];
       return User.fromMap(decrypted);
     }
@@ -797,6 +808,8 @@ class DatabaseHelper {
       'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
       'is_synced': 0, // Mark for re-sync
       'device_token': map['device_token'] ?? map['deviceToken'],
+      'pin_hash': map['pin_hash'] ?? map['pinHash'],
+      'pin_salt': map['pin_salt'] ?? map['pinSalt'],
     };
     await db.update('patients', encryptedMap,
         where: 'id = ?', whereArgs: [user.id]);

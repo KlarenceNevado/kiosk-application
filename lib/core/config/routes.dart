@@ -34,6 +34,7 @@ import '../../features/patient/screens/patient_dashboard_screen.dart';
 import '../../features/patient/screens/patient_nav_shell.dart';
 import '../../features/mobile/screens/mobile_login_screen.dart';
 import '../../features/mobile/screens/mobile_splash_screen.dart';
+import '../../features/health_check/screens/public_results_screen.dart';
 
 import 'route_names.dart';
 export 'route_names.dart';
@@ -73,6 +74,10 @@ List<GoRoute> _sharedRoutes = [
   _fluidRoute(AppRoutes.patientLogin, const MobileLoginScreen()),
   _fluidRoute(AppRoutes.patientDashboard, const PatientDashboardScreen()),
   _fluidRoute(AppRoutes.patientHome, const PatientNavShell()),
+  _fluidRoute(AppRoutes.publicResult, (context, state) {
+    final id = state.pathParameters['id'] ?? '';
+    return PublicResultsScreen(recordId: id);
+  }),
 ];
 
 /// Helper for high-end fluid page transitions

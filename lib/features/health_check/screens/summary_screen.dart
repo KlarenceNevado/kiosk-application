@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 // CORE
 import '../../../core/constants/app_colors.dart';
@@ -10,11 +11,11 @@ import '../../../core/config/routes.dart';
 import '../../../core/widgets/flow_animated_button.dart';
 // NEW: Import the Medical Intelligence
 import '../../../core/utils/vital_validator.dart';
+import '../../../core/services/system/app_environment.dart';
 
 // DATA & SERVICES
 import '../../health_check/models/vital_signs_model.dart';
 import '../../user_history/domain/i_history_repository.dart';
-import '../../../core/services/system/pdf_report_service.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
@@ -61,10 +62,23 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   void _handlePdf(VitalSigns data) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Generating PDF Report..."),
-        duration: Duration(seconds: 2)));
-    await PdfReportService().generateAndOpenReport(data);
+    _showQrHandoverDialog(data);
+  }
+
+  void _showQrHandoverDialog(VitalSigns data) {
+    // STOP the auto-redirect timer while dialog is open
+    _timer?.cancel();
+
+    showDialog(
+      context: context,
+      builder: (context) => DigitalHandoverDialog(
+        data: data,
+        onClose: () {
+          Navigator.of(context).pop();
+          _startAutoRedirect(); // Resume countdown
+        },
+      ),
+    );
   }
 
 
@@ -213,8 +227,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       Expanded(
                           child: FlowAnimatedButton(
                               child: _buildActionButton(
-                                  Icons.picture_as_pdf_rounded,
-                                  "Download PDF Report",
+                              Icons.qr_code_scanner_rounded,
+                              "Get Digital Copy",
                                   () => _handlePdf(latestRecord),
                                   isPrimary: false))),
                       const SizedBox(width: 16),
@@ -345,6 +359,138 @@ class _SummaryScreenState extends State<SummaryScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- DIGITAL HANDOVER DIALOG ---
+class DigitalHandoverDialog extends StatelessWidget {
+  final VitalSigns data;
+  final VoidCallback onClose;
+
+  const DigitalHandoverDialog({
+    super.key,
+    required this.data,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Generate the PWA URL
+    final String resultUrl = "${AppEnvironment().pwaUrl}/results/${data.id}";
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      elevation: 24,
+      backgroundColor: Colors.white,
+      child: Container(
+        width: 480,
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 1. Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: AppColors.brandGreenLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.phonelink_ring_rounded, 
+                    color: AppColors.brandGreen, size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Digital Health Report", 
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark)),
+                      Text("Take your records with you", 
+                        style: TextStyle(fontSize: 14, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // 2. QR Code Frame
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))
+                ],
+              ),
+              child: QrImageView(
+                data: resultUrl,
+                version: QrVersions.auto,
+                size: 240.0,
+                gapless: false,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: AppColors.brandDark,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: AppColors.brandGreen,
+                ),
+                embeddedImage: const AssetImage('assets/icons/patient_icon.png'),
+                embeddedImageStyle: const QrEmbeddedImageStyle(
+                  size: Size(40, 40),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // 3. Instructions
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.camera_alt_outlined, color: Colors.grey),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      "Open your phone's CAMERA app and point it at the QR code to view your digital summary instantly.",
+                      style: TextStyle(fontSize: 14, color: AppColors.brandDark, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // 4. Close/Finish Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onClose,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Text("Got it, thanks!", 
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ),
       ),
     );

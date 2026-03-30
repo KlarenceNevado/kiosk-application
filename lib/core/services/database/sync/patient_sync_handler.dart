@@ -122,6 +122,8 @@ class PatientSyncHandler extends SyncHandler {
       'gender': user.gender,
       'date_of_birth': birthDate,
       'parent_id': user.parentId,
+      'pin_hash': user.pinHash,
+      'pin_salt': user.pinSalt,
       'updated_at': DateTime.now().toIso8601String(),
     };
 
@@ -142,7 +144,12 @@ class PatientSyncHandler extends SyncHandler {
       SecurityLogger.info("Sync: Successfully pushed patient ${user.id} to Supabase.");
       return syncedUser;
     } catch (e) {
-      SecurityLogger.error("Sync: Failed to push patient ${user.id} to Supabase: $e");
+      if (e.toString().contains('PGRST204') || e.toString().contains('pin_hash')) {
+        debugPrint("🚨 SECURITY SYNC BLOCKED: Supabase schema is missing 'pin_hash' or 'pin_salt'.");
+        debugPrint("👉 ACTION REQUIRED: Run the security hardening SQL script in Supabase Editor.");
+      } else {
+        SecurityLogger.error("Sync: Failed to push patient ${user.id} to Supabase: $e");
+      }
       
       final offlineUser = user.copyWith(isSynced: false);
       await dbHelper.insertPatient(offlineUser);
@@ -162,6 +169,8 @@ class PatientSyncHandler extends SyncHandler {
         'date_of_birth': birthDate,
         'gender': user.gender,
         'parent_id': user.parentId,
+        'pin_hash': user.pinHash,
+        'pin_salt': user.pinSalt,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
@@ -222,12 +231,12 @@ class PatientSyncHandler extends SyncHandler {
 
           try {
             final decPhone = dbHelper.decrypt(dbEncPhone);
-            final decPin = dbHelper.decrypt(dbEncPin);
 
-            if (decPhone == phone.trim() && decPin == pin.trim()) {
+            if (decPhone == phone.trim()) {
               final decryptedRow = Map<String, dynamic>.from(row);
               decryptedRow['phone_number'] = decPhone;
-              decryptedRow['pin_code'] = decPin;
+              
+              // We don't decrypt PIN anymore; hash/salt are verified in AuthRepo
               return User.fromMap(decryptedRow);
             }
           } catch (_) {
@@ -304,7 +313,7 @@ class PatientSyncHandler extends SyncHandler {
     'id', 'first_name', 'last_name', 'middle_initial', 'sitio',
     'phone_number', 'pin_code', 'date_of_birth', 'gender', 'parent_id',
     'avatar_url', 'relation', 'is_active', 'is_synced', 'is_deleted',
-    'created_at', 'updated_at',
+    'created_at', 'updated_at', 'pin_hash', 'pin_salt',
   };
 
   Map<String, dynamic> _prepareRowForSqlite(Map<String, dynamic> row) {
