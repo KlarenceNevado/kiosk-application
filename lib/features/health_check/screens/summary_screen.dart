@@ -379,7 +379,13 @@ class DigitalHandoverDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Generate the PWA URL
-    final String resultUrl = "${AppEnvironment().pwaUrl}/results/${data.id}";
+    // Robust URL construction for GitHub Pages (Hash Strategy)
+    String pwaBase = AppEnvironment().pwaUrl;
+    if (!pwaBase.contains('/#/')) {
+      pwaBase = pwaBase.endsWith('/') ? '$pwaBase#' : '$pwaBase/#';
+    }
+    // Ensure no double slashes after the hash
+    final String resultUrl = "${pwaBase.replaceAll(RegExp(r'/$'), '')}/results/${data.id}";
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),

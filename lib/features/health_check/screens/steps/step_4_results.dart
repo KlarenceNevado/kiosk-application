@@ -154,10 +154,11 @@ class _Step4ResultsState extends State<Step4Results>
                   return AnimatedBuilder(
                     animation: _cardAnimations[index],
                     builder: (context, child) {
+                      final animValue = _cardAnimations[index].value.clamp(0.0, 1.0);
                       return Transform.translate(
-                        offset: Offset(0, 50 * (1 - _cardAnimations[index].value)),
+                        offset: Offset(0, 50 * (1 - animValue)),
                         child: Opacity(
-                          opacity: _cardAnimations[index].value,
+                          opacity: animValue,
                           child: VitalSignDisplay(
                             icon: data.icon,
                             label: data.label,

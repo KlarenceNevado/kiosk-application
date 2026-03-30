@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:go_router/go_router.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 // CORE
-import '../../../core/constants/app_colors.dart';
-import '../../../core/config/routes.dart';
-import '../../../core/services/database/sync/vitals_sync_handler.dart';
-import '../../../core/utils/vital_validator.dart';
-import '../../../core/widgets/flow_animated_button.dart';
+import 'package:kiosk_application/core/constants/app_colors.dart';
+import 'package:kiosk_application/core/services/database/sync/vitals_sync_handler.dart';
+import 'package:kiosk_application/core/utils/vital_validator.dart';
+import 'package:kiosk_application/core/widgets/flow_animated_button.dart';
 
 // MODELS
-import '../models/vital_signs_model.dart';
+import 'package:kiosk_application/features/health_check/models/vital_signs_model.dart';
 
 class PublicResultsScreen extends StatefulWidget {
   final String recordId;
@@ -27,6 +28,7 @@ class PublicResultsScreen extends StatefulWidget {
 
 class _PublicResultsScreenState extends State<PublicResultsScreen> {
   bool _isLoading = true;
+  bool _isExporting = false;
   VitalSigns? _record;
   String? _error;
 
@@ -58,6 +60,131 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         });
       }
     }
+  }
+
+  Future<void> _exportPdf() async {
+    if (_record == null) return;
+    
+    setState(() => _isExporting = true);
+    
+    try {
+      final pdf = pw.Document();
+      final record = _record!;
+      final dateStr = DateFormat('MMMM dd, yyyy - hh:mm a').format(record.timestamp);
+      
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.all(32),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  // PDF Header
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text("ISLA VERDE HEALTH KIOSK", 
+                            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+                          pw.Text("Official Clinical Summary Report", 
+                            style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
+                        ],
+                      ),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text("RECORD ID", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey500)),
+                          pw.Text(record.id.toUpperCase(), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.Divider(thickness: 2, color: PdfColors.green),
+                  pw.SizedBox(height: 20),
+                  
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text("DATE: $dateStr", style: const pw.TextStyle(fontSize: 12)),
+                      pw.Text("SOURCE: Isla Verde Community Kiosk #1", style: const pw.TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                  pw.SizedBox(height: 40),
+                  
+                  pw.Text("CLINICAL MEASUREMENTS", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 10),
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey300),
+                    children: [
+                      _buildPdfHeaderRow(),
+                      _buildPdfRow("Blood Pressure", "${record.systolicBP}/${record.diastolicBP}", "mmHg", VitalValidator.evaluateBP(record.systolicBP, record.diastolicBP)),
+                      _buildPdfRow("Heart Rate", "${record.heartRate}", "bpm", VitalValidator.evaluateHR(record.heartRate)),
+                      _buildPdfRow("Oxygen (SpO2)", "${record.oxygen}", "%", VitalValidator.evaluateSpO2(record.oxygen)),
+                      _buildPdfRow("Temperature", "${record.temperature}", "°C", VitalValidator.evaluateTemp(record.temperature)),
+                      if (record.bmi != null)
+                        _buildPdfRow("BMI", record.bmi!.toStringAsFixed(1), "kg/m²", VitalValidator.evaluateBMI(record.bmi!)),
+                    ],
+                  ),
+                  
+                  pw.Spacer(),
+                  pw.Divider(color: PdfColors.grey300),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text("Generated via Isla Verde Digital Handover System", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+                      pw.Text("Verification: ${record.id.substring(0, 8)}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Medical_Report_${record.id.substring(0, 8)}.pdf',
+      );
+      
+    } catch (e) {
+      debugPrint("PDF Error: $e");
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  pw.TableRow _buildPdfHeaderRow() {
+    return pw.TableRow(
+      children: [
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          color: PdfColors.grey100,
+          child: pw.Text("VITAL SIGN", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          color: PdfColors.grey100,
+          child: pw.Text("VALUE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          color: PdfColors.grey100,
+          child: pw.Text("STATUS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+      ],
+    );
+  }
+
+  pw.TableRow _buildPdfRow(String label, String value, String unit, VitalEvaluation eval) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label)),
+        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text("$value $unit")),
+        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(eval.label.toUpperCase())),
+      ],
+    );
   }
 
   @override
@@ -114,10 +241,6 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                 child: const Text("Try Again"),
               ),
             ),
-            TextButton(
-              onPressed: () => context.go(AppRoutes.patientLogin),
-              child: const Text("Go to Login"),
-            ),
           ],
         ),
       ),
@@ -129,14 +252,13 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
     
     return CustomScrollView(
       slivers: [
-        // Premium Header
         SliverAppBar(
           expandedHeight: 180,
           pinned: true,
           backgroundColor: AppColors.brandGreen,
           flexibleSpace: FlexibleSpaceBar(
-            title: const Text("Digital Summary", 
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            title: const Text("Medical Summary", 
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
             background: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -145,25 +267,19 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -50,
-                    top: -50,
-                    child: Icon(Icons.health_and_safety_outlined, 
-                      size: 200, color: Colors.white.withValues(alpha: 0.1)),
-                  ),
-                ],
-              ),
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.share_rounded, color: Colors.white),
-              onPressed: () {
-                // Future implementation for sharing PDF/Link
-              },
-            ),
+            if (_isExporting)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                onPressed: _exportPdf,
+              ),
           ],
         ),
 
@@ -171,25 +287,7 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Info Section
-                Row(
-                  children: [
-                    const Icon(Icons.event_available_rounded, color: Colors.grey, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Recorded on ${DateFormat('MMMM dd, yyyy').format(record.timestamp)}",
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                    const Spacer(),
-                    const Text("ID: ", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    Text(record.id.substring(0, 8), style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 32),
-
-                // Clinical Cards
                 _buildMetricCard(
                   title: "Blood Pressure",
                   value: "${record.systolicBP}/${record.diastolicBP}",
@@ -221,60 +319,24 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                   icon: Icons.thermostat_rounded,
                   eval: VitalValidator.evaluateTemp(record.temperature),
                 ),
-                const SizedBox(height: 16),
-                if (record.bmi != null)
-                  _buildMetricCard(
-                    title: "Body Mass Index",
-                    value: record.bmi!.toStringAsFixed(1),
-                    unit: "kg/m²",
-                    icon: Icons.scale_rounded,
-                    eval: VitalValidator.evaluateBMI(record.bmi!),
-                  ),
-
-                const SizedBox(height: 48),
-
-                // Call to Action
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandGreen.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppColors.brandGreen.withValues(alpha: 0.1)),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.cloud_done_rounded, color: AppColors.brandGreen, size: 32),
-                      const SizedBox(height: 16),
-                      const Text("Save this to your account", 
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandDark)),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Create an account or login to keep a permanent history of your health checks.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey[700], height: 1.4),
+                const SizedBox(height: 32),
+                
+                SizedBox(
+                  width: double.infinity,
+                  child: FlowAnimatedButton(
+                    child: ElevatedButton.icon(
+                      onPressed: _exportPdf,
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text("Download Formal PDF Report"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FlowAnimatedButton(
-                          child: ElevatedButton(
-                            onPressed: () => context.go(AppRoutes.patientLogin),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brandGreen,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              elevation: 0,
-                            ),
-                            child: const Text("Go to Patient Dashboard", 
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 64),
               ],
             ),
           ),
@@ -296,50 +358,23 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
         ],
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: eval.color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: eval.color, size: 24),
-          ),
-          const SizedBox(width: 20),
+          Icon(icon, color: eval.color),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                    const SizedBox(width: 4),
-                    Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-                  ],
-                ),
+                Text(title, style: const TextStyle(color: Colors.grey)),
+                Text("$value $unit", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: eval.color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: eval.color.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              eval.label.toUpperCase(),
-              style: TextStyle(color: eval.color, fontWeight: FontWeight.bold, fontSize: 10),
-            ),
-          ),
+          Text(eval.label.toUpperCase(), style: TextStyle(color: eval.color, fontWeight: FontWeight.bold)),
         ],
       ),
     );

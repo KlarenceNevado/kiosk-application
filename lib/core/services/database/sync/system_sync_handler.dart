@@ -137,6 +137,7 @@ class SystemSyncHandler extends SyncHandler {
       'title': title,
       'content': content,
       'target_group': targetGroup,
+      'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
       'updated_at': DateTime.now().toIso8601String(),
     };
@@ -161,6 +162,7 @@ class SystemSyncHandler extends SyncHandler {
       'message': message,
       'target_group': targetGroup,
       'is_emergency': isEmergency,
+      'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
       'updated_at': DateTime.now().toIso8601String(),
     };
