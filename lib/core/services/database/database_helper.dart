@@ -210,6 +210,7 @@ class DatabaseHelper {
       target_group TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
+      is_archived INTEGER NOT NULL DEFAULT 0,
       reactions TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),

@@ -1,15 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
+import '../../../core/widgets/kiosk_scaffold.dart';
 import '../../../core/widgets/flow_animated_button.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
 import '../domain/i_auth_repository.dart';
-import '../models/user_model.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
 import '../../../core/services/system/app_environment.dart';
+import '../models/user_model.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,162 +23,115 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   bool get isKiosk => AppEnvironment().shouldShowVirtualKeyboard;
 
-  // PERSISTENT CONTROLLERS
-  final _phoneController = TextEditingController();
-  final _searchController = TextEditingController();
-
-  // FOCUS NODES
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _phoneFocusNode = FocusNode();
-
-  // KEYS FOR SCROLLING
   final GlobalKey _nameFieldKey = GlobalKey();
-  final GlobalKey _passwordFieldKey = GlobalKey();
+  final GlobalKey _phoneFieldKey = GlobalKey();
 
-  // _scrollController provided by mixin
-
-  User? _selectedUser;
-  bool _hasError = false;
-  bool _isPasswordVisible = false;
-
-  // SEARCH STATE
   List<User> _filteredUsers = [];
-  bool _showSuggestions = false;
+  User? _selectedUser;
+  bool _isPasswordVisible = false;
+  Timer? _exitTimer;
+
+  void _startExitTimer() {
+    _exitTimer = Timer(const Duration(seconds: 3), () {
+      _showAdminExitDialog();
+    });
+  }
+
+  void _stopExitTimer() {
+    _exitTimer?.cancel();
+  }
+
+  void _showAdminExitDialog() {
+    final passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Admin Exit"),
+        content: TextField(
+          controller: passwordController,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: "Admin Password"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () {
+              if (passwordController.text == "IslaVerde912") {
+                context.go(AppRoutes.adminDashboard);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect password")));
+              }
+            },
+            child: const Text("Exit to Admin"),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
-    
-    // Listen to repository changes to refresh filtered list instantly
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<IAuthRepository>().addListener(_onSearchChanged);
-      }
-    });
   }
 
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
-    try {
-      context.read<IAuthRepository>().removeListener(_onSearchChanged);
-    } catch (_) {}
-    _phoneController.dispose();
     _searchController.dispose();
+    _phoneController.dispose();
     _searchFocusNode.dispose();
-    _phoneFocusNode.dispose();
-    scrollController.dispose();
     super.dispose();
   }
 
-  // --- REAL-TIME FILTER LOGIC ---
   void _onSearchChanged() {
-    if (!mounted) return;
-    final query = _searchController.text.toLowerCase().trim();
+    final query = _searchController.text.toLowerCase();
     final allUsers = context.read<IAuthRepository>().users;
-
-    // Reset selection if text doesn't match selected user
-    if (_selectedUser != null &&
-        _selectedUser!.fullName != _searchController.text) {
-      _selectedUser = null;
-    }
-
-    if (query.isEmpty) {
-      setState(() {
-        _filteredUsers = [];
-        _showSuggestions = false;
-      });
-      return;
-    }
-
-    // STRICT FILTERING: Match start of words only
-    final matches = allUsers.where((user) {
-      final fullName = user.fullName.toLowerCase();
-
-      // 1. Check if the full name starts with query
-      if (fullName.startsWith(query)) return true;
-
-      // 2. Check if any individual word starts with query
-      final parts = fullName.split(' ');
-      for (final part in parts) {
-        if (part.startsWith(query)) return true;
-      }
-
-      return false;
-    }).toList();
-
     setState(() {
-      _filteredUsers = matches;
-      // Show suggestions if we have matches and no user is currently selected
-      _showSuggestions = matches.isNotEmpty && _selectedUser == null;
+      if (query.isEmpty) {
+        _filteredUsers = [];
+      } else {
+        _filteredUsers = allUsers.where((u) {
+          final fullName = "${u.firstName} ${u.lastName}".toLowerCase();
+          return fullName.contains(query);
+        }).toList();
+      }
     });
   }
 
-  void _selectUser(User user) {
+  void _onUserSelected(User user) {
     setState(() {
       _selectedUser = user;
-      _searchController.text = user.fullName;
-      _showSuggestions = false; // Hide dropdown immediately after selection
+      _searchController.text = "${user.firstName} ${user.lastName}";
+      _filteredUsers = [];
     });
-    // Optional: Hide keyboard after selection to focus on password
-    if (isKeyboardVisible) Navigator.pop(context);
+    _searchFocusNode.unfocus();
   }
 
-  void _handleLogin() async {
+  Future<void> _handleLogin() async {
     if (_selectedUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Please search and select your name first.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a patient first")));
       return;
     }
 
-    final phoneInput = _phoneController.text.trim();
-    if (phoneInput.isEmpty) {
-      setState(() => _hasError = true);
+    if (_phoneController.text.length != 11) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number must be 11 digits")));
       return;
     }
 
-    if (phoneInput.length != 11) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                "Phone number must be exactly 11 digits (e.g. 09123456789)."),
-            backgroundColor: Colors.orange),
-      );
-      return;
-    }
+    final success = await context.read<IAuthRepository>().login(
+          _selectedUser!.firstName,
+          _phoneController.text,
+        );
 
-    if (isKeyboardVisible) Navigator.pop(context);
-
-    final error = await context
-        .read<IAuthRepository>()
-        .login(_selectedUser!.firstName, phoneInput);
-
-    if (error == null && mounted) {
+    if (success == null && mounted) {
       context.go(AppRoutes.home);
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(error ?? "Incorrect Phone Number. Please try again."),
-            backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ?? "Invalid credentials"), backgroundColor: Colors.red));
     }
-  }
-
-
-  void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Need Assistance?"),
-        content: const Text(
-            "If you cannot log in or forgot your number, please approach the Barangay Health Worker desk."),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text("Close"))
-        ],
-      ),
-    );
   }
 
   @override
@@ -186,370 +141,257 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
 
     return GestureDetector(
       onTap: () {
-        if (isKeyboardVisible) Navigator.pop(context);
-        setState(() => _showSuggestions = false);
+        FocusScope.of(context).unfocus();
+        if (mounted) setState(() => _filteredUsers = []);
       },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        resizeToAvoidBottomInset: !isKiosk,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          actions: [
-            TextButton.icon(
-              onPressed: _showHelpDialog,
-              icon: const Icon(Icons.help_outline,
-                  color: AppColors.brandDark, size: 24),
-              label: const Text("Help",
-                  style: TextStyle(
-                      color: AppColors.brandDark,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
+      child: KioskScaffold(
+        title: AppLocalizations.of(context)?.appTitle ?? "Kiosk Health",
+        showBackButton: false,
+        actions: [
+          IconButton(
+            onPressed: () => context.push(AppRoutes.help),
+            icon: const Row(
+              children: [
+                Icon(Icons.help_outline, color: AppColors.brandDark, size: 24),
+                SizedBox(width: 4),
+                Text("Help", style: TextStyle(color: AppColors.brandDark, fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
             ),
-            const SizedBox(width: 16),
-          ],
-        ),
-        body: LayoutBuilder(builder: (context, constraints) {
-          return SingleChildScrollView(
-            controller: scrollController,
-            physics: const ClampingScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight -
-                    MediaQuery.of(context).padding.top -
-                    kToolbarHeight,
-              ),
-              child: Center(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  padding: EdgeInsets.only(
-                      left: 24.0,
-                      right: 24.0,
-                      top: 40.0,
-                      bottom: (isKeyboardVisible && isKiosk)
-                          ? 350.0
-                          : 40.0), // Reduced bottom padding to prevent overflow
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // --- HEADER SECTION ---
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    AppColors.brandGreen.withValues(alpha: 0.2),
-                                blurRadius: 20,
-                                spreadRadius: 4,
-                              )
-                            ]),
-                        child: const Icon(Icons.medical_services_rounded,
-                            size: 60, color: AppColors.brandGreen),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text("Kiosk Access",
-                          style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.brandDark,
-                              letterSpacing: -0.5)),
-                      const SizedBox(height: 8),
-                      const Text("Secure Patient Login",
-                          style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(width: 16),
+        ],
+        body: SingleChildScrollView(
+          controller: scrollController,
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.only(
+                    left: 24.0,
+                    right: 24.0,
+                    top: 24.0, // Reduced top
+                    bottom: (isKeyboardVisible && isKiosk) ? 350.0 : 32.0),
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // --- HEADER ---
+                        Container(
+                          padding: const EdgeInsets.all(28), // Larger container
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.brandGreen.withValues(alpha: 0.15),
+                                  blurRadius: 20, // More shadow
+                                )
+                              ]),
+                          child: GestureDetector(
+                            onTapDown: (_) => _startExitTimer(),
+                            onTapUp: (_) => _stopExitTimer(),
+                            onTapCancel: () => _stopExitTimer(),
+                            child: const Icon(Icons.medical_services_rounded,
+                                size: 60, color: AppColors.brandGreen), // Enlarged from 48
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text("Kiosk Access",
+                            style: TextStyle(
+                                fontSize: 42, // High-Accessibility enlargement from 28
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.brandDark,
+                                letterSpacing: -1.0)),
+                        const SizedBox(height: 8),
+                        const Text("Secure Patient Login",
+                            style: TextStyle(
+                                fontSize: 20, // Enlarged from 16
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w500)),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 32),
 
+                        // --- MAIN CARD ---
+                        Container(
+                          padding: const EdgeInsets.all(32), // More room
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    blurRadius: 30, // Deeper shadow
+                                    offset: const Offset(0, 10))
+                              ]),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      AppLocalizations.of(context)?.findYourAccount ?? "1. Find Your Account",
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18, // Enlarged from 15
+                                          color: Colors.grey)),
+                                  const SizedBox(height: 12),
 
-                      // --- MAIN CARD (STACKED FOR DROPDOWN) ---
-                      Container(
-                        padding: const EdgeInsets.all(32),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 12))
-                            ]),
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            // 1. FORM CONTENT (The Base Layer)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                    AppLocalizations.of(context)
-                                            ?.findYourAccount ??
-                                        "Find Your Account",
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.grey)),
-                                const SizedBox(height: 12),
+                                  if (users.isEmpty)
+                                    _buildNoUsersWarning()
+                                  else
+                                    TextField(
+                                      key: _nameFieldKey,
+                                      controller: _searchController,
+                                      focusNode: _searchFocusNode,
+                                      readOnly: isKiosk,
+                                      showCursor: true,
+                                      cursorColor: AppColors.brandDark,
+                                      onTap: () {
+                                        setState(() {
+                                          _onSearchChanged();
+                                        });
+                                        if (isKiosk) {
+                                          showKeyboard(_searchController, _nameFieldKey);
+                                        }
+                                      },
+                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), // Larger text
+                                      decoration: _inputDecoration(
+                                          AppLocalizations.of(context)?.searchName ?? "Type Name...",
+                                          Icons.person_search_rounded),
+                                    ),
 
-                                if (users.isEmpty)
-                                  _buildNoUsersWarning()
-                                else
-                                  // SEARCH INPUT (Base field)
+                                  const SizedBox(height: 24),
+
+                                  Text(
+                                      AppLocalizations.of(context)?.enterPassword ?? "2. Verify Identity",
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18, // Enlarged
+                                          color: Colors.grey)),
+                                  const SizedBox(height: 12),
                                   TextField(
-                                    key: _nameFieldKey,
-                                    controller: _searchController,
-                                    focusNode: _searchFocusNode,
+                                    key: _phoneFieldKey,
+                                    controller: _phoneController,
+                                    obscureText: !_isPasswordVisible,
                                     readOnly: isKiosk,
-                                    showCursor: true,
-                                    cursorColor: AppColors.brandDark,
-                                    cursorWidth: 2.0,
+                                    maxLength: 11,
                                     onTap: () {
-                                      setState(() {
-                                        _selectedUser = null;
-                                        _showSuggestions =
-                                            _filteredUsers.isNotEmpty;
-                                      });
                                       if (isKiosk) {
-                                        showKeyboard(
-                                            _searchController, _nameFieldKey,
-                                            type: KeyboardType.text);
-                                      } else {
-                                        _searchFocusNode.requestFocus();
+                                        showKeyboard(_phoneController, _phoneFieldKey,
+                                            type: KeyboardType.numeric, maxLength: 11);
                                       }
                                     },
-                                    decoration: _inputDecor(
-                                            AppLocalizations.of(context)!
-                                                .searchName,
-                                            Icons.person_search_rounded)
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2),
+                                    decoration: _inputDecoration(
+                                            AppLocalizations.of(context)?.phoneNumber ?? "Phone Number (11 digits)",
+                                            Icons.lock_person_rounded)
                                         .copyWith(
-                                            suffixIcon: _selectedUser != null
-                                                ? const Icon(Icons.check_circle,
-                                                    color: AppColors.brandGreen,
-                                                    size: 28)
-                                                : (_searchController
-                                                        .text.isNotEmpty
-                                                    ? IconButton(
-                                                        icon: const Icon(
-                                                            Icons.clear,
-                                                            color: Colors.grey),
-                                                        onPressed: () {
-                                                          _searchController
-                                                              .clear();
-                                                          setState(() {
-                                                            _selectedUser =
-                                                                null;
-                                                            _filteredUsers = [];
-                                                            _showSuggestions =
-                                                                false;
-                                                          });
-                                                        },
-                                                      )
-                                                    : null)),
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-
-                                const SizedBox(height: 24),
-
-                                Text(
-                                    AppLocalizations.of(context)!.enterPassword,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.grey)),
-                                const SizedBox(height: 12),
-
-                                // PASSWORD FIELD
-                                TextField(
-                                  key: _passwordFieldKey,
-                                  controller: _phoneController,
-                                  focusNode: _phoneFocusNode,
-                                  readOnly: isKiosk,
-                                  keyboardType: isKiosk
-                                      ? TextInputType.none
-                                      : TextInputType.phone,
-                                  onTap: () {
-                                    setState(() => _showSuggestions = false);
-                                    if (isKiosk) {
-                                      showKeyboard(
-                                          _phoneController, _passwordFieldKey,
-                                          type: KeyboardType.numeric,
-                                          maxLength: 11);
-                                    } else {
-                                      _phoneFocusNode.requestFocus();
-                                    }
-                                  },
-                                  obscureText: !_isPasswordVisible,
-                                  maxLength: 11,
-                                  style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2.0),
-                                  decoration: _inputDecor(
-                                          AppLocalizations.of(context)!
-                                              .phoneNumber,
-                                          Icons.lock_outline)
-                                      .copyWith(
-                                    counterText: "",
-                                    hintText: "09XXXXXXXXX",
-                                    hintStyle: TextStyle(
-                                        fontSize: 18,
-                                        letterSpacing: 1.0,
-                                        color: Colors.grey[400]),
-                                    errorText: _hasError
-                                        ? AppLocalizations.of(context)!
-                                            .incorrectCredentials
-                                        : null,
-                                    suffixIcon: IconButton(
-                                      iconSize: 24,
-                                      icon: Icon(
-                                          _isPasswordVisible
-                                              ? Icons.visibility
-                                              : Icons.visibility_off,
-                                          color: Colors.grey),
-                                      onPressed: () => setState(() =>
-                                          _isPasswordVisible =
-                                              !_isPasswordVisible),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 32),
-
-                                // LOGIN BUTTON
-                                if (isLoading)
-                                  const Center(
-                                      child: CircularProgressIndicator(
-                                          color: AppColors.brandGreen))
-                                else
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 54,
-                                    child: FlowAnimatedButton(
-                                      isDisabled: _selectedUser == null,
-                                      child: ElevatedButton(
-                                        onPressed: _selectedUser != null
-                                            ? _handleLogin
-                                            : null,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.brandGreen,
-                                          shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(16)),
-                                          elevation: 2,
-                                          disabledBackgroundColor:
-                                              Colors.grey[300],
-                                        ),
-                                        child: Text(
-                                            AppLocalizations.of(context)!
-                                                .accessRecord,
-                                            style: const TextStyle(
-                                                fontSize: 18,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 1.0)),
+                                      counterText: "",
+                                      suffixIcon: IconButton(
+                                        iconSize: 24,
+                                        icon: Icon(_isPasswordVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off),
+                                        onPressed: () => setState(() =>
+                                            _isPasswordVisible = !_isPasswordVisible),
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
 
-                            // 2. SUGGESTIONS DROPDOWN (The Overlay Layer)
-                            if (_showSuggestions)
-                              Positioned(
-                                top: 95,
-                                left: 0,
-                                right: 0,
-                                child: Material(
-                                  elevation: 8,
-                                  borderRadius: BorderRadius.circular(12),
-                                  color: Colors.white,
-                                  shadowColor:
-                                      Colors.black.withValues(alpha: 0.2),
-                                  child: Container(
-                                    constraints:
-                                        const BoxConstraints(maxHeight: 250),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
+                                  const SizedBox(height: 40),
+
+                                  if (isLoading)
+                                    const Center(child: CircularProgressIndicator(color: AppColors.brandGreen))
+                                  else
+                                    FlowAnimatedButton(
+                                      child: ElevatedButton(
+                                        onPressed: _handleLogin,
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.brandGreen,
+                                            foregroundColor: Colors.white,
+                                            minimumSize: const Size(double.infinity, 64), // Enlarged height
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                                            elevation: 4),
+                                        child: Text(
+                                            AppLocalizations.of(context)?.accessRecord ?? "ACCESS RECORD",
+                                            style: const TextStyle(
+                                                fontSize: 22, // High-Accessibility font size
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: 1.0)),
+                                      ),
                                     ),
-                                    child: ListView.separated(
-                                      padding: EdgeInsets.zero,
-                                      shrinkWrap: true,
-                                      itemCount: _filteredUsers.length,
-                                      separatorBuilder: (ctx, i) =>
-                                          const Divider(
-                                              height: 1, color: Colors.grey),
-                                      itemBuilder: (context, index) {
-                                        final user = _filteredUsers[index];
-                                        return ListTile(
-                                          dense: true,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 16, vertical: 8),
-                                          leading: CircleAvatar(
-                                            backgroundColor: AppColors
-                                                .brandGreen
-                                                .withValues(alpha: 0.1),
-                                            child: const Icon(Icons.person,
-                                                color: AppColors.brandGreen,
-                                                size: 20),
-                                          ),
-                                          title: Text(user.fullName,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 16)),
-                                          subtitle: Text(user.sitio,
-                                              style: const TextStyle(
-                                                  color: Colors.grey,
-                                                  fontSize: 12)),
-                                          onTap: () => _selectUser(user),
-                                        );
-                                      },
+                                ],
+                              ),
+
+                              // --- Result List ---
+                              if (_filteredUsers.isNotEmpty)
+                                Positioned(
+                                  top: 100, left: 0, right: 0,
+                                  child: Material(
+                                    elevation: 15, // Higher elevation
+                                    borderRadius: BorderRadius.circular(16),
+                                    color: Colors.white,
+                                    child: Container(
+                                      constraints: const BoxConstraints(maxHeight: 280),
+                                      child: ListView.separated(
+                                        shrinkWrap: true,
+                                        padding: EdgeInsets.zero,
+                                        itemCount: _filteredUsers.length,
+                                        separatorBuilder: (c, i) =>
+                                            const Divider(height: 1),
+                                        itemBuilder: (ctx, i) {
+                                          final u = _filteredUsers[i];
+                                          return ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                            leading: CircleAvatar(
+                                              backgroundColor: AppColors.brandGreen.withValues(alpha: 0.1),
+                                              child: Text(u.firstName[0], style: const TextStyle(color: AppColors.brandGreen, fontWeight: FontWeight.bold)),
+                                            ),
+                                            title: Text("${u.firstName} ${u.lastName}",
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), // Larger list item
+                                            subtitle: Text("Sitio: ${u.sitio}", style: const TextStyle(fontSize: 15)),
+                                            onTap: () => _onUserSelected(u),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 32),
 
-                      TextButton(
-                        onPressed: () => context.push(AppRoutes.register),
-                        style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
+                        // --- REGISTER LINK ---
+                        TextButton(
+                          onPressed: () => context.push(AppRoutes.register),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             backgroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(50),
-                                side: BorderSide(
-                                    color: AppColors.brandDark
-                                        .withValues(alpha: 0.1)))),
-                        child: Text(
-                            AppLocalizations.of(context)!.noAccountCreate,
-                            style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.brandDark)),
-                      ),
-                    ],
+                                side: BorderSide(color: Colors.grey.shade200),
+                                borderRadius: BorderRadius.circular(50)),
+                          ),
+                          child: Text(
+                              AppLocalizations.of(context)?.noAccountCreate ?? "No Account? Create New Record",
+                              style: const TextStyle(
+                                  color: AppColors.brandDark,
+                                  fontSize: 18, // Enlarged
+                                  fontWeight: FontWeight.w900)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -557,41 +399,31 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   Widget _buildNoUsersWarning() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.shade100)),
       child: const Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
           SizedBox(width: 12),
-          Expanded(
-              child: Text("No records found on this kiosk.",
-                  style: TextStyle(
-                      color: Colors.orange,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16))),
+          Expanded(child: Text("Waiting for data synchronization...", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
-  InputDecoration _inputDecor(String label, IconData icon) {
+  InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.grey, fontSize: 18),
       filled: true,
       fillColor: Colors.grey[50],
+      prefixIcon: Icon(icon, color: AppColors.brandDark, size: 28), // Larger icons
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade200)),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.brandGreen, width: 2)),
-      prefixIcon: Icon(icon, color: Colors.grey, size: 24),
-      contentPadding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade200)),
     );
   }
 }

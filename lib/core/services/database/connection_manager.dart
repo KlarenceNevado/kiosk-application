@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 enum ConnectionStatus { online, offline, checking }
 
-class ConnectionManager {
+class ConnectionManager extends ChangeNotifier {
   static final ConnectionManager _instance = ConnectionManager._internal();
   factory ConnectionManager() => _instance;
   ConnectionManager._internal();
@@ -15,6 +15,8 @@ class ConnectionManager {
 
   ConnectionStatus _currentStatus = ConnectionStatus.checking;
   ConnectionStatus get currentStatus => _currentStatus;
+  
+  bool get isOnline => _currentStatus == ConnectionStatus.online;
 
   Timer? _checkTimer;
   bool _isChecking = false;
@@ -25,7 +27,7 @@ class ConnectionManager {
     // Initial check
     checkStatus();
 
-    // Listen for platform-level changes (Mobile/Web support)
+    // Listen for platform-level changes
     Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
       debugPrint("🌐 Connectivity changed: $result");
       checkStatus();
@@ -36,6 +38,12 @@ class ConnectionManager {
     _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) => checkStatus());
   }
 
+  /// Explicitly re-check connectivity (used by UI Retry buttons)
+  Future<void> retryConnection() async {
+    debugPrint("🌐 ConnectionManager: Manual retry requested...");
+    await checkStatus();
+  }
+
   Future<void> checkStatus() async {
     if (_isChecking) return;
     _isChecking = true;
@@ -43,18 +51,15 @@ class ConnectionManager {
     ConnectionStatus newStatus = ConnectionStatus.offline;
 
     try {
-      // 1. Check connectivity_plus first
       final result = await Connectivity().checkConnectivity();
       
       if (result == ConnectivityResult.none) {
         newStatus = ConnectionStatus.offline;
       } else if (kIsWeb) {
-        // 2. Web Optimization: Browsers block cross-domain pings (CORS) 
-        // We trust the browser's own navigator.onLine reporting (via Connectivity)
+        // Browsers block cross-domain pings (CORS). Trust the navigator.onLine reporting.
         newStatus = ConnectionStatus.online;
       } else {
-        // 2. Verified Internet Check (Avoid "Connected but no Internet")
-        // We ping a reliable source for native platforms.
+        // Native platforms: Verify actual reachability
         try {
           final response = await http
               .head(Uri.parse('https://www.google.com'))
@@ -78,6 +83,7 @@ class ConnectionManager {
       debugPrint("🌐 ConnectionManager: Status changed to $newStatus");
       _currentStatus = newStatus;
       _statusController.add(newStatus);
+      notifyListeners(); // Alert the UI
     }
     
     _isChecking = false;

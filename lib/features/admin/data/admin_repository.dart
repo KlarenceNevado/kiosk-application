@@ -145,6 +145,7 @@ class AdminRepository extends ChangeNotifier {
           targetGroup: announcement.targetGroup,
           timestamp: announcement.timestamp,
           isActive: announcement.isActive,
+          isArchived: announcement.isArchived,
         );
         debugPrint("✅ Admin: Announcement '${announcement.title}' queued for sync.");
       } catch (e) {
@@ -184,14 +185,30 @@ class AdminRepository extends ChangeNotifier {
         targetGroup: announcement.targetGroup,
         timestamp: announcement.timestamp,
         isActive: isActive,
+        isArchived: announcement.isArchived,
         reactions: announcement.reactions,
       );
       notifyListeners();
     }
 
-    // PERSIST VIA SYNC SERVICE (Local-First)
+    // PERSIST LOCALLY THEN VIA SYNC SERVICE
     unawaited(() async {
       try {
+        final updated = Announcement(
+          id: announcement.id,
+          title: announcement.title,
+          content: announcement.content,
+          targetGroup: announcement.targetGroup,
+          timestamp: announcement.timestamp,
+          isActive: isActive,
+          isArchived: announcement.isArchived,
+          reactions: announcement.reactions,
+        );
+
+        // Update Local SQLite
+        await _dbHelper.systemDao.updateAnnouncement(updated.toMap());
+
+        // Push to Cloud
         await SyncService().pushAnnouncement(
           id: announcement.id,
           title: announcement.title,
@@ -199,10 +216,63 @@ class AdminRepository extends ChangeNotifier {
           targetGroup: announcement.targetGroup,
           timestamp: announcement.timestamp,
           isActive: isActive,
+          isArchived: announcement.isArchived,
         );
-        debugPrint("✅ Admin: Announcement status toggle queued.");
+        debugPrint("✅ Admin: Announcement status toggle synced.");
       } catch (e) {
-        debugPrint("❌ Admin: Failed to queue toggle: $e");
+        debugPrint("❌ Admin: Failed to sync toggle: $e");
+      }
+    }());
+  }
+
+  Future<void> toggleAnnouncementArchive(
+      Announcement announcement, bool isArchived) async {
+    // OPTIMISTIC UPDATE: Find and update in memory
+    final index = _announcements.indexWhere((a) => a.id == announcement.id);
+    if (index != -1) {
+      _announcements[index] = Announcement(
+        id: announcement.id,
+        title: announcement.title,
+        content: announcement.content,
+        targetGroup: announcement.targetGroup,
+        timestamp: announcement.timestamp,
+        isActive: announcement.isActive,
+        isArchived: isArchived,
+        reactions: announcement.reactions,
+      );
+      notifyListeners();
+    }
+
+    // PERSIST LOCALLY THEN VIA SYNC SERVICE
+    unawaited(() async {
+      try {
+        final updated = Announcement(
+          id: announcement.id,
+          title: announcement.title,
+          content: announcement.content,
+          targetGroup: announcement.targetGroup,
+          timestamp: announcement.timestamp,
+          isActive: announcement.isActive,
+          isArchived: isArchived,
+          reactions: announcement.reactions,
+        );
+
+        // Update Local SQLite
+        await _dbHelper.systemDao.updateAnnouncement(updated.toMap());
+
+        // Push to Cloud
+        await SyncService().pushAnnouncement(
+          id: announcement.id,
+          title: announcement.title,
+          content: announcement.content,
+          targetGroup: announcement.targetGroup,
+          timestamp: announcement.timestamp,
+          isActive: announcement.isActive,
+          isArchived: isArchived,
+        );
+        debugPrint("✅ Admin: Announcement archive toggle synced.");
+      } catch (e) {
+        debugPrint("❌ Admin: Failed to sync toggle: $e");
       }
     }());
   }

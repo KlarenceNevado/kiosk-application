@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'dart:math';
 import 'sensor_service_interface.dart';
 
@@ -59,6 +60,9 @@ class MockSensorService implements ISensorService {
             'dia': 75 + _random.nextInt(10) 
           };
           break;
+        case SensorType.battery:
+          value = 12.0 + (_random.nextDouble() * 2.0);
+          break;
       }
 
       _dataController.add(value);
@@ -74,6 +78,25 @@ class MockSensorService implements ISensorService {
   void _updateStatus(SensorStatus status) {
     _status = status;
     _statusController.add(status);
+  }
+
+  @override
+  Future<void> sendCommand(Uint8List command) async {
+    // Mimic the Uint8List or dynamic command
+    // In mock, we just log it.
+    debugPrint("🧪 [MockSensorService] $type received command: $command");
+  }
+
+  @override
+  Future<void> writeString(String data) async {
+    debugPrint("🧪 [MockSensorService] $type received string: $data");
+  }
+
+  @override
+  Future<void> calibrate() async {
+    debugPrint("🧪 [MockSensorService] Calibrating $type...");
+    await Future.delayed(const Duration(seconds: 2));
+    debugPrint("🧪 [MockSensorService] Calibration complete for $type.");
   }
 
   void dispose() {

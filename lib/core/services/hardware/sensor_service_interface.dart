@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 enum SensorStatus {
   disconnected,
   connecting,
@@ -10,6 +12,7 @@ enum SensorType {
   oximeter,
   thermometer,
   bloodPressure,
+  battery,
 }
 
 abstract class ISensorService {
@@ -26,4 +29,13 @@ abstract class ISensorService {
 
   void startReading();
   void stopReading();
+
+  /// Sends raw hexadecimal commands to the sensor
+  Future<void> sendCommand(Uint8List command);
+
+  /// Sends ASCII strings (mostly for Hub or AT commands)
+  Future<void> writeString(String data);
+
+  /// Triggers a hardware calibration (e.g., Tare for Scale, Zero for Temp)
+  Future<void> calibrate();
 }

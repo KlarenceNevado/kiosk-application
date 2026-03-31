@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/hardware/sensor_manager.dart';
 
 class AdminHardwareTab extends StatefulWidget {
   const AdminHardwareTab({super.key});
@@ -14,19 +16,29 @@ class _AdminHardwareTabState extends State<AdminHardwareTab> {
   String _currentStatus = "All sensors operational";
 
   void _startCalibration(String sensorName) async {
+    final sensorManager = context.read<SensorManager>();
+    
     setState(() {
       _isCalibrating = true;
-      _calibrationProgress = 0.0;
+      _calibrationProgress = 0.1;
       _currentStatus = "Calibrating $sensorName...";
     });
 
-    for (int i = 0; i <= 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted) {
-        setState(() {
-          _calibrationProgress = i / 10.0;
-        });
+    try {
+      if (sensorName == "Weighing Scale") {
+        await sensorManager.weightSensor.calibrate();
+      } else if (sensorName == "All Sensors") {
+        await sensorManager.weightSensor.calibrate();
+        // Add others if they support calibration
       }
+      
+      // Visual feedback loop for the UI
+      for (int i = 1; i <= 10; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (mounted) setState(() => _calibrationProgress = i / 10.0);
+      }
+    } catch (e) {
+      debugPrint("❌ Calibration failed: $e");
     }
 
     if (mounted) {

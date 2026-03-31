@@ -32,6 +32,7 @@ import 'package:kiosk_application/core/repositories/local_system_repository.dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppEnvironment().setMode(AppMode.kiosk);
+  await AppEnvironment().initialize();
 
   // Centralized Initialization
   await InitializationService().initialize();
@@ -84,6 +85,7 @@ class KioskApp extends StatelessWidget {
       builder: (context, child) {
         ErrorWidget.builder = ErrorHandler.errorWidgetBuilder;
         return SessionTimeoutManager(
+          isPaused: context.watch<HealthWizardProvider>().isSessionActive,
           duration: const Duration(seconds: 45),
           onTimeout: () {
             // Check if already at login to prevent redundant redirects

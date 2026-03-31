@@ -218,6 +218,7 @@ class SystemDao extends BaseDao {
     final dbRow = Map<String, dynamic>.from(row);
     if (dbRow['reactions'] is Map) dbRow['reactions'] = json.encode(dbRow['reactions']);
     dbRow['is_active'] = (dbRow['is_active'] == true || dbRow['is_active'] == 1 || dbRow['isActive'] == true || dbRow['isActive'] == 1) ? 1 : 0;
+    dbRow['is_archived'] = (dbRow['is_archived'] == true || dbRow['is_archived'] == 1 || dbRow['isArchived'] == true || dbRow['isArchived'] == 1) ? 1 : 0;
     dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
     dbRow['is_deleted'] = (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
     dbRow['is_synced'] = (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;

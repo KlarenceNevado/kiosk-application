@@ -12,7 +12,13 @@ class AppColors {
   static const Color textPrimary = Color(0xFF2D3142);
   static const Color textSecondary = Color(0xFF888888);
 
-  // Layout Colors (Moved from MainMenuScreen)
+  // Layout Colors (Required by MainMenu and Mobile)
   static const Color headerBackground = Color(0xFFF0F1F2);
   static const Color bodyBackground = Color(0xFFE6E6E6);
+
+  // Sensor & Feedback Colors
+  static const Color tempOrange = Color(0xFFFF9800);
+  static const Color bpBlue = Color(0xFF2196F3);
+  static const Color hrRed = Color(0xFFF44336);
+  static const Color spO2Cyan = Color(0xFF00BCD4);
 }

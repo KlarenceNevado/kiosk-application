@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/config/routes.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
-import '../../../../core/widgets/vital_sign_display.dart';
 import '../../../../core/utils/vital_validator.dart';
 
 // LOGIC & DATA
@@ -74,7 +73,7 @@ class _Step4ResultsState extends State<Step4Results>
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
+            .showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
       }
     }
   }
@@ -82,6 +81,9 @@ class _Step4ResultsState extends State<Step4Results>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
+    
+    // KEEP SESSION ALIVE WHILE READING RESULTS
+    context.read<IAuthRepository>().resetSessionTimer();
 
     final int heartRate = provider.currentHeartRate;
     final int sys = provider.currentSystolic;
@@ -98,19 +100,27 @@ class _Step4ResultsState extends State<Step4Results>
     final bmiEval = VitalValidator.evaluateBMI(bmi);
 
     final results = [
-      _ResultData(Icons.favorite_rounded, "Heart Rate", "$heartRate", "bpm", hrEval),
-      _ResultData(Icons.speed_rounded, "Blood Pressure", "$sys/$dia", "mmHg", bpEval),
-      _ResultData(Icons.air_rounded, "Oxygen", "$spo2", "%", oxyEval),
-      _ResultData(Icons.thermostat_rounded, "Temperature", temp.toStringAsFixed(1), "°C", tempEval),
-      _ResultData(Icons.scale_rounded, "BMI Score", bmi.toStringAsFixed(1), "kg/m²", bmiEval),
+      _ResultData(Icons.favorite_rounded, "Heart Rate", "$heartRate", "bpm", hrEval, Colors.red),
+      _ResultData(Icons.speed_rounded, "Blood Pressure", "$sys/$dia", "mmHg", bpEval, Colors.blue),
+      _ResultData(Icons.water_drop_rounded, "Oxygen Levels", "$spo2", "%", oxyEval, Colors.cyan),
+      _ResultData(Icons.thermostat_rounded, "Body Temperature", temp.toStringAsFixed(1), "°C", tempEval, Colors.orange),
+      _ResultData(Icons.scale_rounded, "Body Mass Index", bmi.toStringAsFixed(1), "kg/m²", bmiEval, Colors.purple),
     ];
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.grey[50]!,
+            Colors.white,
+          ],
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
         child: Column(
           children: [
             // Dashboard Header
@@ -118,19 +128,36 @@ class _Step4ResultsState extends State<Step4Results>
               opacity: _animationController,
               child: Column(
                 children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandGreen.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: const Text(
+                      "CHECKUP COMPLETE",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.brandGreen,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   const Text(
-                    "Your Health Dashboard",
+                    "Clinical Summary",
                     style: TextStyle(
-                        fontSize: 36,
+                        fontSize: 42,
                         fontWeight: FontWeight.w900,
                         color: AppColors.brandDark,
-                        letterSpacing: -0.5),
+                        letterSpacing: -1.5),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Real-time analysis complete. Review your vitals below.",
+                    "Vitals successfully captured and validated.",
                     style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 18,
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500),
                   ),
@@ -139,38 +166,31 @@ class _Step4ResultsState extends State<Step4Results>
             ),
             const SizedBox(height: 48),
 
-            // Animated Results Grid
+            // Animated Results List (Medical Report Style)
             Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 1.3,
-                  crossAxisSpacing: 24,
-                  mainAxisSpacing: 24,
-                ),
-                itemCount: results.length,
-                itemBuilder: (context, index) {
-                  final data = results[index];
-                  return AnimatedBuilder(
-                    animation: _cardAnimations[index],
-                    builder: (context, child) {
-                      final animValue = _cardAnimations[index].value.clamp(0.0, 1.0);
-                      return Transform.translate(
-                        offset: Offset(0, 50 * (1 - animValue)),
-                        child: Opacity(
-                          opacity: animValue,
-                          child: VitalSignDisplay(
-                            icon: data.icon,
-                            label: data.label,
-                            value: data.value,
-                            unit: data.unit,
-                            evaluation: data.evaluation,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 1000),
+                child: ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  itemCount: results.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 16),
+                  itemBuilder: (context, index) {
+                    final data = results[index];
+                    return AnimatedBuilder(
+                      animation: _cardAnimations[index],
+                      builder: (context, child) {
+                        final animValue = _cardAnimations[index].value.clamp(0.0, 1.0);
+                        return Transform.translate(
+                          offset: Offset(0, 30 * (1 - animValue)),
+                          child: Opacity(
+                            opacity: animValue,
+                            child: _buildMedicalReportCard(data),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ),
 
@@ -180,17 +200,22 @@ class _Step4ResultsState extends State<Step4Results>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FlowAnimatedButton(
-                    child: _buildButtonContainer(Colors.white, "Discard",
-                        Colors.red, () => context.go(AppRoutes.home)),
+                   _buildActionButton(
+                    label: "Discard Checkup", 
+                    icon: Icons.delete_outline_rounded,
+                    color: Colors.red,
+                    isOutline: true,
+                    onTap: () => context.go(AppRoutes.home),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 24),
                   if (_isSaving)
                     const CircularProgressIndicator(color: AppColors.brandGreen)
                   else
-                    FlowAnimatedButton(
-                      child: _buildButtonContainer(AppColors.brandGreen,
-                          "Save & Finish", Colors.white, _handleSave),
+                    _buildActionButton(
+                      label: "Finalize & Save Report", 
+                      icon: Icons.check_circle_rounded,
+                      color: AppColors.brandGreen,
+                      onTap: _handleSave,
                     ),
                 ],
               ),
@@ -201,39 +226,115 @@ class _Step4ResultsState extends State<Step4Results>
     );
   }
 
-  Widget _buildButtonContainer(
-      Color color, String label, Color textColor, VoidCallback onTap) {
+  Widget _buildMedicalReportCard(_ResultData data) {
+    final statusColor = data.evaluation.status == HealthStatus.normal ? AppColors.brandGreen : Colors.orange;
+    final statusText = data.evaluation.status == HealthStatus.normal ? "NORMAL" : "ATTENTION";
+
     return Container(
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(50),
-        border: color == Colors.white
-            ? Border.all(color: Colors.grey.withValues(alpha: 0.3))
-            : null,
-        boxShadow: color != Colors.white
-            ? [
-                BoxShadow(
-                    color: color.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8))
-              ]
-            : null,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.1), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(50),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(50),
-          splashColor: textColor.withValues(alpha: 0.1),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 20,
-                    color: textColor,
-                    fontWeight: FontWeight.bold)),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: data.themeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(data.icon, color: data.themeColor, size: 32),
           ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.label.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.grey[400],
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      data.value,
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.brandDark,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      data.unit,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              statusText,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required String label, 
+    required IconData icon, 
+    required Color color, 
+    required VoidCallback onTap,
+    bool isOutline = false,
+  }) {
+    return FlowAnimatedButton(
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 24),
+        label: Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isOutline ? Colors.white : color,
+          foregroundColor: isOutline ? color : Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          elevation: isOutline ? 0 : 8,
+          shadowColor: color.withValues(alpha: 0.4),
+          side: isOutline ? BorderSide(color: color.withValues(alpha: 0.3), width: 2) : null,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
       ),
     );
@@ -246,6 +347,7 @@ class _ResultData {
   final String value;
   final String unit;
   final VitalEvaluation evaluation;
+  final Color themeColor;
 
-  _ResultData(this.icon, this.label, this.value, this.unit, this.evaluation);
+  _ResultData(this.icon, this.label, this.value, this.unit, this.evaluation, this.themeColor);
 }

@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/domain/i_system_repository.dart';
 import 'package:provider/provider.dart';
 import '../../auth/domain/i_auth_repository.dart';
+import '../../../../core/services/database/connection_manager.dart';
 
 class PatientAnnouncementsScreen extends StatefulWidget {
   const PatientAnnouncementsScreen({super.key});
@@ -51,135 +52,186 @@ class _PatientAnnouncementsScreenState
     final authRepo = context.watch<IAuthRepository>();
     final systemRepo = context.read<ISystemRepository>();
     final user = authRepo.currentUser;
+    final connectionManager = ConnectionManager();
 
+    return ListenableBuilder(
+      listenable: connectionManager,
+      builder: (context, _) {
+        final isOffline = connectionManager.currentStatus == ConnectionStatus.offline;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        title: const Text("Announcements",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.brandGreen,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: systemRepo.announcementStream,
-        initialData: _initialData,
-        builder: (context, snapshot) {
-          // Show spinner only on the very first local load
-          if (_isInitialLoading && !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
-          }
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F7FA),
+          appBar: AppBar(
+            title: const Text("Announcements",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            backgroundColor: AppColors.brandGreen,
+            elevation: 0,
+            centerTitle: true,
+          ),
+          body: isOffline 
+            ? _buildOfflineView()
+            : StreamBuilder<List<Map<String, dynamic>>>(
+                stream: systemRepo.announcementStream,
+                initialData: _initialData,
+                builder: (context, snapshot) {
+                  // Show spinner only on the very first local load
+                  if (_isInitialLoading && !snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
+                  }
 
-          if (snapshot.hasError) {
-             return Center(
-               child: Padding(
-                 padding: const EdgeInsets.all(32.0),
-                 child: Column(
-                   mainAxisAlignment: MainAxisAlignment.center,
-                   children: [
-                     const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.redAccent),
-                     const SizedBox(height: 16),
-                     Text(
-                       snapshot.error.toString().contains('RealtimeSubscribeException') 
-                           ? "Connection Lost" 
-                           : "Something went wrong",
-                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                     ),
-                     const SizedBox(height: 8),
-                     const Text(
-                       "We're having trouble reaching the server. Please try refreshing.",
-                       textAlign: TextAlign.center,
-                       style: TextStyle(color: Colors.grey),
-                     ),
-                     const SizedBox(height: 24),
-                     ElevatedButton.icon(
-                       onPressed: () {
-                         // A simple setState will trigger a rebuild and re-subscribe
-                         setState(() {});
-                       },
-                       icon: const Icon(Icons.refresh),
-                       label: const Text("Retry Connection"),
-                       style: ElevatedButton.styleFrom(
-                         backgroundColor: AppColors.brandGreen,
-                         foregroundColor: Colors.white,
-                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                       ),
-                     ),
-                   ],
-                 ),
-               ),
-             );
-          }
+                  if (snapshot.hasError) {
+                    return _buildErrorView(snapshot.error.toString());
+                  }
 
-          final rawData = snapshot.data ?? [];
-          
-          // Strict filtering for Active and Not Deleted
-          var announcements = rawData.where((a) {
-            final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
-            final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
-            return isActive && !isDeleted;
-          }).toList();
-          
-          // User-specific filtering (Seniors/Children/All)
-          if (user != null) {
-            final int age = user.age;
-            announcements = announcements.where((a) {
-              final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
-              if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
-              if (target == 'SENIORS' && age >= 60) return true;
-              if (target == 'CHILDREN' && age <= 12) return true;
-              return false;
-            }).toList();
-          }
+                  final rawData = snapshot.data ?? [];
+                  
+                  // Strict filtering for Active and Not Deleted
+                  var announcements = rawData.where((a) {
+                    final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
+                    final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
+                    return isActive && !isDeleted;
+                  }).toList();
+                  
+                  // User-specific filtering (Seniors/Children/All)
+                  if (user != null) {
+                    final int age = user.age;
+                    announcements = announcements.where((a) {
+                      final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+                      if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
+                      if (target == 'SENIORS' && age >= 60) return true;
+                      if (target == 'CHILDREN' && age <= 12) return true;
+                      return false;
+                    }).toList();
+                  }
 
-          if (announcements.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
-              child: Stack(
-                children: [
-                   ListView(), // For pull-to-refresh
-                   Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.campaign_outlined,
-                            color: Colors.grey.shade300, size: 80),
-                        const SizedBox(height: 16),
-                        const Text("No announcements yet",
-                            style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold)),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                          child: Text(
-                            "Important updates from your Barangay will appear here.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey, fontSize: 14),
-                          ),
-                        ),
-                      ],
+                  if (announcements.isEmpty) {
+                    return _buildEmptyView(authRepo, systemRepo);
+                  }
+
+                  return RefreshIndicator(
+                    onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
+                    color: AppColors.brandGreen,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: announcements.length,
+                      itemBuilder: (context, index) {
+                        return _buildAnnouncementCard(announcements[index]);
+                      },
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
-            );
-          }
+        );
+      },
+    );
+  }
 
-          return RefreshIndicator(
-            onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
-            color: AppColors.brandGreen,
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: announcements.length,
-              itemBuilder: (context, index) {
-                return _buildAnnouncementCard(announcements[index]);
-              },
+  Widget _buildOfflineView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              "Connection Lost",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          );
-        },
+            const SizedBox(height: 8),
+            const Text(
+              "We're having trouble reaching the server. Please check your internet and try again.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => ConnectionManager().retryConnection(),
+              icon: const Icon(Icons.refresh),
+              label: const Text("Retry Connection"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorView(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(
+              error.contains('RealtimeSubscribeException') 
+                  ? "Live Updates Unavailable" 
+                  : "Something went wrong",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "We're showing previously loaded data. Try refreshing manually.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _refreshData,
+              icon: const Icon(Icons.refresh),
+              label: const Text("Refresh Data"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyView(IAuthRepository authRepo, ISystemRepository systemRepo) {
+    return RefreshIndicator(
+      onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
+      child: Stack(
+        children: [
+          ListView(), // For pull-to-refresh
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.campaign_outlined,
+                    color: Colors.grey.shade300, size: 80),
+                const SizedBox(height: 16),
+                const Text("No announcements yet",
+                    style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                  child: Text(
+                    "Important updates from your Barangay will appear here.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

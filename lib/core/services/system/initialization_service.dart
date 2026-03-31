@@ -23,6 +23,7 @@ import '../hardware/sensor_manager.dart';
 import '../hardware/sensor_service_interface.dart';
 import 'background_service_helper.dart';
 import '../database/database_helper.dart';
+import 'power_manager_service.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
@@ -128,6 +129,7 @@ class InitializationService {
     // 10. Initial Uptime & Health Log (H2 Validation)
     if (mode == AppMode.kiosk) {
         try {
+          PowerManagerService().startMonitoring();
           _logInitialHealth();
         } catch (e) {
           debugPrint("⚠️ [InitializationService] Health Log Error: $e");
@@ -139,7 +141,11 @@ class InitializationService {
 
   /// Centralized permission request flow for Mobile Patient mode
   Future<void> _requestAppPermissions() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      debugPrint("🔐 [InitializationService] Requesting Web Permissions...");
+      await NotificationService().requestPermissions();
+      return;
+    }
     if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) return;
 
     try {
@@ -219,11 +225,38 @@ class InitializationService {
       }
     }
 
-    // Capture PWA URL from env or fallback
+    // 2. Capture PWA URL from env or fallback
     final pwaUrl = dotenv.env['PWA_URL'];
     if (pwaUrl != null && pwaUrl.isNotEmpty) {
       AppEnvironment().setPwaUrl(pwaUrl);
       debugPrint("📢 InitializationService: PWA Domain set to $pwaUrl");
+    }
+
+    // 3. CAPTURE KIOSK CONFIG (Flexible deployments)
+    // IMPORTANT: Only override from .env if mode is the default 'kiosk'
+    // This allows main_admin.dart to firmly set 'desktopAdmin' mode.
+    final currentMode = AppEnvironment().mode;
+    final modeStr = dotenv.env['APP_MODE']?.toLowerCase();
+    
+    if (currentMode == AppMode.kiosk && modeStr != null) {
+      if (modeStr == 'admin') {
+        AppEnvironment().setMode(AppMode.desktopAdmin);
+      } else if (modeStr == 'patient') {
+        AppEnvironment().setMode(AppMode.mobilePatient);
+      }
+      // If modeStr is 'kiosk', it's already the default.
+    }
+
+    final simStr = dotenv.env['USE_SIMULATION']?.toLowerCase();
+    if (simStr != null) {
+      AppEnvironment().setSimulation(simStr == 'true');
+      debugPrint("📢 InitializationService: Simulation Mode = ${AppEnvironment().useSimulation}");
+    }
+
+    final exitPass = dotenv.env['ADMIN_EXIT_PASSWORD'];
+    if (exitPass != null && exitPass.isNotEmpty) {
+      AppEnvironment().setAdminExitPassword(exitPass);
+      debugPrint("📢 InitializationService: Admin Exit Password loaded.");
     }
   }
 
@@ -272,6 +305,15 @@ class InitializationService {
           DeviceOrientation.portraitDown,
         ]);
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+        // PI OPTIMIZATION: Hide mouse cursor for touch-only kiosks on Desktop platforms
+        if (!kIsWeb && 
+           (defaultTargetPlatform == TargetPlatform.linux || 
+            defaultTargetPlatform == TargetPlatform.windows || 
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+          debugPrint("🖱️ [InitializationService] Kiosk Mode: Hiding mouse cursor...");
+          SystemChannels.mouseCursor.invokeMethod('setCursor', {'kind': 'none'});
+        }
       } else {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
         SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -282,38 +324,62 @@ class InitializationService {
         ));
       }
     } catch (e) {
-      debugPrint("⚠️ InitializationService (UI Config): $e");
+      debugPrint("⚠️ [InitializationService] UI Config Error: $e");
     }
   }
 
   Future<void> _initDesktopWindow() async {
-     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
       try {
         await windowManager.ensureInitialized();
 
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(1280, 720),
-          minimumSize: Size(1280, 720),
+        final isKiosk = AppEnvironment().mode == AppMode.kiosk;
+
+        WindowOptions windowOptions = WindowOptions(
+          size: const Size(1280, 720),
+          minimumSize: const Size(1280, 720),
           center: true,
           backgroundColor: Colors.white,
-          skipTaskbar: false,
-          title: "Isla Verde Admin Command Center",
+          skipTaskbar: isKiosk, // Hide from taskbar in Kiosk mode
+          title: isKiosk ? "Isla Verde Kiosk" : "Isla Verde Admin Command Center",
+          titleBarStyle: isKiosk ? TitleBarStyle.hidden : TitleBarStyle.normal,
         );
 
         await windowManager.waitUntilReadyToShow(windowOptions, () async {
           await windowManager.show();
           await windowManager.focus();
-          // Full screen for Kiosk on Linux/Windows
-          if (AppEnvironment().mode == AppMode.kiosk) {
-             await windowManager.setFullScreen(true);
+          
+          if (isKiosk) {
+            debugPrint("🔒 [InitializationService] Locking Kiosk Window...");
+            await windowManager.setFullScreen(true);
+            await windowManager.setAlwaysOnTop(true);
+            await windowManager.setResizable(false);
+            await windowManager.setClosable(false); // Prevent accidental closing
+            
+            // PI OPTIMIZATION: Additional Linux checks
+            if (defaultTargetPlatform == TargetPlatform.linux) {
+              _checkLinuxHardwareAccess();
+            }
           } else {
-             await windowManager.maximize();
+            // Admin Desktop Mode: Standard window behavior
+            // We show it at the default Size(1280, 720) first, 
+            // then let the user maximize it manually if they wish.
+            // This provides the header/title bar they expect.
+            await windowManager.setFullScreen(false);
           }
         });
       } catch (e) {
-        debugPrint("⚠️ InitializationService (WindowManager): $e");
+        debugPrint("⚠️ [InitializationService] WindowManager Error: $e");
       }
     }
+  }
+
+  /// Diagnostic helper for Raspberry Pi / Linux sensor connectivity
+  void _checkLinuxHardwareAccess() {
+    // This is a log-only check to assist setup.
+    // In a real Pi environment, the user must be in the 'dialout' group.
+    debugPrint("🔍 [RPi Diagnostic] Verifying hardware access paths...");
+    debugPrint("💡 Tip: Ensure the user is in the 'dialout' group: sudo usermod -a -G dialout \$USER");
   }
 }
 

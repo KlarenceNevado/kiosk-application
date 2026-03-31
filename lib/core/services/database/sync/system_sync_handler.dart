@@ -131,7 +131,7 @@ class SystemSyncHandler extends SyncHandler {
 
   // --- PUBLIC CRUDS (For Admin & Interactive Reactions) ---
 
-  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive}) async {
+  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive, bool isArchived = false}) async {
     final data = {
       'id': id,
       'title': title,
@@ -139,13 +139,17 @@ class SystemSyncHandler extends SyncHandler {
       'target_group': targetGroup,
       'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
+      'is_archived': isArchived,
       'updated_at': DateTime.now().toIso8601String(),
     };
     await supabase.from('announcements').upsert(data);
   }
 
   Future<void> deleteAnnouncement(String id) async {
-    await supabase.from('announcements').delete().eq('id', id);
+    // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullAnnouncements.
+    await supabase.from('announcements')
+        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
   Future<void> pushSchedule({required String id, required String type, required DateTime date, required String location, required String assigned, required int colorValue}) async {
@@ -153,7 +157,10 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> deleteScheduleCloud(String id) async {
-    await supabase.from('schedules').delete().eq('id', id);
+    // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullSchedules.
+    await supabase.from('schedules')
+        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
   Future<void> pushAlert({required String id, required String message, required String targetGroup, required bool isEmergency, required DateTime timestamp, required bool isActive}) async {
@@ -170,7 +177,10 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> deleteAlert(String id) async {
-    await supabase.from('alerts').delete().eq('id', id);
+    // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullAlerts.
+    await supabase.from('alerts')
+        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
   Future<void> reactToAnnouncement(String id, String emoji, String userId) async {
@@ -213,8 +223,15 @@ class SystemSyncHandler extends SyncHandler {
     _announcementsChannel = supabase.channel('public:announcements_realtime').onPostgresChanges(
       event: PostgresChangeEvent.all, schema: 'public', table: 'announcements',
       callback: (payload) {
+        if (payload.eventType == PostgresChangeEvent.delete) {
+          final id = payload.oldRecord['id']?.toString();
+          if (id != null) {
+            unawaited(dbHelper.systemDao.hardDeleteAnnouncement(id));
+          }
+        } else {
+          unawaited(pullAnnouncements());
+        }
         SyncEventBus.instance.triggerAnnouncementUpdate();
-        unawaited(pullAnnouncements());
       },
     ).subscribe();
   }
@@ -224,8 +241,15 @@ class SystemSyncHandler extends SyncHandler {
     _alertsChannel = supabase.channel('public:alerts_realtime').onPostgresChanges(
       event: PostgresChangeEvent.all, schema: 'public', table: 'alerts',
       callback: (payload) {
+        if (payload.eventType == PostgresChangeEvent.delete) {
+          final id = payload.oldRecord['id']?.toString();
+          if (id != null) {
+            unawaited(dbHelper.systemDao.hardDeleteAlert(id));
+          }
+        } else {
+          unawaited(pullAlerts());
+        }
         SyncEventBus.instance.triggerAlertUpdate();
-        unawaited(pullAlerts());
       },
     ).subscribe();
   }
@@ -239,7 +263,14 @@ class SystemSyncHandler extends SyncHandler {
       event: PostgresChangeEvent.all, schema: 'public', table: 'schedules',
       filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: currentUserId),
       callback: (payload) {
-        unawaited(pullSchedules(currentUserId));
+        if (payload.eventType == PostgresChangeEvent.delete) {
+          final id = payload.oldRecord['id']?.toString();
+          if (id != null) {
+            unawaited(dbHelper.systemDao.hardDeleteSchedule(id));
+          }
+        } else {
+          unawaited(pullSchedules(currentUserId));
+        }
       },
     ).subscribe();
   }
@@ -286,8 +317,11 @@ class SystemSyncHandler extends SyncHandler {
     final isArchived = (row['is_archived'] == true || row['isArchived'] == true);
     if (isArchived) return;
 
-    // QUIET MODE: Never notify if we are in the UI isolate
-    if (!isBackground) return;
+    // QUIET MODE: Only notify if we are a mobile or web app (not Admin Desktop)
+    // Removed strict !isBackground check to allow foreground notifications, 
+    // matching the behavior of chat messages.
+    final isMobileOrWeb = AppEnvironment().isMobilePatient || kIsWeb;
+    if (!isMobileOrWeb) return;
 
     final target = (row['target_group'] ?? row['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
     final title = row['title'] ?? "New Announcement";

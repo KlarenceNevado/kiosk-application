@@ -20,9 +20,17 @@ class HealthWizardProvider extends ChangeNotifier {
   int _heightCm = 165;
   double _weightKg = 70.0;
 
-  // SYSTEM STATE
+  bool _isSessionActive = false;
   SensorStatus _status = SensorStatus.disconnected;
   StreamSubscription? _sensorSubscription;
+
+  bool get isSessionActive => _isSessionActive;
+
+  // LOCK STATES (To prevent fluctuation after capture)
+  bool _isWeightLocked = false;
+  bool _isTempLocked = false;
+  bool _isPulseOxLocked = false;
+  bool _isBpLocked = false;
 
   // GETTERS
   int get currentHeartRate => _currentHeartRate;
@@ -39,6 +47,16 @@ class HealthWizardProvider extends ChangeNotifier {
   SensorStatus get status => _status;
   bool get isScanning => _status == SensorStatus.reading;
   bool get isConnecting => _status == SensorStatus.connecting;
+
+  bool isVitalLocked(SensorType type) {
+    switch (type) {
+      case SensorType.weight: return _isWeightLocked;
+      case SensorType.thermometer: return _isTempLocked;
+      case SensorType.oximeter: return _isPulseOxLocked;
+      case SensorType.bloodPressure: return _isBpLocked;
+      case SensorType.battery: return false;
+    }
+  }
 
   double get bmi {
     if (_heightCm == 0) return 0.0;
@@ -64,13 +82,32 @@ class HealthWizardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Simulate weight reading
+  // Simulation / Manual Setters
+  void setTemperature(double temp) {
+    _currentTemp = temp;
+    notifyListeners();
+  }
+
+  void setBloodPressure(int sys, int dia) {
+    _currentSystolic = sys;
+    _currentDiastolic = dia;
+    notifyListeners();
+  }
+
+  void setPulseOx(int hr, int spo2) {
+    _currentHeartRate = hr;
+    _currentSpO2 = spo2;
+    notifyListeners();
+  }
+
   void setWeight(double weight) {
     _weightKg = weight;
     notifyListeners();
   }
 
   void startHealthCheck() {
+    _isSessionActive = true;
+    notifyListeners();
     SystemLogService().logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
 
     _sensorSubscription?.cancel();
@@ -80,20 +117,27 @@ class HealthWizardProvider extends ChangeNotifier {
       if (event.data != null) {
         switch (event.type) {
           case SensorType.weight:
-            _weightKg = event.data as double;
+            if (!_isWeightLocked) _weightKg = event.data as double;
             break;
           case SensorType.oximeter:
-            final oximeter = event.data as Map<String, dynamic>;
-            _currentSpO2 = oximeter['spo2'] as int;
-            _currentHeartRate = oximeter['bpm'] as int;
+            if (!_isPulseOxLocked) {
+              final oximeter = event.data as Map<String, dynamic>;
+              _currentSpO2 = oximeter['spo2'] as int;
+              _currentHeartRate = oximeter['bpm'] as int;
+            }
             break;
           case SensorType.thermometer:
-            _currentTemp = event.data as double;
+            if (!_isTempLocked) _currentTemp = event.data as double;
             break;
           case SensorType.bloodPressure:
-            final bp = event.data as Map<String, dynamic>;
-            _currentSystolic = bp['sys'] as int;
-            _currentDiastolic = bp['dia'] as int;
+            if (!_isBpLocked) {
+              final bp = event.data as Map<String, dynamic>;
+              _currentSystolic = bp['sys'] as int;
+              _currentDiastolic = bp['dia'] as int;
+            }
+            break;
+          case SensorType.battery:
+            // Handled by PowerManager, not used in Wizard UI
             break;
         }
       }
@@ -105,9 +149,33 @@ class HealthWizardProvider extends ChangeNotifier {
     });
   }
 
+  /// Captures the current vital reading, locks it, and stops the sensor.
+  void captureVital(SensorType type) {
+    debugPrint("📥 [HealthWizardProvider] Capturing Final $type Reading...");
+    
+    switch (type) {
+      case SensorType.weight: _isWeightLocked = true; break;
+      case SensorType.thermometer: _isTempLocked = true; break;
+      case SensorType.oximeter: _isPulseOxLocked = true; break;
+      case SensorType.bloodPressure: _isBpLocked = true; break;
+      case SensorType.battery: break;
+    }
+
+    _sensorManager.stopSensor(type);
+    
+    SystemLogService().logAction(
+      action: 'VITAL_CAPTURE_LOCKED',
+      module: 'HEALTH_CHECK',
+      sensorFailures: 'Reading locked for $type',
+    );
+    
+    notifyListeners();
+  }
+
 
 
   void stopHealthCheck() {
+    _isSessionActive = false;
     SystemLogService().logAction(action: 'HEALTH_CHECK_STOP', module: 'HEALTH_CHECK');
     _sensorManager.stopAll();
     _sensorSubscription?.cancel();

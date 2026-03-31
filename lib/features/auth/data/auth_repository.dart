@@ -329,7 +329,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       familyIds: getLinkedAccounts().map((u) => u.id).toList(),
     );
 
-    _resetSessionTimer();
+    resetSessionTimer();
     _isLoading = false;
     notifyListeners();
     return null;
@@ -337,7 +337,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   // --- NEW: SESSION & LOCKOUT HELPERS ---
 
-  void _resetSessionTimer() {
+  @override
+  void resetSessionTimer() {
     _sessionTimeout?.cancel();
     _sessionTimeout = Timer(const Duration(minutes: _sessionMinutes), () {
       debugPrint("🕰️ Session Timeout ($_sessionMinutes minutes): Logging out...");
@@ -496,7 +497,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         SystemAlertListenerService().startListening(userRole: 'patient', sitio: _currentUser!.sitio);
         SyncService().syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
         
-        _resetSessionTimer();
+        resetSessionTimer();
         notifyListeners();
         return null; 
       } else {

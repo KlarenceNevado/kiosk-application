@@ -15,6 +15,7 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   String _selectedTarget = 'all';
+  bool _showArchived = false;
 
   @override
   void dispose() {
@@ -26,7 +27,8 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
   @override
   Widget build(BuildContext context) {
     final adminRepo = context.watch<AdminRepository>();
-    final announcements = adminRepo.announcements;
+    // Filter based on the _showArchived toggle
+    final announcements = adminRepo.announcements.where((a) => a.isArchived == _showArchived).toList();
 
     return Row(
       children: [
@@ -232,11 +234,22 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
           padding: const EdgeInsets.all(32),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("Active & Recent Announcements",
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_showArchived ? "Archived Announcements" : "Active & Recent Announcements",
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark)),
+                // Filter Toggle
+                TextButton.icon(
+                  onPressed: () => setState(() => _showArchived = !_showArchived),
+                  icon: Icon(_showArchived ? Icons.inbox_outlined : Icons.archive_outlined),
+                  label: Text(_showArchived ? "SHOW ACTIVE" : "VIEW ARCHIVE"),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             Expanded(
                 child: ListView.separated(
@@ -247,7 +260,7 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                       final ann = announcements[index];
                       return Card(
                           elevation: ann.isActive ? 2 : 0,
-                          color: ann.isActive ? Colors.white : Colors.grey[200],
+                          color: ann.isActive && !ann.isArchived ? Colors.white : Colors.grey[200],
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(color: Colors.grey[300]!)),
@@ -298,13 +311,13 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                             style: TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
-                                                color: ann.isActive
+                                                color: ann.isActive && !ann.isArchived
                                                     ? Colors.black
                                                     : Colors.grey)),
                                         const SizedBox(height: 8),
                                         Text(ann.content,
                                             style: TextStyle(
-                                                color: ann.isActive
+                                                color: ann.isActive && !ann.isArchived
                                                     ? Colors.black87
                                                     : Colors.grey)),
                                       ],
@@ -312,46 +325,63 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                     const SizedBox(width: 24),
                                     Column(
                                       children: [
-                                        IconButton(
-                                          icon: const Icon(
-                                              Icons.delete_outline_rounded,
-                                              color: Colors.red),
-                                          onPressed: () async {
-                                            final confirm =
-                                                await showDialog<bool>(
-                                              context: context,
-                                              builder: (ctx) => AlertDialog(
-                                                title: const Text(
-                                                    "Delete Announcement?"),
-                                                content: const Text(
-                                                    "This will permanently remove it for all users."),
-                                                actions: [
-                                                  TextButton(
-                                                      onPressed: () =>
-                                                          Navigator.pop(
-                                                              ctx, false),
-                                                      child:
-                                                          const Text("CANCEL")),
-                                                  TextButton(
-                                                      onPressed: () =>
-                                                          Navigator.pop(
-                                                              ctx, true),
-                                                      child: const Text(
-                                                          "DELETE",
-                                                          style: TextStyle(
-                                                              color:
-                                                                  Colors.red))),
-                                                ],
-                                              ),
-                                            );
-                                            if (confirm == true) {
-                                              adminRepo
-                                                  .deleteAnnouncement(ann.id);
-                                            }
-                                          },
+                                        Row(
+                                          children: [
+                                            // Archive/Unarchive Action
+                                            IconButton(
+                                              tooltip: ann.isArchived ? "Unarchive" : "Archive",
+                                              icon: Icon(ann.isArchived ? Icons.unarchive : Icons.archive),
+                                              onPressed: () {
+                                                adminRepo.toggleAnnouncementArchive(ann, !ann.isArchived);
+                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                                  content: Text(ann.isArchived ? "Announcement Restored!" : "Announcement Archived!"),
+                                                  backgroundColor: ann.isArchived ? AppColors.brandGreen : Colors.orange,
+                                                ));
+                                              },
+                                            ),
+                                            IconButton(
+                                              tooltip: "Delete Permanently",
+                                              icon: const Icon(
+                                                  Icons.delete_outline_rounded,
+                                                  color: Colors.red),
+                                              onPressed: () async {
+                                                final confirm =
+                                                    await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (ctx) => AlertDialog(
+                                                    title: const Text(
+                                                        "Delete Announcement?"),
+                                                    content: const Text(
+                                                        "This will permanently remove it for all users."),
+                                                    actions: [
+                                                      TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                  ctx, false),
+                                                          child:
+                                                              const Text("CANCEL")),
+                                                      TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                  ctx, true),
+                                                          child: const Text(
+                                                              "DELETE",
+                                                              style: TextStyle(
+                                                                  color:
+                                                                      Colors.red))),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (confirm == true) {
+                                                  adminRepo
+                                                      .deleteAnnouncement(ann.id);
+                                                }
+                                              },
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 8),
-                                        const Text("Status",
+                                        const Text("Visibility",
                                             style: TextStyle(
                                                 color: Colors.grey,
                                                 fontSize: 12)),
@@ -392,10 +422,11 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                         ],
                                         Text(
                                             ann.isActive
-                                                ? "Active"
-                                                : "Archived",
+                                                ? "ACTIVE"
+                                                : "HIDDEN",
                                             style: TextStyle(
                                                 fontWeight: FontWeight.bold,
+                                                fontSize: 10,
                                                 color: ann.isActive
                                                     ? AppColors.brandGreen
                                                     : Colors.grey)),

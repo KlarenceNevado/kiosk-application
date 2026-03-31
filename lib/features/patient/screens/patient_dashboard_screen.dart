@@ -8,6 +8,7 @@ import '../../health_check/models/vital_signs_model.dart';
 import '../data/mobile_navigation_provider.dart';
 import '../../user_history/domain/i_history_repository.dart';
 import '../../../core/domain/i_system_repository.dart';
+import '../../../core/services/database/connection_manager.dart';
 import 'dart:math' as math;
 
 class PatientDashboardScreen extends StatefulWidget {
@@ -102,108 +103,149 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   Widget build(BuildContext context) {
     final user = context.read<IAuthRepository>().currentUser;
     final systemRepo = context.read<ISystemRepository>();
+    final connectionManager = ConnectionManager();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        color: AppColors.brandGreen,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // ── App Bar ──────────────────────────────────────────────────
-            SliverAppBar(
-              expandedHeight: 130,
-              floating: false,
-              pinned: true,
-              automaticallyImplyLeading: false,
-              backgroundColor: AppColors.brandGreen,
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF7CB335), // brandGreenDark
-                        Color(0xFF8CC63F), // brandGreen
-                      ],
+    return ListenableBuilder(
+      listenable: connectionManager,
+      builder: (context, _) {
+        final isOffline = connectionManager.currentStatus == ConnectionStatus.offline;
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F7FA),
+          body: RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppColors.brandGreen,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                // ── App Bar ──────────────────────────────────────────────────
+                SliverAppBar(
+                  expandedHeight: 130,
+                  floating: false,
+                  pinned: true,
+                  automaticallyImplyLeading: false,
+                  backgroundColor: AppColors.brandGreen,
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF7CB335), // brandGreenDark
+                            Color(0xFF8CC63F), // brandGreen
+                          ],
+                        ),
+                      ),
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                "Welcome, ${user?.firstName ?? 'Patient'}",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                "Here's your health overview",
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
+                  actions: [
+                    if (isOffline)
+                      const Tooltip(
+                        message: "Offline Mode",
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Icon(Icons.wifi_off_rounded, color: Colors.white70, size: 20),
+                        ),
+                      ),
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: systemRepo.announcementStream,
+                      builder: (context, snapshot) {
+                        final hasUpdates = snapshot.hasData && snapshot.data!.isNotEmpty;
+                        return Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.notifications_none_rounded,
+                                  color: Colors.white, size: 28),
+                              onPressed: () {
+                                context
+                                    .read<MobileNavigationProvider>()
+                                    .goToAnnouncements();
+                              },
+                            ),
+                            if (hasUpdates)
+                              Positioned(
+                                right: 12,
+                                top: 12,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF5252), // Clinical Red
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      }
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+
+                if (isOffline)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      color: Colors.orange.shade100,
+                      child: Row(
                         children: [
-                          Text(
-                            "Welcome, ${user?.firstName ?? 'Patient'}",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
+                          const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "You are currently offline. Showing cached data.",
+                              style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.w600),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "Here's your health overview",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
+                          TextButton(
+                            onPressed: () => connectionManager.retryConnection(),
+                            child: const Text("RETRY", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          )
                         ],
                       ),
                     ),
                   ),
-                ),
-              ),
-              actions: [
-                StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: systemRepo.announcementStream,
-                  builder: (context, snapshot) {
-                    final hasUpdates = snapshot.hasData && snapshot.data!.isNotEmpty;
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.notifications_none_rounded,
-                              color: Colors.white, size: 28),
-                          onPressed: () {
-                            context
-                                .read<MobileNavigationProvider>()
-                                .goToAnnouncements();
-                          },
-                        ),
-                        if (hasUpdates)
-                          Positioned(
-                            right: 12,
-                            top: 12,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFF5252), // Clinical Red
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 1.5),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  }
-                ),
-                const SizedBox(width: 8),
+
+                // ── Body Content ─────────────────────────────────────────────
+                SliverToBoxAdapter(child: _buildBody()),
               ],
             ),
-
-            // ── Body Content ─────────────────────────────────────────────
-            SliverToBoxAdapter(child: _buildBody()),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -298,22 +340,34 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   Widget _buildDoctorRemarksCard() {
     if (_vitals.isEmpty) return const SizedBox.shrink();
 
-    // Find latest record that has remarks
+    // 1. Find the ABSOLUTE LATEST record
+    final latestRecord = _vitals.first;
+    
+    // 2. Find the latest record that actually has remarks (for historical context)
     VitalSigns? recordWithRemarks;
     try {
       recordWithRemarks = _vitals.firstWhere(
         (v) => v.remarks != null && v.remarks!.isNotEmpty,
       );
     } catch (_) {
-      recordWithRemarks = _vitals.first;
+      recordWithRemarks = null;
     }
 
-    if (recordWithRemarks.remarks == null || recordWithRemarks.remarks!.isEmpty) {
+    // Determine what to show
+    // If the latest record is NOT verified and HAS NO remarks, it's definitely "Under Review"
+    final bool latestIsPending = latestRecord.status != 'verified' && 
+                                latestRecord.status != 'verified_true' &&
+                                (latestRecord.remarks == null || latestRecord.remarks!.isEmpty);
+
+    // If we have nothing to show (no pending checkup AND no historical remarks), hide
+    if (!latestIsPending && (recordWithRemarks == null)) {
       return const SizedBox.shrink();
     }
 
-    final bool isVerified = recordWithRemarks.status == 'verified_true' ||
-        recordWithRemarks.status == 'verified';
+    // Use latest for status, but recordWithRemarks for content if available
+    final displayRecord = latestIsPending ? latestRecord : recordWithRemarks!;
+    final bool isVerified = displayRecord.status == 'verified_true' ||
+        displayRecord.status == 'verified';
 
     return Container(
       decoration: BoxDecoration(
@@ -341,9 +395,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                 const Icon(Icons.rate_review_rounded,
                     color: Colors.white, size: 18),
                 const SizedBox(width: 8),
-                const Text(
-                  "Health Worker Remarks",
-                  style: TextStyle(
+                Text(
+                  latestIsPending ? "Checkup Status" : "Health Worker Remarks",
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -366,42 +420,61 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  recordWithRemarks.remarks!,
-                  style: const TextStyle(
-                    color: AppColors.brandDark,
-                    fontSize: 15,
-                    height: 1.5,
-                  ),
-                ),
-                if (recordWithRemarks.followUpAction != null &&
-                    recordWithRemarks.followUpAction != 'none') ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.medical_services_outlined,
-                            size: 16, color: Colors.blue.shade700),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            "Follow-up: ${_formatAction(recordWithRemarks.followUpAction!)}",
-                            style: TextStyle(
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+                if (latestIsPending) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.hourglass_empty_rounded, color: Colors.orange, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Your latest checkup from ${_formatDateShort(displayRecord.timestamp)} is currently being reviewed by our health workers.",
+                          style: const TextStyle(
+                            color: AppColors.brandDark,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  Text(
+                    displayRecord.remarks!,
+                    style: const TextStyle(
+                      color: AppColors.brandDark,
+                      fontSize: 15,
+                      height: 1.5,
                     ),
                   ),
+                  if (displayRecord.followUpAction != null &&
+                      displayRecord.followUpAction != 'none') ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.medical_services_outlined,
+                              size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              "Follow-up: ${_formatAction(displayRecord.followUpAction!)}",
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -409,6 +482,10 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         ],
       ),
     );
+  }
+
+  String _formatDateShort(DateTime date) {
+    return "${date.month}/${date.day}/${date.year}";
   }
 
   String _formatAction(String action) {
@@ -419,9 +496,46 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         return "Schedule Home Visit";
       case 'refer_municipal':
         return "Refer to Municipal Office";
+      case 'none':
+        return "No further action needed";
       default:
-        return "No further action needed at this time.";
+        return action;
     }
+  }
+
+  Widget _buildStatusBadge(String status) {
+    final bool isVerified = status == 'verified' || status == 'verified_true';
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isVerified ? Icons.check_circle_rounded : Icons.pending_rounded,
+            size: 10,
+            color: isVerified ? AppColors.brandGreen : Colors.orange,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isVerified ? "Verified" : "Reviewing",
+            style: TextStyle(
+              color: isVerified ? AppColors.brandGreen : Colors.orange,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBody() {
@@ -1506,11 +1620,17 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                 size: 22,
               ),
             ),
-            title: Text(date,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
-                    fontSize: 14)),
+            title: Row(
+              children: [
+                Text(date,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark,
+                        fontSize: 14)),
+                const SizedBox(width: 12),
+                _buildStatusBadge(vital.status),
+              ],
+            ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Wrap(

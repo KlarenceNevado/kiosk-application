@@ -32,14 +32,11 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
     super.initState();
     _pageController = PageController();
 
-    // Prepare listener, but DO NOT start sensors yet to avoid UI lag on entry.
-    // Sensors will be started lazily as the user progresses through steps.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<HealthWizardProvider>();
-      provider.startHealthCheck(); // This now just sets up the listener but doesn't call startAll internally if we change it
+      provider.startHealthCheck(); 
     });
   }
-
 
   @override
   void dispose() {
@@ -70,63 +67,76 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
           }
         },
         child: Scaffold(
-          backgroundColor: AppColors.background,
+          extendBodyBehindAppBar: true,
           appBar: AppBar(
-            backgroundColor: Colors.white,
+            backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey),
+              icon: const Icon(Icons.close, color: AppColors.brandDark, size: 28),
               onPressed: _safeExit,
               tooltip: "Cancel Checkup",
             ),
             title: Text(
               "Health Check ${_currentStep + 1}/$_totalSteps",
-              style: const TextStyle(
-                  color: Colors.grey,
+              style: TextStyle(
+                  color: AppColors.brandDark.withValues(alpha: 0.6),
                   fontSize: 16,
-                  fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0),
             ),
             centerTitle: true,
           ),
-          body: Column(
-            children: [
-              // Progress Bar
-              LinearProgressIndicator(
-                value: (_currentStep + 1) / _totalSteps,
-                minHeight: 6,
-                backgroundColor: Colors.grey[200],
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.brandGreen),
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFF8FAF5),
+                  Color(0xFFF0F4E8),
+                ],
+                stops: [0.0, 0.5, 1.0],
               ),
-
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  physics:
-                      const NeverScrollableScrollPhysics(), // Prevent swipe, force buttons
-                  children: [
-                    Step1Consent(onNext: _nextStep, onCancel: _safeExit),
-                    StepHeightInput(onNext: _nextStep),
-                    StepWeightScale(onNext: _nextStep),
-                    Step3SensorScan(onNext: _nextStep), // Temperature
-                    StepPulseOx(onNext: _nextStep), // Pulse & Ox
-                    StepBpConnect(onNext: _nextStep), // Blood Pressure
-                    const Step4Results(),
-                  ],
-                ),
-              ),
-
-              // Debug Skip (Remove in production)
-              if (_currentStep > 0 && _currentStep < 6)
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: TextButton(
-                    onPressed: _nextStep,
-                    child: const Text("Dev Skip >",
-                        style: TextStyle(color: Colors.grey, fontSize: 10)),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  // Premium Progress Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: LinearProgressIndicator(
+                        value: (_currentStep + 1) / _totalSteps,
+                        minHeight: 10,
+                        backgroundColor: AppColors.brandGreen.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.brandGreen),
+                      ),
+                    ),
                   ),
-                )
-            ],
+            
+                  Expanded(
+                    child: PageView(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(), 
+                      children: [
+                        Step1Consent(onNext: _nextStep, onCancel: _safeExit),
+                        StepHeightInput(onNext: _nextStep),
+                        StepWeightScale(onNext: _nextStep),
+                        Step3SensorScan(onNext: _nextStep),
+                        StepPulseOx(onNext: _nextStep),
+                        StepBpConnect(onNext: _nextStep),
+                        const Step4Results(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ));
   }

@@ -99,9 +99,12 @@ class HistoryItemTile extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (isAlert)
+                    _buildStatusBadge(data.status),
+                    if (isAlert) ...[
+                      const SizedBox(width: 8),
                       const Icon(Icons.warning_amber_rounded,
                           color: Colors.orange, size: 20),
+                    ],
                     const SizedBox(width: 8),
                     const Icon(Icons.arrow_forward_ios_rounded,
                         size: 14, color: Colors.grey),
@@ -198,6 +201,41 @@ class HistoryItemTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
       ],
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    final bool isVerified = status == 'verified' || status == 'verified_true';
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.3),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isVerified ? Icons.check_circle_rounded : Icons.pending_rounded,
+            size: 12,
+            color: isVerified ? AppColors.brandGreen : Colors.orange,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isVerified ? "Verified" : "Reviewing",
+            style: TextStyle(
+              color: isVerified ? AppColors.brandGreen : Colors.orange,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -24,6 +24,7 @@ abstract class IAuthRepository extends ChangeNotifier {
   Future<String?> loginWithId(String userId);
   Future<String?> loginPatientDevice(String phone, String pin);
   Future<void> logout();
+  void resetSessionTimer();
   
   // PIN specific logic (mainly for Patient apps)
   Future<bool> verifyAdminAccess(String pin) async => false; // Default implementations to avoid massive refactoring overhead

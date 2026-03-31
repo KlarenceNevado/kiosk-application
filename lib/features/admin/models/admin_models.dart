@@ -9,6 +9,7 @@ class Announcement {
   final String targetGroup;
   final DateTime timestamp;
   final bool isActive;
+  final bool isArchived;
   final Map<String, dynamic>? reactions; // { emoji: [userIds] }
   final String? mediaUrl;
   final String? mediaPath;
@@ -20,6 +21,7 @@ class Announcement {
     required this.targetGroup,
     required this.timestamp,
     required this.isActive,
+    this.isArchived = false,
     this.reactions,
     this.mediaUrl,
     this.mediaPath,
@@ -43,6 +45,7 @@ class Announcement {
       'target_group': targetGroup,
       'timestamp': timestamp.toIso8601String(),
       'is_active': isActive ? 1 : 0,
+      'is_archived': isArchived ? 1 : 0,
       'reactions': reactions,
       'media_url': mediaUrl,
       'media_path': mediaPath,
@@ -70,6 +73,7 @@ class Announcement {
       targetGroup: map['targetGroup'] ?? map['target_group'] ?? 'all',
       timestamp: DateTime.parse(map['timestamp']),
       isActive: map['is_active'] == 1 || map['is_active'] == true || map['isActive'] == 1 || map['isActive'] == true,
+      isArchived: map['is_archived'] == 1 || map['is_archived'] == true || map['isArchived'] == 1 || map['isArchived'] == true,
       reactions: parsedReactions,
       mediaUrl: map['media_url'],
       mediaPath: map['media_path'],

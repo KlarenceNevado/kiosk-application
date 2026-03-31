@@ -13,6 +13,7 @@ import 'database_helper.dart';
 import '../../../features/auth/models/user_model.dart';
 import '../../../features/health_check/models/vital_signs_model.dart';
 import '../system/app_environment.dart';
+import '../system/power_manager_service.dart';
 import 'package:kiosk_application/core/services/security/security_logger.dart';
 
 class SyncService with WidgetsBindingObserver {
@@ -98,6 +99,7 @@ class SyncService with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     debugPrint("🔄 SyncService: Starting sync loop and real-time listeners...");
     _attemptSync();
+    _listenToPowerMode();
 
     // PWA Optimization: High-frequency sync for Web to provide 'near-realtime' feel
     const syncInterval = kIsWeb ? Duration(seconds: 10) : Duration(minutes: 1);
@@ -141,6 +143,28 @@ class SyncService with WidgetsBindingObserver {
     _isSyncing = false;
     _syncMutex = null;
     _syncCallbacks.clear();
+  }
+
+  void _listenToPowerMode() {
+    PowerManagerService().modeStream.listen((mode) {
+      debugPrint("🔄 SyncService: Power mode changed to $mode. Adjusting interval...");
+      _syncTimer?.cancel();
+      
+      Duration interval;
+      switch (mode) {
+        case PowerMode.active:
+          interval = kIsWeb ? const Duration(seconds: 10) : const Duration(minutes: 1);
+          break;
+        case PowerMode.eco:
+          interval = const Duration(minutes: 15);
+          break;
+        case PowerMode.deepSleep:
+          interval = const Duration(minutes: 60); // Very rare sync
+          break;
+      }
+      
+      _syncTimer = Timer.periodic(interval, (_) => _attemptSync());
+    });
   }
 
   /// Restarts the entire sync engine for a new user session.
@@ -326,8 +350,8 @@ class SyncService with WidgetsBindingObserver {
   Future<void> syncFamilyVitals(List<String> ids) => vitalsHandler.syncFamilyVitals(ids);
 
   // --- DELEGATION: SYSTEM ---
-  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive}) =>
-      systemHandler.pushAnnouncement(id: id, title: title, content: content, targetGroup: targetGroup, timestamp: timestamp, isActive: isActive);
+  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive, bool isArchived = false}) =>
+      systemHandler.pushAnnouncement(id: id, title: title, content: content, targetGroup: targetGroup, timestamp: timestamp, isActive: isActive, isArchived: isArchived);
 
   Future<void> deleteAnnouncement(String id) => systemHandler.deleteAnnouncement(id);
 

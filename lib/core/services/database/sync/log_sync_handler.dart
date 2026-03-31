@@ -40,7 +40,7 @@ class LogSyncHandler extends SyncHandler {
     }
     
     // RLS will handle permission check (Allow insert for authenticated/anon)
-    await supabase.from('system_logs').insert(data);
+    await supabase.from('system_logs').upsert(data);
   }
 
   @override

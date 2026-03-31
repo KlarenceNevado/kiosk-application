@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS public.announcements (
     target_group TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     reactions JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT now(),
@@ -113,6 +114,7 @@ CREATE TABLE IF NOT EXISTS public.announcements (
 ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
 
 -- ── 2.4 Alerts ──
 CREATE TABLE IF NOT EXISTS public.alerts (

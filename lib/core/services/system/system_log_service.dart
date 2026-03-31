@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../../models/system_log_model.dart';
 import '../security/security_logger.dart';
+import 'power_manager_service.dart';
 
 class SystemLogService {
   static final SystemLogService _instance = SystemLogService._internal();
@@ -92,14 +93,17 @@ class SystemLogService {
   /// Used for tracking Hypothesis H2 (Reliability)
   Future<void> logUptimeHealth({
     bool isSolarActive = true, // Placeholder for future solar sensor
-    double batteryLevel = 100.0,
     Map<String, String>? availableSensors,
   }) async {
+    final power = PowerManagerService();
+    final voltage = power.currentVoltage;
+    final batteryLevel = power.batteryPercentage;
+
     final sensorStatusStr = availableSensors?.entries
         .map((e) => "${e.key}: ${e.value}")
         .join(", ");
     
-    final remarks = "Solar: ${isSolarActive ? 'ON' : 'OFF'}, Battery: $batteryLevel%, Sensors: ${sensorStatusStr ?? 'None detected'}";
+    final remarks = "Solar: ${isSolarActive ? 'ON' : 'OFF'}, Battery: $batteryLevel% ($voltage V), Sensors: ${sensorStatusStr ?? 'None detected'}";
 
     await logAction(
       action: 'SYSTEM_UPTIME_HEALTH',

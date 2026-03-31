@@ -8,6 +8,7 @@ import '../../../../core/widgets/kiosk_scaffold.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
 import '../../../../core/services/hardware/sensor_service_interface.dart' as hw;
+import '../../../../core/services/system/app_environment.dart';
 
 // DATA & REPO
 import '../../../user_history/domain/i_history_repository.dart';
@@ -15,7 +16,6 @@ import '../../../auth/domain/i_auth_repository.dart';
 import '../../models/vital_signs_model.dart';
 
 enum TestSensorType { temperature, bloodPressure, heartRate, oxygen }
-
 
 class SingleSensorTestScreen extends StatefulWidget {
   final TestSensorType type;
@@ -26,59 +26,83 @@ class SingleSensorTestScreen extends StatefulWidget {
   State<SingleSensorTestScreen> createState() => _SingleSensorTestScreenState();
 }
 
-class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
-  // 0 = Intro, 1 = Scanning (Simulated), 2 = Result
+class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with TickerProviderStateMixin {
+  // 0 = Prep, 1 = Scanning, 2 = Result
   int _viewState = 0;
-  String _liveDisplay = "--";
+  String _simDisplay = "--";
+  String _lockedResult = ""; 
   Timer? _simTimer;
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+       context.read<HealthWizardProvider>().startHealthCheck();
+    });
+  }
 
   void _startScan() {
     setState(() => _viewState = 1);
     final provider = context.read<HealthWizardProvider>();
-    provider.startHealthCheck();
-
-    // Map local type to hardware type and start laziness
+    
     switch (widget.type) {
-      case TestSensorType.temperature:
-        provider.startSensor(hw.SensorType.thermometer);
-        break;
-      case TestSensorType.bloodPressure:
-        provider.startSensor(hw.SensorType.bloodPressure);
-        break;
+      case TestSensorType.temperature: provider.startSensor(hw.SensorType.thermometer); break;
+      case TestSensorType.bloodPressure: provider.startSensor(hw.SensorType.bloodPressure); break;
       case TestSensorType.heartRate:
-      case TestSensorType.oxygen:
-        provider.startSensor(hw.SensorType.oximeter);
-        break;
+      case TestSensorType.oxygen: provider.startSensor(hw.SensorType.oximeter); break;
     }
 
+    if (!AppEnvironment().useSimulation) return;
 
-
-    // SIMULATE LIVE READING FLUCTUATION
+    // SIMULATION
     int ticks = 0;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 150), (timer) {
+    _simTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
       ticks++;
-      if (mounted) {
-        setState(() {
-          // Generate realistic fluctuations based on sensor type
-          if (widget.type == TestSensorType.temperature) {
-            _liveDisplay =
-                (34.0 + Random().nextDouble() * 3).toStringAsFixed(1);
-          } else if (widget.type == TestSensorType.heartRate) {
-            _liveDisplay = (60 + Random().nextInt(40)).toString();
-          } else if (widget.type == TestSensorType.oxygen) {
-            _liveDisplay = (90 + Random().nextInt(9)).toString();
-          } else if (widget.type == TestSensorType.bloodPressure) {
-            _liveDisplay =
-                "${90 + Random().nextInt(50)}"; // Just Systolic for animation
-          }
+      if (!mounted) { timer.cancel(); return; }
+      
+      setState(() {
+        if (widget.type == TestSensorType.temperature) {
+          _simDisplay = (36.0 + Random().nextDouble() * 0.5).toStringAsFixed(1);
+        } else if (widget.type == TestSensorType.heartRate) {
+          _simDisplay = (70 + Random().nextInt(15)).toString();
+        } else if (widget.type == TestSensorType.oxygen) {
+          _simDisplay = (97 + Random().nextInt(3)).toString();
+        } else if (widget.type == TestSensorType.bloodPressure) {
+          _simDisplay = "${100 + ticks * 2}"; 
+        }
+      });
 
-        });
-      }
-
-      // Stop after 4 seconds (simulate sensor lock)
-      if (ticks > 25) {
+      if (ticks >= 20) {
         timer.cancel();
-        if (mounted) setState(() => _viewState = 2);
+        _lockValueAndFinish();
+      }
+    });
+  }
+
+  void _lockValueAndFinish() {
+    final provider = context.read<HealthWizardProvider>();
+    setState(() {
+      _viewState = 2;
+      // Capture the final value
+      if (AppEnvironment().useSimulation) {
+          if (widget.type == TestSensorType.bloodPressure) {
+            _lockedResult = "120/80";
+          } else {
+            _lockedResult = _simDisplay;
+          }
+      } else {
+         switch (widget.type) {
+           case TestSensorType.temperature: _lockedResult = provider.currentTemp.toStringAsFixed(1); break;
+           case TestSensorType.heartRate: _lockedResult = "${provider.currentHeartRate}"; break;
+           case TestSensorType.oxygen: _lockedResult = "${provider.currentSpO2}"; break;
+           case TestSensorType.bloodPressure: _lockedResult = "${provider.currentSystolic}/${provider.currentDiastolic}"; break;
+         }
       }
     });
   }
@@ -93,319 +117,237 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> {
     final historyRepo = context.read<IHistoryRepository>();
     final authRepo = context.read<IAuthRepository>();
 
-    if (authRepo.currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Error: No user logged in")));
-      return;
-    }
+    if (authRepo.currentUser == null) return;
 
     final VitalSigns record = VitalSigns(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       userId: authRepo.currentUser!.id,
       timestamp: DateTime.now(),
-      heartRate:
-          widget.type == TestSensorType.heartRate ? provider.currentHeartRate : 0,
-      systolicBP: widget.type == TestSensorType.bloodPressure
-          ? provider.currentSystolic
-          : 0,
-      diastolicBP: widget.type == TestSensorType.bloodPressure
-          ? provider.currentDiastolic
-          : 0,
+      heartRate: widget.type == TestSensorType.heartRate ? provider.currentHeartRate : 0,
+      systolicBP: widget.type == TestSensorType.bloodPressure ? provider.currentSystolic : 0,
+      diastolicBP: widget.type == TestSensorType.bloodPressure ? provider.currentDiastolic : 0,
       oxygen: widget.type == TestSensorType.oxygen ? provider.currentSpO2 : 0,
-      temperature:
-          widget.type == TestSensorType.temperature ? provider.currentTemp : 0.0,
-
+      temperature: widget.type == TestSensorType.temperature ? provider.currentTemp : 0.0,
     );
 
     await historyRepo.addRecord(record);
     provider.stopHealthCheck();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Result saved to History"),
-        backgroundColor: AppColors.brandGreen,
-        duration: Duration(seconds: 2),
-      ));
-      context.pop();
-    }
+    if (mounted) context.pop();
   }
 
   @override
   void dispose() {
     _simTimer?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
+    final Color testColor = _getColor();
+    final IconData icon = _getIcon();
 
-    // Config based on Type
-    String title = "";
-    String instruction = "";
-    String info = "";
-    String valueDisplay = "";
-    String unit = "";
-    String interpretation = "Normal";
-    Color statusColor = AppColors.brandGreen;
-    IconData icon = Icons.help;
-
-    switch (widget.type) {
-      case TestSensorType.temperature:
-        title = "Body Temperature";
-        instruction = "Position forehead 5cm from sensor.";
-        info = "Detects fever or hypothermia.";
-        valueDisplay = provider.currentTemp.toStringAsFixed(1);
-        unit = "°C";
-        icon = Icons.thermostat_rounded;
-        if (provider.currentTemp > 37.5) {
-          interpretation = "Fever";
-          statusColor = Colors.orange;
-        }
-        break;
-      case TestSensorType.bloodPressure:
-        title = "Blood Pressure";
-        instruction = "Keep arm steady at heart level.";
-        info = "Measures heart workload.";
-        valueDisplay =
-            "${provider.currentSystolic}/${provider.currentDiastolic}";
-        unit = "mmHg";
-        icon = Icons.speed_rounded;
-        if (provider.currentSystolic > 130) {
-          interpretation = "High";
-          statusColor = Colors.red;
-        }
-        break;
-      case TestSensorType.heartRate:
-        title = "Heart Rate";
-        instruction = "Place finger on the sensor.";
-        info = "Measures pulse speed.";
-        valueDisplay = "${provider.currentHeartRate}";
-        unit = "bpm";
-        icon = Icons.favorite_rounded;
-        if (provider.currentHeartRate > 100) {
-          interpretation = "Fast";
-          statusColor = Colors.orange;
-        }
-        break;
-      case TestSensorType.oxygen:
-        title = "Oxygen Saturation";
-        instruction = "Keep finger still in the clip.";
-        info = "Measures lung efficiency.";
-        valueDisplay = "${provider.currentSpO2}";
-        unit = "%";
-        icon = Icons.air_rounded;
-        if (provider.currentSpO2 < 95) {
-          interpretation = "Low";
-          statusColor = Colors.red;
-        }
-        break;
+    // Map hardware data OR use locked value
+    String liveValue = _simDisplay;
+    if (_viewState == 2) {
+       liveValue = _lockedResult; 
+    } else if (!AppEnvironment().useSimulation) {
+       switch (widget.type) {
+         case TestSensorType.temperature: liveValue = provider.currentTemp > 0 ? provider.currentTemp.toStringAsFixed(1) : "SCAN"; if (provider.currentTemp > 30) _lockValueAndFinish(); break;
+         case TestSensorType.heartRate: liveValue = provider.currentHeartRate > 0 ? "${provider.currentHeartRate}" : "READ"; break;
+         case TestSensorType.oxygen: liveValue = provider.currentSpO2 > 0 ? "${provider.currentSpO2}" : "READ"; break;
+         case TestSensorType.bloodPressure: liveValue = (provider.currentSystolic > 0) ? "${provider.currentSystolic}/${provider.currentDiastolic}" : "CUFF"; break;
+       }
     }
 
-
     return KioskScaffold(
-      title: title,
+      title: _getTitle(),
       onBackTap: _stopAndExit,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 700),
-          child: _viewState == 0
-              ? _buildIntroView(icon, instruction, title, info, statusColor)
-              : _buildScanningView(
-                  icon,
-                  statusColor,
-                  _viewState == 2 ? valueDisplay : _liveDisplay,
-                  unit,
-                  interpretation),
+      body: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Colors.white, testColor.withValues(alpha: 0.02)],
+          ),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _viewState == 0 
+                  ? _buildPrepView(testColor, icon) 
+                  : _buildMeasurementView(testColor, icon, liveValue),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // --- VIEW 1: INTRO (Instruction First) ---
-  Widget _buildIntroView(IconData icon, String instruction, String title,
-      String info, Color color) {
+  Widget _buildPrepView(Color color, IconData icon) {
     return Column(
+      key: const ValueKey(0),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(40),
+          padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                  color: color.withValues(alpha: 0.2),
-                  blurRadius: 30,
-                  spreadRadius: 5)
-            ],
+            color: Colors.white, shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 15)],
           ),
-          child: Icon(icon, size: 80, color: color),
+          child: Icon(icon, size: 64, color: color),
         ),
-        const SizedBox(height: 40),
-        const Text("Ready to Measure",
-            style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark)),
-        const SizedBox(height: 16),
-
-        // Instruction Card
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.info_outline_rounded, color: color),
-                  const SizedBox(width: 12),
-                  const Text("INSTRUCTION",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.grey)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                instruction,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 20, color: Colors.black87, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-
         const SizedBox(height: 24),
-        Text(info,
-            style: const TextStyle(
-                color: Colors.grey, fontStyle: FontStyle.italic)),
-
+        const Text("Precautionary Stage", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.brandDark, letterSpacing: -0.5)),
+        const SizedBox(height: 12),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.08)),
+          ),
+          child: Text(_getInstruction(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4)),
+        ),
         const SizedBox(height: 40),
-
         FlowAnimatedButton(
-          child: ElevatedButton.icon(
+          child: ElevatedButton(
             onPressed: _startScan,
-            icon: const Icon(Icons.play_arrow_rounded, size: 32),
-            label: const Text("Start Measurement",
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(50)),
+              backgroundColor: color, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
               elevation: 4,
             ),
+            child: const Text("Start Measurement", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
         ),
       ],
     );
   }
 
-  // --- VIEW 2 & 3: SCANNING & RESULT ---
-  Widget _buildScanningView(
-      IconData icon, Color color, String value, String unit, String status) {
+  Widget _buildMeasurementView(Color color, IconData icon, String value) {
     bool isDone = _viewState == 2;
+    String unit = _getUnit();
 
     return Column(
+      key: const ValueKey(1),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Live Circle
-        Container(
-          width: 320,
-          height: 320,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white,
-            border: Border.all(
-                color: isDone ? color : Colors.grey.shade300, width: 8),
-            boxShadow: [
-              BoxShadow(
-                color: isDone
-                    ? color.withValues(alpha: 0.3)
-                    : Colors.black.withValues(alpha: 0.05),
-                blurRadius: 40,
-                spreadRadius: 10,
-              )
-            ],
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (!isDone)
-                  const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(strokeWidth: 4))
-                else
-                  Icon(icon, size: 48, color: color),
-                const SizedBox(height: 16),
-                Text(
-                  value,
-                  style: TextStyle(
-                      fontSize: 72,
-                      fontWeight: FontWeight.bold,
-                      color: isDone ? AppColors.brandDark : Colors.grey[400]),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            if (!isDone)
+              ...List.generate(2, (index) => TweenAnimationBuilder(
+                duration: Duration(seconds: 1 + index),
+                tween: Tween<double>(begin: 1, end: 1.3),
+                builder: (context, val, child) => Container(
+                  width: 250 * val, height: 250 * val,
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color.withValues(alpha: 0.15 / val), width: 2)),
                 ),
-                Text(
-                  unit,
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[500]),
-                ),
-              ],
+              )),
+            
+            SizedBox(
+              width: 260, height: 260,
+              child: CircularProgressIndicator(
+                value: isDone ? 1 : null, strokeWidth: 10, strokeCap: StrokeCap.round,
+                color: isDone ? AppColors.brandGreen : color, backgroundColor: color.withValues(alpha: 0.1),
+              ),
             ),
-          ),
+
+            Container(
+              width: 190, height: 190,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.4)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.type == TestSensorType.heartRate && !isDone)
+                    ScaleTransition(
+                       scale: Tween(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)),
+                       child: Icon(icon, color: color, size: 28),
+                    )
+                  else
+                    Icon(icon, color: isDone ? AppColors.brandGreen : color, size: 28),
+                  
+                  const SizedBox(height: 6),
+                  Text(value, style: TextStyle(fontSize: value.length > 5 ? 32 : 52, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : color, letterSpacing: -1)),
+                  Text(unit, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ],
         ),
-
         const SizedBox(height: 48),
-
-        // Result Interpretation Pill
-        if (isDone)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: color),
-            ),
-            child: Text(
-              status.toUpperCase(),
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color),
-            ),
-          )
-        else
-          const Text("Analyzing...",
-              style: TextStyle(
-                  fontSize: 24, color: Colors.grey, letterSpacing: 2.0)),
-
-        const SizedBox(height: 60),
-
-        // Save Button
-        if (isDone)
+        
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(color: isDone ? AppColors.brandGreen.withValues(alpha: 0.05) : color.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(50)),
+          child: Text(isDone ? "TEST COMPLETE" : "STABILIZING...", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDone ? AppColors.brandGreen : color)),
+        ),
+        
+        const SizedBox(height: 48),
+        if (isDone || (!AppEnvironment().useSimulation && _viewState == 1))
           FlowAnimatedButton(
             child: ElevatedButton(
               onPressed: _saveAndFinish,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandDark,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(50)),
+                backgroundColor: AppColors.brandGreen, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                elevation: 4,
               ),
-              child: const Text("Save & Close",
-                  style: TextStyle(fontSize: 20, color: Colors.white)),
+              child: const Text("Save & Record Result", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ),
       ],
     );
+  }
+
+  Color _getColor() {
+    switch (widget.type) {
+      case TestSensorType.temperature: return Colors.orange;
+      case TestSensorType.bloodPressure: return Colors.blue;
+      case TestSensorType.heartRate: return Colors.red;
+      case TestSensorType.oxygen: return Colors.cyan;
+    }
+  }
+
+  IconData _getIcon() {
+    switch (widget.type) {
+      case TestSensorType.temperature: return Icons.thermostat_outlined;
+      case TestSensorType.bloodPressure: return Icons.speed_rounded;
+      case TestSensorType.heartRate: return Icons.monitor_heart_rounded;
+      case TestSensorType.oxygen: return Icons.air_rounded;
+    }
+  }
+
+  String _getTitle() {
+     switch (widget.type) {
+      case TestSensorType.temperature: return "Temperature";
+      case TestSensorType.bloodPressure: return "Blood Pressure";
+      case TestSensorType.heartRate: return "Heart Rate";
+      case TestSensorType.oxygen: return "Oxygen";
+    }
+  }
+
+  String _getInstruction() {
+     switch (widget.type) {
+      case TestSensorType.temperature: return "Forehead 5cm from the sensor. Remove hair/hats.";
+      case TestSensorType.bloodPressure: return "Cuff on left arm, sit straight, and stay still.";
+      case TestSensorType.heartRate: return "Insert index finger into the pulse clip.";
+      case TestSensorType.oxygen: return "Insert index finger into the pulse clip.";
+    }
+  }
+
+  String _getUnit() {
+     switch (widget.type) {
+      case TestSensorType.temperature: return "°C";
+      case TestSensorType.bloodPressure: return "mmHg";
+      case TestSensorType.heartRate: return "BPM";
+      case TestSensorType.oxygen: return "% SpO2";
+    }
   }
 }

@@ -107,10 +107,14 @@ class MigrationService {
         final columns = await txn.rawQuery('PRAGMA table_info($table)');
         final columnNames = columns.map((c) => c['name'].toString()).toList();
 
-        // Ensure 'is_active' exists in core tables
+        // Ensure 'is_active' and 'is_archived' exist in core tables
         if (!columnNames.contains('is_active')) {
           await txn.execute(
               'ALTER TABLE $table ADD COLUMN is_active INTEGER DEFAULT 1');
+        }
+        if (table == 'announcements' && !columnNames.contains('is_archived')) {
+          await txn.execute(
+              'ALTER TABLE $table ADD COLUMN is_archived INTEGER DEFAULT 0');
         }
 
         // Ensure 'is_synced' exists

@@ -65,7 +65,8 @@ class VitalsSyncHandler extends SyncHandler {
         query = query.gt('updated_at', lastSync);
       }
 
-      final cloudVitals = await query.order('updated_at', ascending: true);
+      final cloudData = await query.order('updated_at', ascending: true);
+      final cloudVitals = cloudData as List<dynamic>;
       String? latestTimestamp;
       bool anyNew = false;
       Map<String, dynamic>? latestNew;

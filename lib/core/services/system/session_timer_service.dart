@@ -1,17 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'power_manager_service.dart';
 
 class SessionTimeoutManager extends StatefulWidget {
 
   final Widget? child;
   final Duration duration;
   final VoidCallback? onTimeout;
+  final bool isPaused;
 
   const SessionTimeoutManager({
     super.key,
     this.child,
     this.duration = const Duration(seconds: 45),
     this.onTimeout,
+    this.isPaused = false,
   });
 
 
@@ -30,6 +33,15 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
   }
 
   @override
+  void didUpdateWidget(covariant SessionTimeoutManager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isPaused != widget.isPaused) {
+      debugPrint("🕒 Session Timer State Changed: isPaused = ${widget.isPaused}");
+      _startTimer();
+    }
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
@@ -37,6 +49,10 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
 
   void _startTimer() {
     _timer?.cancel();
+    if (widget.isPaused) {
+      debugPrint("🕒 Session Timer PAUSED (Kiosk Activity Active)");
+      return;
+    }
     _timer = Timer(widget.duration, _handleTimeout);
     debugPrint("🕒 Session Timer Started: ${widget.duration.inSeconds}s");
   }
@@ -54,6 +70,7 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
 
   void _handleInteraction([dynamic _]) {
     debugPrint("🕒 Session Timer Reset");
+    PowerManagerService().notifyActivity();
     _startTimer();
   }
 

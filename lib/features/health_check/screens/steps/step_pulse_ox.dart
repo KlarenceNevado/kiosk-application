@@ -6,7 +6,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
 import '../../../../core/services/hardware/sensor_service_interface.dart';
-
+import '../../../../core/services/system/app_environment.dart';
+import '../../../auth/domain/i_auth_repository.dart';
 
 class StepPulseOx extends StatefulWidget {
   final VoidCallback onNext;
@@ -16,197 +17,315 @@ class StepPulseOx extends StatefulWidget {
   State<StepPulseOx> createState() => _StepPulseOxState();
 }
 
-class _StepPulseOxState extends State<StepPulseOx> {
-  int _state = 0;
-  String _liveHR = "--";
-  String _liveO2 = "--";
+class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin {
+  // 0 = Prep, 1 = Measuring, 2 = Result
+  int _viewState = 0;
   Timer? _simTimer;
+  
+  String _lockedHR = "--";
+  String _lockedSpO2 = "--";
+
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
 
   void _startMeasurement() {
-    setState(() => _state = 1);
-    context.read<HealthWizardProvider>().startSensor(SensorType.oximeter);
+    setState(() => _viewState = 1);
+    final provider = context.read<HealthWizardProvider>();
+    provider.startSensor(SensorType.oximeter);
+    
+    // KEEP SESSION ALIVE
+    context.read<IAuthRepository>().resetSessionTimer();
+
+    if (!AppEnvironment().useSimulation) return;
 
     int ticks = 0;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
+    _simTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (!mounted) { timer.cancel(); return; }
       ticks++;
-
-      setState(() {
-        // Fluctuate values to look "live"
-        _liveHR = (70 + Random().nextInt(15)).toString();
-        _liveO2 = (96 + Random().nextInt(3)).toString();
-      });
-
-      if (ticks >= 16) {
-        // 4 seconds
+      if (ticks >= 25) {
         timer.cancel();
-        setState(() => _state = 2);
+        final hr = 72 + Random().nextInt(8);
+        final spo2 = 97 + Random().nextInt(3);
+        
+        provider.setPulseOx(hr, spo2);
+        _finishTest(hr.toString(), spo2.toString());
       }
+    });
+  }
+
+  void _finishTest(String hr, String spo2) {
+    if (!mounted) return;
+    context.read<HealthWizardProvider>().captureVital(SensorType.oximeter);
+    context.read<IAuthRepository>().resetSessionTimer();
+    
+    setState(() {
+      _viewState = 2;
+      _lockedHR = hr;
+      _lockedSpO2 = spo2;
     });
   }
 
   @override
   void dispose() {
     _simTimer?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Fallback to provider values if measurement done
-    final hr = context.watch<HealthWizardProvider>().currentHeartRate;
-    final spo2 = context.watch<HealthWizardProvider>().currentSpO2;
+    final provider = context.watch<HealthWizardProvider>();
+    final isSim = AppEnvironment().useSimulation;
 
-    final displayHR = _state == 2 && hr > 0 ? "$hr" : _liveHR;
-    final displayO2 = _state == 2 && spo2 > 0 ? "$spo2" : _liveO2;
+    // Handle real hardware finish
+    if (!isSim && _viewState == 1 && provider.currentHeartRate > 0 && provider.currentSpO2 > 0) {
+       Future.microtask(() => _finishTest(provider.currentHeartRate.toString(), provider.currentSpO2.toString()));
+    }
 
     return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 600),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        child: _viewState == 0 
+            ? _buildPrepView() 
+            : _buildMeasurementView(provider, isSim),
+      ),
+    );
+  }
+
+  Widget _buildPrepView() {
+    return Column(
+      key: const ValueKey(0),
+      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(36),
+          decoration: BoxDecoration(
+              color: AppColors.hrRed.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.2), width: 3)),
+          child: const Icon(Icons.favorite_rounded, size: 72, color: AppColors.hrRed),
+        ),
+        const SizedBox(height: 32),
+        const Text(
+          "Step 5/7: Vital Signs",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppColors.brandDark, letterSpacing: -1.5),
+        ),
+        const SizedBox(height: 24),
+        _buildInstructionCard("Insert your index finger into the Pulse Oximeter clip.\nKeep your hand flat and still."),
+        const SizedBox(height: 64),
+        FlowAnimatedButton(
+          child: Container(
+            decoration: BoxDecoration(
+               borderRadius: BorderRadius.circular(50),
+               boxShadow: [BoxShadow(color: AppColors.hrRed.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
+               gradient: const LinearGradient(colors: [AppColors.hrRed, Color(0xFFD32F2F)]),
+            ),
+            child: ElevatedButton(
+              onPressed: _startMeasurement,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
+                  minimumSize: const Size(320, 72),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
+              child: const Text("Start Vital Measurement", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMeasurementView(HealthWizardProvider provider, bool isSim) {
+    bool isDone = _viewState == 2;
+    String hrValue = isDone ? _lockedHR : (isSim ? "--" : (provider.currentHeartRate > 0 ? provider.currentHeartRate.toString() : "READ"));
+    String spo2Value = isDone ? _lockedSpO2 : (isSim ? "--" : (provider.currentSpO2 > 0 ? provider.currentSpO2.toString() : "READ"));
+
+    return Column(
+      key: const ValueKey(1),
+      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      children: [
+        Stack(
+          alignment: Alignment.center,
           children: [
-            if (_state == 0) ...[
-              const Icon(Icons.monitor_heart_rounded,
-                  size: 100, color: Colors.red),
-              const SizedBox(height: 32),
-              const Text("Step 5: Pulse & Oxygen",
-                  style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.touch_app_rounded, color: Colors.red),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        "Insert your index finger into the clip sensor. Relax your hand and keep it steady on the table.",
-                        style: TextStyle(
-                            fontSize: 18, height: 1.4, color: Colors.black87),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 48),
-              FlowAnimatedButton(
-                child: ElevatedButton(
-                  onPressed: _startMeasurement,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 48, vertical: 20),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(50)),
-                  ),
-                  child: const Text("Start Measurement",
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                ),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border:
-                        Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8))
-                    ]),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(displayHR,
-                              style: const TextStyle(
-                                  fontSize: 56,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.red)),
-                          const Text("BPM",
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.bold))
-                        ],
-                      ),
-                    ),
-                    Container(width: 2, height: 80, color: Colors.grey[200]),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(displayO2,
-                              style: const TextStyle(
-                                  fontSize: 56,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.cyan)),
-                          const Text("% SpO2",
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.bold))
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 48),
-              if (_state == 1)
-                const Text("Acquiring Signal...",
-                    style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey))
-              else
-                const Text("Measurement Complete",
-                    style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandGreen)),
-              const SizedBox(height: 60),
-              if (_state == 2)
-                FlowAnimatedButton(
-                  child: ElevatedButton(
-                    onPressed: widget.onNext,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandGreen,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 60, vertical: 20),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(50))),
-                    child: const Text("Next: Blood Pressure",
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
+            // PREMIUM GLOW
+            AnimatedContainer(
+                 duration: const Duration(milliseconds: 500),
+                 width: isDone ? 340 : 300, 
+                 height: isDone ? 340 : 300,
+                 decoration: BoxDecoration(
+                   shape: BoxShape.circle,
+                   boxShadow: [
+                     BoxShadow(
+                        color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.hrRed.withValues(alpha: 0.12), 
+                        blurRadius: isDone ? 100 : 80, 
+                        spreadRadius: isDone ? 40 : 30
+                     )
+                   ],
+                 ),
+               ),
+
+            if (!isDone)
+              ...List.generate(2, (index) => TweenAnimationBuilder(
+                duration: Duration(seconds: 1 + index),
+                tween: Tween<double>(begin: 1, end: 1.3),
+                builder: (context, val, child) => Container(
+                  width: 270 * val, height: 270 * val,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.15 / val), width: 2),
                   ),
                 ),
-            ]
+              )),
+            
+            SizedBox(
+              width: 280, height: 280,
+              child: CircularProgressIndicator(
+                value: isDone ? 1 : null,
+                strokeWidth: 14,
+                strokeCap: StrokeCap.round,
+                color: isDone ? AppColors.brandGreen : AppColors.hrRed,
+                backgroundColor: AppColors.hrRed.withValues(alpha: 0.05),
+              ),
+            ),
+
+            Container(
+              width: 220, height: 220,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isDone)
+                    const Icon(Icons.check_circle_rounded, color: AppColors.brandGreen, size: 60)
+                  else
+                    ScaleTransition(
+                      scale: Tween(begin: 1.0, end: 1.25).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)),
+                      child: const Icon(Icons.favorite_rounded, color: AppColors.hrRed, size: 48),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(hrValue, style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : AppColors.brandDark, height: 1.0, letterSpacing: -3)),
+                  const Text("HEART RATE (BPM)", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.0)),
+                ],
+              ),
+            ),
           ],
         ),
+        const SizedBox(height: 56),
+        Row(
+           mainAxisAlignment: MainAxisAlignment.center,
+           children: [
+             _buildRichMiniCard("OXYGEN LEVEL", spo2Value, "% SpO2", AppColors.spO2Cyan, isDone),
+           ],
+        ),
+        const SizedBox(height: 48),
+        if (isDone)
+          FlowAnimatedButton(
+            child: Container(
+               padding: const EdgeInsets.symmetric(horizontal: 16),
+               decoration: BoxDecoration(
+                 borderRadius: BorderRadius.circular(50),
+                 boxShadow: [BoxShadow(color: AppColors.brandGreen.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
+                 gradient: const LinearGradient(colors: [AppColors.brandGreen, AppColors.brandGreenDark]),
+               ),
+               child: ElevatedButton(
+                 onPressed: widget.onNext,
+                 style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
+                    minimumSize: const Size(260, 72),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
+                 child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text("Next Step", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                      SizedBox(width: 12),
+                      Icon(Icons.arrow_forward_rounded, size: 28),
+                    ],
+                 ),
+               ),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            decoration: BoxDecoration(
+               color: Colors.white, 
+               borderRadius: BorderRadius.circular(50),
+               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+               border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.1), width: 2),
+            ),
+            child: const Row(
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.hrRed)),
+                 SizedBox(width: 16),
+                 Text("STABILIZING READINGS...", style: TextStyle(color: AppColors.hrRed, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
+               ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRichMiniCard(String label, String value, String unit, Color color, bool isDone) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : color.withValues(alpha: 0.2), width: 2.5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        children: [
+          Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : color, letterSpacing: 1.5)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: AppColors.brandDark, letterSpacing: -2)),
+              const SizedBox(width: 8),
+              Text(unit, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionCard(String text) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 40),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.1), width: 2),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.info_outline, color: AppColors.hrRed, size: 36),
+          const SizedBox(height: 16),
+          Text(
+            text, 
+            textAlign: TextAlign.center, // CENTER TEXT
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)
+          ),
+        ],
       ),
     );
   }

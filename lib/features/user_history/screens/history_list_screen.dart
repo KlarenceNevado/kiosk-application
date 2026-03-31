@@ -478,11 +478,83 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
               if (data.bmi != null)
                 _buildDetailRow("BMI", data.bmi!.toInt(), "kg/m²",
                     VitalValidator.evaluateBMI(data.bmi!)),
+              
+              // HEALTH WORKER FEEDBACK SECTION
+              if (data.remarks != null && data.remarks!.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text("Health Worker Feedback",
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark)),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: (data.status == 'verified' || data.status == 'verified_true' 
+                        ? AppColors.brandGreen 
+                        : Colors.orange).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (data.status == 'verified' || data.status == 'verified_true' 
+                          ? AppColors.brandGreen 
+                          : Colors.orange).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        data.remarks!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.brandDark,
+                          height: 1.5,
+                        ),
+                      ),
+                      if (data.followUpAction != null && data.followUpAction != 'none') ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.medical_services_outlined, 
+                                size: 16, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Follow-up: ${_formatAction(data.followUpAction!)}",
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _formatAction(String action) {
+    switch (action) {
+      case 'advise_clinic':
+        return "Advise Clinic Visit";
+      case 'home_visit':
+        return "Schedule Home Visit";
+      case 'refer_municipal':
+        return "Refer to Municipal Office";
+      default:
+        return "No further action needed at this time.";
+    }
   }
 
   Widget _buildDetailRow(

@@ -303,6 +303,12 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
         .toList();
   }
 
+  @override
+  void resetSessionTimer() {
+    // Current PWA implementation is session-based via Supabase/LocalStorage
+    // and does not yet enforce an inactivity timeout. This is a no-op for now.
+  }
+
   // Stubs for methods that may be called from shared UI but are no-ops on web
   @override
   Future<void> refreshUsers() async {}
