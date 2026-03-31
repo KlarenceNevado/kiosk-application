@@ -217,13 +217,30 @@ class SystemDao extends BaseDao {
   Future<void> insertAnnouncement(Map<String, dynamic> row) async {
     final dbRow = Map<String, dynamic>.from(row);
     if (dbRow['reactions'] is Map) dbRow['reactions'] = json.encode(dbRow['reactions']);
-    dbRow['is_active'] = (dbRow['is_active'] == true || dbRow['is_active'] == 1 || dbRow['isActive'] == true || dbRow['isActive'] == 1) ? 1 : 0;
-    dbRow['is_archived'] = (dbRow['is_archived'] == true || dbRow['is_archived'] == 1 || dbRow['isArchived'] == true || dbRow['isArchived'] == 1) ? 1 : 0;
-    dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
-    dbRow['is_deleted'] = (dbRow['is_deleted'] == true || dbRow['is_deleted'] == 1) ? 1 : 0;
+
+    // UNIFICATION: Convert all possible status keys to standard snake_case
+    final rawActive = dbRow['is_active'] ?? dbRow['isActive'];
+    final rawArchived = dbRow['is_archived'] ?? dbRow['isArchived'];
+    final rawDeleted = dbRow['is_deleted'] ?? dbRow['deleted'];
+
+    // Handle Boolean/Integer conversion carefully
+    dbRow['is_active'] = (rawActive == true || rawActive == 1 || rawActive == "1" || rawActive == "true") ? 1 : 0;
+    dbRow['is_archived'] = (rawArchived == true || rawArchived == 1 || rawArchived == "1" || rawArchived == "true") ? 1 : 0;
+    dbRow['is_deleted'] = (rawDeleted == true || rawDeleted == 1 || rawDeleted == "1" || rawDeleted == "true") ? 1 : 0;
     dbRow['is_synced'] = (dbRow['is_synced'] == true || dbRow['is_synced'] == 1) ? 1 : 0;
+    dbRow['target_group'] = dbRow['target_group'] ?? dbRow['targetGroup'];
+
+    // Cleanup legacy fields
     dbRow.remove('targetGroup');
+    dbRow.remove('isActive');
+    dbRow.remove('isArchived');
+
     await db.insert('announcements', dbRow, conflictAlgorithm: ConflictAlgorithm.replace);
+    refreshAnnouncements();
+  }
+
+  Future<void> deleteAnnouncementPermanently(String id) async {
+    await db.delete('announcements', where: 'id = ?', whereArgs: [id]);
     refreshAnnouncements();
   }
 
@@ -234,6 +251,11 @@ class SystemDao extends BaseDao {
         orderBy: 'timestamp DESC');
     return results.map((row) {
       final map = Map<String, dynamic>.from(row);
+      // Normalized result for the UI
+      map['is_active'] = (map['is_active'] == 1 || map['is_active'] == true) ? 1 : 0;
+      map['is_archived'] = (map['is_archived'] == 1 || map['is_archived'] == true) ? 1 : 0;
+      map['is_deleted'] = (map['is_deleted'] == 1 || map['is_deleted'] == true) ? 1 : 0;
+      
       if (map['reactions'] is String) {
         try {
           map['reactions'] = json.decode(map['reactions'] as String);
@@ -245,6 +267,10 @@ class SystemDao extends BaseDao {
       }
       return map;
     }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getAnnouncementsRaw() async {
+    return await db.query('announcements');
   }
 
   Future<Map<String, dynamic>?> getAnnouncementById(String id) async {

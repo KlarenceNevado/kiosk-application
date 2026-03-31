@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../security/notification_service.dart';
 import 'sync_handler.dart';
 import '../../system/sync_event_bus.dart';
-import '../../system/app_environment.dart';
 import '../database_helper.dart';
 
 class SystemSyncHandler extends SyncHandler {
@@ -41,32 +40,58 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> pullAnnouncements() async {
-    final lastSync = await _getLastSync('announcements');
-    var query = supabase.from('announcements').select();
-    if (lastSync != null) {
-      query = query.gt('updated_at', lastSync);
-    }
+    // REASON FOR CHANGE: Full Parity Sync ensures 100% parity by fetching the full active set.
+    // Announcements are low-volume data, and differential sync (updated_at) was causing staleness.
+    final cloudData = await supabase.from('announcements')
+        .select()
+        .filter('is_deleted', 'eq', false)
+        .order('updated_at', ascending: true);
 
-    final cloudData = await query.order('updated_at', ascending: true);
-    String? latestTimestamp;
+    final List<String> cloudIds = [];
 
     for (var row in cloudData) {
-      final exists = await dbHelper.systemDao.getAnnouncementById(row['id']);
+      final id = row['id'];
+      cloudIds.add(id);
+
+      // OS-LEVEL NOTIFICATION LOGIC:
+      // If the announcement is new or was previously hidden but is now active:
+      final existing = await dbHelper.systemDao.getAnnouncementById(id);
+      final wasActive = existing != null && (existing['is_active'] == 1 || existing['is_active'] == true);
+      final isNowActive = (row['is_active'] == 1 || row['is_active'] == true);
+      final isArchived = (row['is_archived'] == 1 || row['is_archived'] == true);
+
+      if (isNowActive && !isArchived) {
+        if (existing == null || !wasActive) {
+          final target = (row['target_group'] ?? row['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+          final title = row['title'] ?? "New Announcement";
+          final body = row['content'] ?? "Tap to view details";
+
+          if (target == 'BROADCAST_ALL') {
+            NotificationService().showSystemAlertNotification(title: "🚨 URGENT: $title", body: body);
+          } else {
+            NotificationService().showAnnouncementNotification(title: title, body: body);
+          }
+        }
+      }
+
       await dbHelper.systemDao.insertAnnouncement({
         ...row,
         'is_synced': 1,
       });
-      if (exists == null) {
-        final isArchived = (row['is_archived'] == true || row['isArchived'] == true);
-        if (!isArchived) {
-          _handleNewAnnouncementNotification(row);
-        }
+    }
+
+    // PURGE LOGIC: Any local announcement NOT in the current cloud pull 
+    // must be removed locally to ensure parity with the Cloud.
+    final localAnnouncements = await dbHelper.systemDao.getAnnouncements();
+    for (var ann in localAnnouncements) {
+      final id = ann['id'];
+      if (!cloudIds.contains(id)) {
+        debugPrint("🗑️ [FullParity] Purging stale local announcement: $id");
+        await dbHelper.systemDao.deleteAnnouncementPermanently(id);
       }
-      latestTimestamp = row['updated_at'];
     }
-    if (latestTimestamp != null) {
-      await _updateLastSync('announcements', latestTimestamp);
-    }
+
+    await _updateLastSync('announcements', DateTime.now().toUtc().toIso8601String());
     dbHelper.systemDao.refreshAnnouncements();
     SyncEventBus.instance.triggerAnnouncementUpdate();
   }
@@ -140,7 +165,7 @@ class SystemSyncHandler extends SyncHandler {
       'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
       'is_archived': isArchived,
-      'updated_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
     await supabase.from('announcements').upsert(data);
   }
@@ -171,7 +196,7 @@ class SystemSyncHandler extends SyncHandler {
       'is_emergency': isEmergency,
       'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
-      'updated_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
     await supabase.from('alerts').upsert(data);
   }
@@ -308,29 +333,6 @@ class SystemSyncHandler extends SyncHandler {
         if (attempts >= maxAttempts) rethrow;
         await Future.delayed(Duration(seconds: attempts * 2));
       }
-    }
-  }
-
-  void _handleNewAnnouncementNotification(Map<String, dynamic> row) {
-    if (AppEnvironment().isDesktopAdmin) return;
-    
-    final isArchived = (row['is_archived'] == true || row['isArchived'] == true);
-    if (isArchived) return;
-
-    // QUIET MODE: Only notify if we are a mobile or web app (not Admin Desktop)
-    // Removed strict !isBackground check to allow foreground notifications, 
-    // matching the behavior of chat messages.
-    final isMobileOrWeb = AppEnvironment().isMobilePatient || kIsWeb;
-    if (!isMobileOrWeb) return;
-
-    final target = (row['target_group'] ?? row['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
-    final title = row['title'] ?? "New Announcement";
-    final body = row['content'] ?? "Tap to view details";
-
-    if (target == 'BROADCAST_ALL') {
-      NotificationService().showSystemAlertNotification(title: "🚨 URGENT: $title", body: body);
-    } else {
-      NotificationService().showAnnouncementNotification(title: title, body: body);
     }
   }
 }

@@ -237,16 +237,28 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_showArchived ? "Archived Announcements" : "Active & Recent Announcements",
-                    style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandDark)),
+                Expanded(
+                  child: Text(
+                      _showArchived
+                          ? "Archived Announcements"
+                          : "Active & Recent Announcements",
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandDark)),
+                ),
+                const SizedBox(width: 16),
                 // Filter Toggle
-                TextButton.icon(
-                  onPressed: () => setState(() => _showArchived = !_showArchived),
-                  icon: Icon(_showArchived ? Icons.inbox_outlined : Icons.archive_outlined),
-                  label: Text(_showArchived ? "SHOW ACTIVE" : "VIEW ARCHIVE"),
+                Flexible(
+                  child: TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _showArchived = !_showArchived),
+                    icon: Icon(_showArchived
+                        ? Icons.inbox_outlined
+                        : Icons.archive_outlined),
+                    label: Text(_showArchived ? "SHOW ACTIVE" : "VIEW ARCHIVE"),
+                  ),
                 ),
               ],
             ),

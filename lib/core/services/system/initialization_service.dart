@@ -362,10 +362,20 @@ class InitializationService {
             }
           } else {
             // Admin Desktop Mode: Standard window behavior
-            // We show it at the default Size(1280, 720) first, 
-            // then let the user maximize it manually if they wish.
-            // This provides the header/title bar they expect.
+            // We explicitly reset these in case the app was previously a kiosk.
+            debugPrint("🔓 [InitializationService] Restoring Admin Window Controls...");
             await windowManager.setFullScreen(false);
+            await windowManager.setAlwaysOnTop(false);
+            await windowManager.setResizable(true);
+            await windowManager.setClosable(true);
+            await windowManager.setHasShadow(true);
+            
+            // Ensure title bar is normal for Admin
+            await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+            
+            // Center and show with standard size if not already visible
+            await windowManager.setSize(const Size(1280, 720));
+            await windowManager.center();
           }
         });
       } catch (e) {

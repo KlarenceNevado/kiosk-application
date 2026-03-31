@@ -630,7 +630,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               var filtered = list.where((a) {
                 final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
                 final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
-                return isActive && !isDeleted;
+                final isArchived = a['is_archived'] == 1 || a['is_archived'] == true || a['isArchived'] == 1 || a['isArchived'] == true;
+                return isActive && !isDeleted && !isArchived;
               }).toList();
 
               if (user != null) {

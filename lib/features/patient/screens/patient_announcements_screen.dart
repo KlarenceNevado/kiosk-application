@@ -85,11 +85,12 @@ class _PatientAnnouncementsScreenState
 
                   final rawData = snapshot.data ?? [];
                   
-                  // Strict filtering for Active and Not Deleted
+                  // Strict filtering for Active, Not Deleted, and Not Archived
                   var announcements = rawData.where((a) {
                     final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
                     final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
-                    return isActive && !isDeleted;
+                    final isArchived = a['is_archived'] == 1 || a['is_archived'] == true || a['isArchived'] == 1 || a['isArchived'] == true;
+                    return isActive && !isDeleted && !isArchived;
                   }).toList();
                   
                   // User-specific filtering (Seniors/Children/All)
