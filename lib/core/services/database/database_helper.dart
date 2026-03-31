@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' if (dart.library.html) 'dart:html';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
@@ -62,7 +61,7 @@ class DatabaseHelper {
     }
 
     try {
-      if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) {
         sqfliteFfiInit();
         databaseFactory = databaseFactoryFfi;
       }

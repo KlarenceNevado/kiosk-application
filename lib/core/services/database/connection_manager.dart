@@ -48,11 +48,14 @@ class ConnectionManager {
       
       if (result == ConnectivityResult.none) {
         newStatus = ConnectionStatus.offline;
+      } else if (kIsWeb) {
+        // 2. Web Optimization: Browsers block cross-domain pings (CORS) 
+        // We trust the browser's own navigator.onLine reporting (via Connectivity)
+        newStatus = ConnectionStatus.online;
       } else {
         // 2. Verified Internet Check (Avoid "Connected but no Internet")
-        // We ping a reliable source (Google DNS or Supabase Health - here we use a simple reliable ping)
+        // We ping a reliable source for native platforms.
         try {
-          // Timeout quickly to prevent UI lag
           final response = await http
               .head(Uri.parse('https://www.google.com'))
               .timeout(const Duration(seconds: 3));
@@ -63,7 +66,6 @@ class ConnectionManager {
             newStatus = ConnectionStatus.offline;
           }
         } catch (_) {
-          // If DNS fails or host unreachable
           newStatus = ConnectionStatus.offline;
         }
       }

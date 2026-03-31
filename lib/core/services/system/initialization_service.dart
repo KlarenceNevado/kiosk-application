@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -40,7 +40,7 @@ class InitializationService {
     _initTimezone();
 
     // 2. Platform Specific Database Initialization
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
       _initDesktopDatabase();
     }
 
@@ -50,7 +50,7 @@ class InitializationService {
 
     // 4. Initialize Firebase (Real OS-Level Push)
     try {
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
         await Firebase.initializeApp();
         FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
         debugPrint("🔥 [InitializationService] Firebase Initialized.");
@@ -105,7 +105,7 @@ class InitializationService {
 
     // 8. Desktop Window Configuration (Linux/Windows/macOS)
     if (AppEnvironment().isDesktopAdmin || AppEnvironment().mode == AppMode.kiosk) {
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
         try {
           debugPrint("🪟 [InitializationService] Configuring Desktop Window...");
           await _initDesktopWindow().timeout(const Duration(seconds: 5));
@@ -139,7 +139,8 @@ class InitializationService {
 
   /// Centralized permission request flow for Mobile Patient mode
   Future<void> _requestAppPermissions() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
+    if (kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) return;
 
     try {
       debugPrint("🔐 [InitializationService] Checking OS Permissions...");
@@ -150,7 +151,7 @@ class InitializationService {
       }
 
       // 2. IGNORE BATTERY OPTIMIZATIONS (Crucial for sync stability)
-      if (Platform.isAndroid) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
         if (await Permission.ignoreBatteryOptimizations.status.isDenied) {
           debugPrint("⚡ [InitializationService] Requesting Battery Optimization Waiver...");
           // This will open the system dialog or settings page
@@ -286,7 +287,7 @@ class InitializationService {
   }
 
   Future<void> _initDesktopWindow() async {
-     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
       try {
         await windowManager.ensureInitialized();
 
