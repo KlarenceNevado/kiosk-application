@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -46,26 +47,34 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
 
   void _showAdminExitDialog() {
     final passwordController = TextEditingController();
+    final env = AppEnvironment();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Admin Exit"),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(env.isKiosk ? "Exit Kiosk" : "Admin Exit"),
         content: TextField(
           controller: passwordController,
           obscureText: true,
           decoration: const InputDecoration(labelText: "Admin Password"),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
           TextButton(
             onPressed: () {
-              if (passwordController.text == "IslaVerde912") {
-                context.go(AppRoutes.adminDashboard);
+              if (passwordController.text == env.adminExitPassword) {
+                if (env.isKiosk) {
+                  // On the physical kiosk, exit the app entirely
+                  exit(0);
+                } else {
+                  // On other platforms, go to admin dashboard
+                  Navigator.pop(dialogContext);
+                  context.go(AppRoutes.adminDashboard);
+                }
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect password")));
+                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text("Incorrect password")));
               }
             },
-            child: const Text("Exit to Admin"),
+            child: Text(env.isKiosk ? "Exit App" : "Exit to Admin"),
           ),
         ],
       ),
