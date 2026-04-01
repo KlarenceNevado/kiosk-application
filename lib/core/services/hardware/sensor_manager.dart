@@ -87,8 +87,8 @@ class SensorManager {
     String? foundBpPort;
 
     for (var portName in availablePorts) {
-      if (portName.contains("ttyAMA") || portName.contains("ttyS")) continue; // Skip internal Pi ports
-
+      // PROBE EVERYTHING: We no longer skip internal ports, 
+      // because the ESP32 Hub is wired to the Pi's GPIO UART pins.
       final port = SerialPort(portName);
       try {
         if (port.openReadWrite()) {
