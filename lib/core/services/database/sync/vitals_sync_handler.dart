@@ -59,9 +59,16 @@ class VitalsSyncHandler extends SyncHandler {
   @override
   Future<void> pull() async {
     try {
+      final db = await dbHelper.database;
+      int localCount = 0;
+      try {
+        final countResult = await db.rawQuery('SELECT COUNT(*) FROM vitals');
+        localCount = Sqflite.firstIntValue(countResult) ?? 0;
+      } catch (_) {}
+
       final lastSync = await _getLastSync();
       var query = supabase.from('vitals').select();
-      if (lastSync != null) {
+      if (lastSync != null && localCount > 0) {
         query = query.gt('updated_at', lastSync);
       }
 

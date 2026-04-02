@@ -56,10 +56,19 @@ class PatientSyncHandler extends SyncHandler {
   @override
   Future<void> pull() async {
     try {
+      final db = await dbHelper.database;
+      int localCount = 0;
+      try {
+        final countResult = await db.rawQuery('SELECT COUNT(*) FROM patients');
+        localCount = Sqflite.firstIntValue(countResult) ?? 0;
+      } catch (_) {}
+
       final lastSync = await _getLastSync();
       var query = supabase.from('patients').select();
 
-      if (lastSync != null) {
+      // Only use lastSync optimization if we actually have local data. 
+      // If the SSD database is fresh and empty, we MUST force a full pull regardless of lastSync from shared prefs.
+      if (lastSync != null && localCount > 0) {
         final overlapTime = DateTime.parse(lastSync).toUtc().subtract(const Duration(minutes: 5));
         query = query.gt('updated_at', overlapTime.toUtc().toIso8601String());
       }

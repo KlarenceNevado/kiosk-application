@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import '../../../features/health_check/models/vital_signs_model.dart';
 import '../../../features/auth/models/user_model.dart';
 import '../../models/system_log_model.dart';
 import '../../services/security/encryption_service.dart';
+import '../system/app_environment.dart';
 import 'migration_service.dart';
 import 'dao/patient_dao.dart';
 import 'dao/vitals_dao.dart';
@@ -81,9 +83,22 @@ class DatabaseHelper {
     if (kIsWeb) {
       path = filePath; // Web uses simple names for IndexedDB
     } else {
-      // 1. Get a shared absolute path for both apps to use
-      final directory = await getApplicationSupportDirectory();
-      path = join(directory.path, filePath);
+      // 1. Check for dedicated NVMe SSD on Kiosk
+      final ssdDir = Directory('/media/kiosk/Kiosk 256 SSD');
+      
+      if (AppEnvironment().isKiosk && ssdDir.existsSync()) {
+        final kioskDataDir = Directory(join(ssdDir.path, 'kiosk_health_data'));
+        if (!kioskDataDir.existsSync()) {
+          kioskDataDir.createSync(recursive: true);
+        }
+        path = join(kioskDataDir.path, filePath);
+        debugPrint("💾 [DatabaseHelper] Using Dedicated NVMe SSD Storage: \$path");
+      } else {
+        // Fallback to shared absolute path on SD card
+        final directory = await getApplicationSupportDirectory();
+        path = join(directory.path, filePath);
+        debugPrint("💾 [DatabaseHelper] Using Default Support Directory: \$path");
+      }
     }
 
     debugPrint("Database Path Unified: $path");

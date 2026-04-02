@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 import '../../security/notification_service.dart';
 import 'sync_handler.dart';
 import '../../system/sync_event_bus.dart';
@@ -97,9 +98,16 @@ class SystemSyncHandler extends SyncHandler {
   }
 
   Future<void> pullAlerts() async {
+    final db = await dbHelper.database;
+    int localCount = 0;
+    try {
+      final countResult = await db.rawQuery('SELECT COUNT(*) FROM alerts');
+      localCount = Sqflite.firstIntValue(countResult) ?? 0;
+    } catch (_) {}
+
     final lastSync = await _getLastSync('alerts');
     var query = supabase.from('alerts').select();
-    if (lastSync != null) {
+    if (lastSync != null && localCount > 0) {
       query = query.gt('updated_at', lastSync);
     }
 
@@ -132,9 +140,16 @@ class SystemSyncHandler extends SyncHandler {
     final currentUserId = userId ?? supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
 
+    final db = await dbHelper.database;
+    int localCount = 0;
+    try {
+      final countResult = await db.rawQuery('SELECT COUNT(*) FROM schedules');
+      localCount = Sqflite.firstIntValue(countResult) ?? 0;
+    } catch (_) {}
+
     final lastSync = await _getLastSync('schedules');
     var query = supabase.from('schedules').select().eq('patient_id', currentUserId);
-    if (lastSync != null) {
+    if (lastSync != null && localCount > 0) {
       query = query.gt('updated_at', lastSync);
     }
 
