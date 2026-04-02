@@ -52,10 +52,21 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(env.isKiosk ? "Exit Kiosk" : "Admin Exit"),
-        content: TextField(
-          controller: passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: "Admin Password"),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                readOnly: true,
+                decoration: const InputDecoration(labelText: "Admin Password"),
+              ),
+              const SizedBox(height: 24),
+              _VirtualKeyboard(controller: passwordController),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
@@ -433,6 +444,83 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
       enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: Colors.grey.shade200)),
+    );
+  }
+}
+
+class _VirtualKeyboard extends StatefulWidget {
+  final TextEditingController controller;
+  const _VirtualKeyboard({required this.controller});
+
+  @override
+  _VirtualKeyboardState createState() => _VirtualKeyboardState();
+}
+
+class _VirtualKeyboardState extends State<_VirtualKeyboard> {
+  bool isCaps = false;
+
+  final keys = [
+    ['1','2','3','4','5','6','7','8','9','0'],
+    ['q','w','e','r','t','y','u','i','o','p'],
+    ['a','s','d','f','g','h','j','k','l'],
+    ['z','x','c','v','b','n','m'],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var row in keys)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: row.map((k) => Padding(
+              padding: const EdgeInsets.all(2.0),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(42, 52),
+                  padding: EdgeInsets.zero,
+                  backgroundColor: Colors.grey.shade100,
+                  foregroundColor: Colors.black87,
+                  elevation: 1,
+                ),
+                onPressed: () {
+                  widget.controller.text += isCaps ? k.toUpperCase() : k;
+                },
+                child: Text(isCaps ? k.toUpperCase() : k, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+            )).toList(),
+          ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(100, 52),
+                backgroundColor: isCaps ? AppColors.brandGreen : Colors.grey.shade200,
+                foregroundColor: isCaps ? Colors.white : Colors.black87,
+              ),
+              onPressed: () => setState(() => isCaps = !isCaps),
+              child: const Text('CAPS', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(100, 52),
+                backgroundColor: Colors.red.shade100,
+                foregroundColor: Colors.red.shade900,
+              ),
+              onPressed: () {
+                if (widget.controller.text.isNotEmpty) {
+                  widget.controller.text = widget.controller.text.substring(0, widget.controller.text.length - 1);
+                }
+              },
+              child: const Icon(Icons.backspace),
+            ),
+          ],
+        )
+      ],
     );
   }
 }

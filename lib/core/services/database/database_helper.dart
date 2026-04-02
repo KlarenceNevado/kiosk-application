@@ -92,12 +92,12 @@ class DatabaseHelper {
           kioskDataDir.createSync(recursive: true);
         }
         path = join(kioskDataDir.path, filePath);
-        debugPrint("💾 [DatabaseHelper] Using Dedicated NVMe SSD Storage: \$path");
+        debugPrint("💾 [DatabaseHelper] Using Dedicated NVMe SSD Storage: $path");
       } else {
         // Fallback to shared absolute path on SD card
         final directory = await getApplicationSupportDirectory();
         path = join(directory.path, filePath);
-        debugPrint("💾 [DatabaseHelper] Using Default Support Directory: \$path");
+        debugPrint("💾 [DatabaseHelper] Using Default Support Directory: $path");
       }
     }
 
