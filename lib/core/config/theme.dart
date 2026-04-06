@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
 class AppTheme {
@@ -13,27 +14,33 @@ class AppTheme {
       scaffoldBackgroundColor: AppColors.background,
 
       // Consistent Text Styling
-      textTheme: const TextTheme(
+      textTheme: GoogleFonts.outfitTextTheme(const TextTheme(
         displayLarge: TextStyle(
-            fontSize: 48,
-            fontWeight: FontWeight.bold,
+            fontSize: 40,
+            fontWeight: FontWeight.w700, // Reduced from w900
             color: AppColors.brandDark,
-            letterSpacing: -1.5),
+            letterSpacing: -0.5),
         headlineMedium: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+            fontSize: 28,
+            fontWeight: FontWeight.w700, // Reduced from w800
             color: AppColors.brandDark),
         bodyLarge: TextStyle(fontSize: 18, color: Colors.black87),
-      ),
+        labelLarge: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0),
+      )),
 
       // Global Button Styling
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandGreen,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          elevation: 4,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
       ),
 

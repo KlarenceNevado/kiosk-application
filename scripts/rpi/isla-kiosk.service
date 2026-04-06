@@ -1,0 +1,16 @@
+[Unit]
+Description=Isla Verde Health Kiosk Launcher
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/isla-kiosk
+ExecStart=/bin/bash /home/pi/isla-kiosk/update_kiosk.sh
+Restart=always
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+
+[Install]
+WantedBy=graphical.target

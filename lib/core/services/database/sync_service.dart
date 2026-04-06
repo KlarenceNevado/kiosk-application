@@ -274,7 +274,8 @@ class SyncService with WidgetsBindingObserver {
         vitalsHandler.push(),
         if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
-        logHandler.push(),
+        // Only push logs if we have a valid session (Proper fix for 42501 RLS noise)
+        if (Supabase.instance.client.auth.currentSession != null) logHandler.push(),
       ]);
 
       // Parallel Pull
@@ -392,12 +393,12 @@ class SyncService with WidgetsBindingObserver {
   /// Resolves the current user ID by checking Supabase Native Auth 
   /// and falling back to the local database session (for PWA compatibility).
   String? _getCurrentUserId() {
-    // 1. Explicitly set ID (from login/restart flow)
-    if (_userId != null) return _userId;
-
-    // 2. Check Native Supabase Auth
+    // 2. Check Native Supabase Auth (Crucial for RLS identification)
     final nativeId = Supabase.instance.client.auth.currentUser?.id;
     if (nativeId != null) return nativeId;
+    
+    // 3. Explicitly set ID fallback
+    if (_userId != null) return _userId;
 
     return null; 
   }

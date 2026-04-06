@@ -15,6 +15,7 @@ import '../../../core/services/notifications/announcement_listener_service.dart'
 import '../../../core/services/security/notification_service.dart';
 import '../../../core/services/security/security_logger.dart';
 import '../../../core/services/system/system_log_service.dart';
+import 'package:uuid/uuid.dart';
 import '../domain/i_auth_repository.dart';
 
 class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
@@ -160,34 +161,35 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
-      final syncService = SyncService();
+      // 1. LOCAL-FIRST AUTONOMY: Generate UUID locally (100% Offline Support)
+      final String localId = const Uuid().v4();
+      final User autonomousUser = newUser.copyWith(
+        id: localId,
+        isSynced: false,
+        updatedAt: DateTime.now(),
+      );
 
-      final createdUser = await syncService.createPatient(newUser);
-
-      if (createdUser == null) {
-        _isLoading = false;
-        notifyListeners();
-        return "Failed to register patient locally.";
-      }
-
-      // 3. Save to SQLite
-      await DatabaseHelper.instance.insertPatient(createdUser);
+      // 2. Persist to SQLite immediately
+      await DatabaseHelper.instance.insertPatient(autonomousUser);
+      
+      // 3. Update memory state for instant login
       _users = await DatabaseHelper.instance.getPatients();
-      _currentUser = createdUser;
+      _currentUser = autonomousUser;
 
-      SecurityLogger.info("New patient registered", 
-          pii: createdUser.fullName);
+      SecurityLogger.info("New patient registered (Offline-First)", 
+          pii: autonomousUser.fullName);
       
       DatabaseHelper.instance.logSecurityEvent(
-          "REGISTER", "New patient registered", // Event log sanitized internally or masked
-          userId: createdUser.id);
+          "REGISTER", "New patient registered autonomously", 
+          userId: autonomousUser.id);
 
-      // Trigger immediate background sync push
+      // 4. Background Cloud Handoff (Non-blocking)
+      // This will attempt a push now, but fail gracefully if offline
       SyncService().triggerSync();
 
       _isLoading = false;
       notifyListeners();
-      return null; // Success
+      return null; // Success (even if offline!)
     } catch (e) {
       _isLoading = false;
       notifyListeners();

@@ -6,6 +6,7 @@ import 'mock_sensor_service.dart';
 import 'drivers/serial_service.dart';
 import 'drivers/sensor_hub_service.dart';
 import 'sensor_data_models.dart';
+import 'models/hardware_config.dart';
 import '../system/app_environment.dart';
 import '../system/power_manager_service.dart';
 import '../security/notification_service.dart';
@@ -40,10 +41,7 @@ class SensorManager {
       }
     }
 
-    // Listen to all registered sensors
     _setupSensorListeners();
-
-    // Special Case: Pipe Hub secondary data (Temp and Battery)
     _setupHubSubscribers();
   }
 
@@ -79,44 +77,48 @@ class SensorManager {
   }
 
   Future<void> _discoverAndAssignPorts() async {
+    final config = HardwareConfig.instance;
     final List<String> availablePorts = SerialPort.availablePorts;
-    debugPrint("🔍 [SensorManager] Scanning ${availablePorts.length} ports for signatures...");
+    debugPrint("🔍 [SensorManager] Scanning ${availablePorts.length} ports using dynamic config...");
 
-    String? foundHubPort;
-    String? foundOxiPort;
-    String? foundBpPort;
+    String? foundHubPort = config.hub.portOverride;
+    String? foundOxiPort = config.oximeter.portOverride;
+    String? foundBpPort = config.bloodPressure.portOverride;
 
-    for (var portName in availablePorts) {
-      // PROBE EVERYTHING: We no longer skip internal ports, 
-      // because the ESP32 Hub is wired to the Pi's GPIO UART pins.
+    List<String> portsToScan = availablePorts.where((p) => 
+      p != foundHubPort && p != foundOxiPort && p != foundBpPort
+    ).toList();
+
+    for (var portName in portsToScan) {
       final port = SerialPort(portName);
       try {
         if (port.openReadWrite()) {
           port.config.baudRate = 9600;
-          // In flutter_libserialport, setting the property on port.config is usually sufficient 
-          // or assignment port.config = config is used. 
 
-          // 1. Check for HUB (JSON signature)
-          // We wait a short duration for a push-based JSON packet
-          await Future.delayed(const Duration(milliseconds: 500));
           final reader = SerialPortReader(port);
           final Completer<String?> signatureCompleter = Completer();
           
           final subscription = reader.stream.listen((data) {
             final str = String.fromCharCodes(data);
-            if (str.contains('"weight"') || str.contains('{')) {
+            
+            if (config.hub.handshakeSignature != null && str.contains(config.hub.handshakeSignature!)) {
               if (!signatureCompleter.isCompleted) signatureCompleter.complete("hub");
-            } else if (data.isNotEmpty && data[0] == 0x81) {
-              if (!signatureCompleter.isCompleted) signatureCompleter.complete("oximeter");
+            } 
+            else if (config.oximeter.handshakeSignatureHex != null) {
+              final sig = int.tryParse(config.oximeter.handshakeSignatureHex!, radix: 16);
+              if (data.isNotEmpty && sig != null && data[0] == sig) {
+                if (!signatureCompleter.isCompleted) signatureCompleter.complete("oximeter");
+              }
             }
           });
 
-          // Also try active probe for BP
-          final query = Uint8List.fromList([0x4D, 0x53, 0x54, 0x52]);
-          port.write(query);
+          if (config.bloodPressure.handshakeSignature != null) {
+            final query = Uint8List.fromList(config.bloodPressure.handshakeSignature!.codeUnits);
+            port.write(query);
+          }
 
           final result = await signatureCompleter.future.timeout(
-            const Duration(seconds: 1), 
+            Duration(milliseconds: config.system.discoveryTimeoutMs), 
             onTimeout: () => null
           );
 
@@ -125,24 +127,38 @@ class SensorManager {
 
           if (result == "hub") foundHubPort = portName;
           if (result == "oximeter") foundOxiPort = portName;
-          // BP detection is tricky in a quick probe, we'll use exclusion if needed
         }
       } catch (e) {
         debugPrint("⚠️ [SensorManager] Error probing $portName: $e");
       }
     }
 
-    // FALLBACKS & ASSIGNMENT
-    final String finalHub = foundHubPort ?? (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
-    final String finalOxi = foundOxiPort ?? (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1');
-    final String finalBp = foundBpPort ?? (Platform.isWindows ? 'COM4' : '/dev/ttyUSB3');
+    final String finalHub = foundHubPort ?? (Platform.isWindows ? 'COM1' : '/dev/ttyAMA0');
+    final String finalOxi = foundOxiPort ?? (Platform.isWindows ? 'COM2' : '/dev/ttyUSB0');
+    final String finalBp = foundBpPort ?? (Platform.isWindows ? 'COM4' : '/dev/ttyUSB1');
 
-    debugPrint("✅ [SensorManager] Hardware Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");
+    debugPrint("✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");
 
-    _sensors[SensorType.weight] = SensorHubService(type: SensorType.weight, portName: finalHub);
-    _sensors[SensorType.thermometer] = SerialSensorService(type: SensorType.thermometer, portName: finalHub);
-    _sensors[SensorType.oximeter] = SerialSensorService(type: SensorType.oximeter, portName: finalOxi, baudRate: 19200);
-    _sensors[SensorType.bloodPressure] = SerialSensorService(type: SensorType.bloodPressure, portName: finalBp, baudRate: 9600);
+    _sensors[SensorType.weight] = SensorHubService(
+      type: SensorType.weight, 
+      portName: finalHub,
+      baudRate: config.hub.baudRate
+    );
+    _sensors[SensorType.thermometer] = SerialSensorService(
+      type: SensorType.thermometer, 
+      portName: finalHub,
+      baudRate: config.hub.baudRate
+    );
+    _sensors[SensorType.oximeter] = SerialSensorService(
+      type: SensorType.oximeter, 
+      portName: finalOxi, 
+      baudRate: config.oximeter.baudRate
+    );
+    _sensors[SensorType.bloodPressure] = SerialSensorService(
+      type: SensorType.bloodPressure, 
+      portName: finalBp, 
+      baudRate: config.bloodPressure.baudRate
+    );
   }
 
   ISensorService getSensor(SensorType type) => _sensors[type]!;
@@ -168,13 +184,10 @@ class SensorManager {
   void startSensor(SensorType type) => _sensors[type]?.startReading();
   void stopSensor(SensorType type) => _sensors[type]?.stopReading();
 
-  /// Sends the "MSTR" query command to the CONTEC08A Blood Pressure monitor
-  /// to request stored measurement results.
   Future<void> queryBpResults() async {
     final bp = _sensors[SensorType.bloodPressure];
     if (bp != null) {
       debugPrint("📡 [SensorManager] Sending MSTR query to CONTEC BP monitor...");
-      // 0x4D 0x53 0x54 0x52 is the common ASCII hex for "MSTR"
       final query = Uint8List.fromList([0x4D, 0x53, 0x54, 0x52]);
       await bp.sendCommand(query);
     }
@@ -189,7 +202,6 @@ class SensorManager {
     });
   }
 
-  /// Manually updates the battery status (Used for Simulation and Testing).
   void updateBatteryVoltage(double voltage) {
     debugPrint("🔋 [SensorManager] Manual Battery Override: $voltage V");
     PowerManagerService().updateBatteryStatus(voltage);

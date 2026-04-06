@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/widgets/kiosk_scaffold.dart';
+import '../../../core/widgets/logo_glow.dart';
 import '../../../core/widgets/flow_animated_button.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
 import '../domain/i_auth_repository.dart';
@@ -33,63 +35,168 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   List<User> _filteredUsers = [];
   User? _selectedUser;
   bool _isPasswordVisible = false;
-  Timer? _exitTimer;
 
-  void _startExitTimer() {
-    _exitTimer = Timer(const Duration(seconds: 3), () {
-      _showAdminExitDialog();
-    });
-  }
-
-  void _stopExitTimer() {
-    _exitTimer?.cancel();
-  }
-
+  // --- Admin Hold Logic ---
+  Timer? _adminHoldTimer;
+  double _adminHoldScale = 1.0;
+  final int _holdDurationSeconds = 10;
   void _showAdminExitDialog() {
     final passwordController = TextEditingController();
     final env = AppEnvironment();
+
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(env.isKiosk ? "Exit Kiosk" : "Admin Exit"),
-        content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: "Admin Password"),
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        bool isDialogPasswordVisible = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final bool keyboardActive = isKeyboardVisible;
+            
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Align(
+                alignment: keyboardActive ? const Alignment(0, -1.0) : Alignment.center,
+                child: Container(
+                  constraints: BoxConstraints(maxWidth: keyboardActive ? 380 : 440),
+                  padding: EdgeInsets.all(keyboardActive ? 16 : 24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F3E9), 
+                    borderRadius: BorderRadius.circular(keyboardActive ? 20 : 28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!keyboardActive) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.security_rounded, color: AppColors.brandGreen, size: 28),
+                            const SizedBox(width: 12),
+                            Text(
+                              env.isKiosk ? "System Exit" : "Admin Exit",
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Administrator credentials required to exit kiosk mode.",
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ] else ...[
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.lock_outline, color: AppColors.brandGreen, size: 18),
+                            SizedBox(width: 8),
+                            Text("ADMIN ACCESS REQUIRED", 
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.brandGreen, letterSpacing: 1.2)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: !isDialogPasswordVisible,
+                        readOnly: true,
+                        decoration: InputDecoration(
+                          labelText: keyboardActive ? null : "Admin Password",
+                          hintText: keyboardActive ? "Password" : null,
+                          filled: true,
+                          fillColor: Colors.white,
+                          prefixIcon: const Icon(Icons.vpn_key_rounded, color: AppColors.brandGreen),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              isDialogPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                              color: AppColors.brandGreen,
+                            ),
+                            onPressed: () => setState(() => isDialogPasswordVisible = !isDialogPasswordVisible),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                        onTap: () {
+                          if (env.isKiosk) {
+                            showKeyboard(passwordController, null, type: KeyboardType.text);
+                            Future.delayed(const Duration(milliseconds: 150), () => setState(() {}));
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text("Cancel", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (passwordController.text == env.adminExitPassword) {
+                                if (env.isKiosk) {
+                                  exit(0);
+                                } else {
+                                  Navigator.pop(dialogContext);
+                                  context.go(AppRoutes.adminDashboard);
+                                }
+                              } else {
+                                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                  const SnackBar(content: Text("Incorrect password"), backgroundColor: Colors.red),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade400,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text(env.isKiosk ? "Exit App" : "Proceed"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
-              _VirtualKeyboard(controller: passwordController),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () {
-              if (passwordController.text == env.adminExitPassword) {
-                if (env.isKiosk) {
-                  // On the physical kiosk, exit the app entirely
-                  exit(0);
-                } else {
-                  // On other platforms, go to admin dashboard
-                  Navigator.pop(dialogContext);
-                  context.go(AppRoutes.adminDashboard);
-                }
-              } else {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text("Incorrect password")));
-              }
-            },
-            child: Text(env.isKiosk ? "Exit App" : "Exit to Admin"),
-          ),
-        ],
-      ),
-    );
+            );
+          },
+        );
+      },
+    ).then((_) {
+      if (mounted && isKeyboardVisible) Navigator.of(context).pop();
+    });
+  }
+
+  void _startAdminHold() {
+    _adminHoldTimer?.cancel();
+    setState(() => _adminHoldScale = 1.1); // Pulse up animation
+    
+    _adminHoldTimer = Timer(Duration(seconds: _holdDurationSeconds), () {
+      if (mounted) {
+        setState(() => _adminHoldScale = 1.0);
+        _showAdminExitDialog();
+      }
+    });
+  }
+
+  void _stopAdminHold() {
+    _adminHoldTimer?.cancel();
+    _adminHoldTimer = null;
+    if (mounted) {
+      setState(() => _adminHoldScale = 1.0);
+    }
   }
 
   @override
@@ -147,10 +254,11 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
           _phoneController.text,
         );
 
-    if (success == null && mounted) {
+    if (success == null) {
+      if (!mounted) return;
       context.go(AppRoutes.home);
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ?? "Invalid credentials"), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success), backgroundColor: Colors.red));
     }
   }
 
@@ -199,52 +307,44 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // --- HEADER ---
-                        Container(
-                          padding: const EdgeInsets.all(28), // Larger container
-                          decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.brandGreen.withValues(alpha: 0.15),
-                                  blurRadius: 20, // More shadow
-                                )
-                              ]),
-                          child: GestureDetector(
-                            onTapDown: (_) => _startExitTimer(),
-                            onTapUp: (_) => _stopExitTimer(),
-                            onTapCancel: () => _stopExitTimer(),
-                            child: const Icon(Icons.medical_services_rounded,
-                                size: 60, color: AppColors.brandGreen), // Enlarged from 48
+                        GestureDetector(
+                          onLongPressStart: (_) => _startAdminHold(),
+                          onLongPressEnd: (_) => _stopAdminHold(),
+                          onLongPressCancel: () => _stopAdminHold(),
+                          child: AnimatedScale(
+                            scale: _adminHoldScale,
+                            duration: const Duration(milliseconds: 200),
+                            child: const LogoGlow(
+                              size: 140, // Adjusted size
+                              child: Icon(Icons.medical_services_rounded,
+                                  size: 84, color: AppColors.brandGreen),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        const Text("Kiosk Access",
-                            style: TextStyle(
-                                fontSize: 42, // High-Accessibility enlargement from 28
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.brandDark,
-                                letterSpacing: -1.0)),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16), // Reduced from 32
+                        Text("Kiosk Access",
+                            style: Theme.of(context).textTheme.displayLarge),
+                        const SizedBox(height: 8), // Reduced from 12
                         const Text("Secure Patient Login",
                             style: TextStyle(
-                                fontSize: 20, // Enlarged from 16
+                                fontSize: 18, // Reduced from 20
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w500)),
 
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24), // Reduced from 32
 
                         // --- MAIN CARD ---
                         Container(
-                          padding: const EdgeInsets.all(32), // More room
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32), // Reduced vertical from 48
                           decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(24),
+                              borderRadius: BorderRadius.circular(32),
+                              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                               boxShadow: [
                                 BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
-                                    blurRadius: 30, // Deeper shadow
-                                    offset: const Offset(0, 10))
+                                    color: Colors.black.withValues(alpha: 0.02), // Reduced opacity
+                                    blurRadius: 20, // Reduced from 30
+                                    offset: const Offset(0, 10)) // Reduced from 15
                               ]),
                           child: Stack(
                             clipBehavior: Clip.none,
@@ -255,8 +355,8 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                                   Text(
                                       AppLocalizations.of(context)?.findYourAccount ?? "1. Find Your Account",
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 18, // Enlarged from 15
+                                          fontWeight: FontWeight.w700, // Reduced from w900
+                                          fontSize: 18,
                                           color: Colors.grey)),
                                   const SizedBox(height: 12),
 
@@ -289,8 +389,8 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                                   Text(
                                       AppLocalizations.of(context)?.enterPassword ?? "2. Verify Identity",
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 18, // Enlarged
+                                          fontWeight: FontWeight.w700, // Reduced from w900
+                                          fontSize: 18,
                                           color: Colors.grey)),
                                   const SizedBox(height: 12),
                                   TextField(
@@ -311,13 +411,20 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                                             Icons.lock_person_rounded)
                                         .copyWith(
                                       counterText: "",
-                                      suffixIcon: IconButton(
-                                        iconSize: 24,
-                                        icon: Icon(_isPasswordVisible
-                                            ? Icons.visibility
-                                            : Icons.visibility_off),
-                                        onPressed: () => setState(() =>
-                                            _isPasswordVisible = !_isPasswordVisible),
+                                      contentPadding: const EdgeInsets.only(left: 28, right: 12, top: 26, bottom: 26),
+                                      suffixIcon: Padding(
+                                        padding: const EdgeInsets.only(right: 8),
+                                        child: IconButton(
+                                          constraints: const BoxConstraints(), // Fixes 'lumalampas' issue
+                                          padding: EdgeInsets.zero,
+                                          iconSize: 24,
+                                          icon: Icon(_isPasswordVisible
+                                              ? Icons.visibility
+                                              : Icons.visibility_off,
+                                              color: AppColors.brandGreen),
+                                          onPressed: () => setState(() =>
+                                              _isPasswordVisible = !_isPasswordVisible),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -333,15 +440,18 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                                         style: ElevatedButton.styleFrom(
                                             backgroundColor: AppColors.brandGreen,
                                             foregroundColor: Colors.white,
-                                            minimumSize: const Size(double.infinity, 64), // Enlarged height
+                                            minimumSize: const Size(double.infinity, 64), // Reduced from 72
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-                                            elevation: 4),
+                                            elevation: 8,
+                                            shadowColor: AppColors.brandGreen.withValues(alpha: 0.4),
+                                        ),
                                         child: Text(
                                             AppLocalizations.of(context)?.accessRecord ?? "ACCESS RECORD",
-                                            style: const TextStyle(
-                                                fontSize: 22, // High-Accessibility font size
-                                                fontWeight: FontWeight.w900,
-                                                letterSpacing: 1.0)),
+                                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                              color: Colors.white,
+                                              fontSize: 20, // Reduced from 22
+                                              letterSpacing: 2.0,
+                                            )),
                                       ),
                                     ),
                                 ],
@@ -391,18 +501,18 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
                         TextButton(
                           onPressed: () => context.push(AppRoutes.register),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16), // Reduced from 20
                             backgroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                                side: BorderSide(color: Colors.grey.shade200),
+                                side: BorderSide(color: Colors.grey.shade200, width: 2),
                                 borderRadius: BorderRadius.circular(50)),
                           ),
                           child: Text(
                               AppLocalizations.of(context)?.noAccountCreate ?? "No Account? Create New Record",
                               style: const TextStyle(
                                   color: AppColors.brandDark,
-                                  fontSize: 18, // Enlarged
-                                  fontWeight: FontWeight.w900)),
+                                  fontSize: 16, // Reduced from 18
+                                  fontWeight: FontWeight.w700)), // Reduced from w900
                         ),
                       ],
                     ),
@@ -433,94 +543,23 @@ class _LoginScreenState extends State<LoginScreen> with VirtualKeyboardMixin {
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.grey, fontSize: 18),
+      hintStyle: GoogleFonts.outfit(color: Colors.grey, fontSize: 18, fontWeight: FontWeight.w500),
       filled: true,
-      fillColor: Colors.grey[50],
-      prefixIcon: Icon(icon, color: AppColors.brandDark, size: 28), // Larger icons
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+      fillColor: Colors.white,
+      prefixIcon: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Icon(icon, color: AppColors.brandGreen, size: 28),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade200)),
+          borderRadius: BorderRadius.circular(50),
+          borderSide: BorderSide(color: Colors.grey.shade200, width: 2)),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade200)),
-    );
-  }
-}
-
-class _VirtualKeyboard extends StatefulWidget {
-  final TextEditingController controller;
-  const _VirtualKeyboard({required this.controller});
-
-  @override
-  _VirtualKeyboardState createState() => _VirtualKeyboardState();
-}
-
-class _VirtualKeyboardState extends State<_VirtualKeyboard> {
-  bool isCaps = false;
-
-  final keys = [
-    ['1','2','3','4','5','6','7','8','9','0'],
-    ['q','w','e','r','t','y','u','i','o','p'],
-    ['a','s','d','f','g','h','j','k','l'],
-    ['z','x','c','v','b','n','m'],
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var row in keys)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: row.map((k) => Padding(
-              padding: const EdgeInsets.all(2.0),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(42, 52),
-                  padding: EdgeInsets.zero,
-                  backgroundColor: Colors.grey.shade100,
-                  foregroundColor: Colors.black87,
-                  elevation: 1,
-                ),
-                onPressed: () {
-                  widget.controller.text += isCaps ? k.toUpperCase() : k;
-                },
-                child: Text(isCaps ? k.toUpperCase() : k, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ),
-            )).toList(),
-          ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(100, 52),
-                backgroundColor: isCaps ? AppColors.brandGreen : Colors.grey.shade200,
-                foregroundColor: isCaps ? Colors.white : Colors.black87,
-              ),
-              onPressed: () => setState(() => isCaps = !isCaps),
-              child: const Text('CAPS', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(width: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(100, 52),
-                backgroundColor: Colors.red.shade100,
-                foregroundColor: Colors.red.shade900,
-              ),
-              onPressed: () {
-                if (widget.controller.text.isNotEmpty) {
-                  widget.controller.text = widget.controller.text.substring(0, widget.controller.text.length - 1);
-                }
-              },
-              child: const Icon(Icons.backspace),
-            ),
-          ],
-        )
-      ],
+          borderRadius: BorderRadius.circular(50),
+          borderSide: BorderSide(color: Colors.grey.shade200, width: 2)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(50),
+          borderSide: const BorderSide(color: AppColors.brandGreen, width: 2.5)),
     );
   }
 }

@@ -148,7 +148,7 @@ class SystemSyncHandler extends SyncHandler {
     } catch (_) {}
 
     final lastSync = await _getLastSync('schedules');
-    var query = supabase.from('schedules').select().eq('patient_id', currentUserId);
+    var query = supabase.from('schedules').select(); // Removed patient_id filter as it doesn't exist in Supabase/Local schema
     if (lastSync != null && localCount > 0) {
       query = query.gt('updated_at', lastSync);
     }
@@ -301,7 +301,7 @@ class SystemSyncHandler extends SyncHandler {
 
     _schedulesChannel = supabase.channel('public:schedules_realtime').onPostgresChanges(
       event: PostgresChangeEvent.all, schema: 'public', table: 'schedules',
-      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: currentUserId),
+      // filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: currentUserId), // Removed as patient_id column is missing
       callback: (payload) {
         if (payload.eventType == PostgresChangeEvent.delete) {
           final id = payload.oldRecord['id']?.toString();
@@ -309,7 +309,11 @@ class SystemSyncHandler extends SyncHandler {
             unawaited(dbHelper.systemDao.hardDeleteSchedule(id));
           }
         } else {
-          unawaited(pullSchedules(currentUserId));
+          try {
+            unawaited(pullSchedules(currentUserId));
+          } catch (e) {
+            debugPrint("❌ pullSchedules Error: $e");
+          }
         }
       },
     ).subscribe();

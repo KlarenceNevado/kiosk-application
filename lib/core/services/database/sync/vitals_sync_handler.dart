@@ -97,6 +97,7 @@ class VitalsSyncHandler extends SyncHandler {
       if (latestTimestamp != null) {
         await _updateLastSync(latestTimestamp);
         _changeController.add(null);
+        SyncEventBus.instance.triggerVitalsUpdate();
         if (anyNew && latestNew != null) {
           _newRecordController.add(latestNew);
         }
@@ -275,6 +276,10 @@ class VitalsSyncHandler extends SyncHandler {
         prepared[field] = dbHelper.decrypt(prepared[field]);
       }
     }
+
+    // Force is_synced to true for data pulled FROM the cloud.
+    // Cloud payloads do not contain this local flag, so we must set it manually.
+    prepared['is_synced'] = 1;
 
     return prepared;
   }

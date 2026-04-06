@@ -91,6 +91,7 @@ class PatientSyncHandler extends SyncHandler {
       if (latestTimestamp != null) {
         await _updateLastSync(latestTimestamp);
         _changeController.add(null);
+        SyncEventBus.instance.triggerPatientUpdate();
       }
     } catch (e) {
       debugPrint("❌ PatientSyncHandler: Pull Error: $e");
@@ -343,6 +344,10 @@ class PatientSyncHandler extends SyncHandler {
     if (prepared['pin_code'] != null) {
       prepared['pin_code'] = dbHelper.decrypt(prepared['pin_code']);
     }
+
+    // Force is_synced to true for data pulled FROM the cloud.
+    // Cloud payloads do not contain this local flag, so we must set it manually.
+    prepared['is_synced'] = 1;
 
     return prepared;
   }

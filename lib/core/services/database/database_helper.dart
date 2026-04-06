@@ -65,7 +65,9 @@ class DatabaseHelper {
     try {
       if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) {
         sqfliteFfiInit();
-        databaseFactory = databaseFactoryFfi;
+        if (databaseFactory != databaseFactoryFfi) {
+          databaseFactory = databaseFactoryFfi;
+        }
       }
 
       _database = await _initDB('kiosk_health.db');
@@ -547,12 +549,21 @@ class DatabaseHelper {
     return double.tryParse(val) ?? 0.0;
   }
 
-  Future<void> createRecord(VitalSigns record) => vitalsDao.createRecord(record);
+  Future<void> createRecord(VitalSigns record) async {
+    await database;
+    return vitalsDao.createRecord(record);
+  }
 
   // Same as createRecord, but forces is_synced based on the incoming valid map (from sync service)
-  Future<void> insertVitalSign(Map<String, dynamic> map) => vitalsDao.insertVitalSign(map);
+  Future<void> insertVitalSign(Map<String, dynamic> map) async {
+    await database;
+    return vitalsDao.insertVitalSign(map);
+  }
 
-  Future<void> updateRecord(VitalSigns record) => vitalsDao.updateRecord(record);
+  Future<void> updateRecord(VitalSigns record) async {
+    await database;
+    return vitalsDao.updateRecord(record);
+  }
 
   /// Partial update for specific fields (e.g. file paths during sync)
   Future<int> updateRecordRaw(String id, Map<String, dynamic> data) async {
@@ -636,13 +647,25 @@ class DatabaseHelper {
   }
 
   // --- SYNC SUPPORT MODULES ---
-  Future<List<User>> getUnsyncedPatients() => patientDao.getUnsyncedPatients();
+  Future<List<User>> getUnsyncedPatients() async {
+    await database;
+    return patientDao.getUnsyncedPatients();
+  }
 
-  Future<void> markPatientAsSynced(String id) => patientDao.markPatientAsSynced(id);
+  Future<void> markPatientAsSynced(String id) async {
+    await database;
+    return patientDao.markPatientAsSynced(id);
+  }
 
-  Future<List<VitalSigns>> getUnsyncedRecords() => vitalsDao.getUnsyncedRecords();
+  Future<List<VitalSigns>> getUnsyncedRecords() async {
+    await database;
+    return vitalsDao.getUnsyncedRecords();
+  }
 
-  Future<void> markRecordAsSynced(String id) => vitalsDao.markRecordAsSynced(id);
+  Future<void> markRecordAsSynced(String id) async {
+    await database;
+    return vitalsDao.markRecordAsSynced(id);
+  }
 
   Future<void> markAnnouncementAsSynced(String id) async {
     final db = await database;
@@ -686,19 +709,26 @@ class DatabaseHelper {
       }
       await batch.commit(noResult: true);
     });
-    debugPrint("✅ Database: Marked ${ids.length} records in '$table' as synced.");
+    debugPrint("✅ Database: Marked ${ids.length} records in '$table' as synced: ${ids.take(3).join(', ')}${ids.length > 3 ? '...' : ''}");
   }
 
   // --- SECURITY METHODS ---
   Future<void> logSecurityEvent(String action, String description,
-          {String severity = 'LOW', String? userId}) =>
-      systemDao.logSecurityEvent(action, description,
-          severity: severity, userId: userId);
+          {String severity = 'LOW', String? userId}) async {
+    await database;
+    return systemDao.logSecurityEvent(action, description,
+        severity: severity, userId: userId);
+  }
 
-  Future<bool> verifyAuditIntegrity() => systemDao.verifyAuditIntegrity();
+  Future<bool> verifyAuditIntegrity() async {
+    await database;
+    return systemDao.verifyAuditIntegrity();
+  }
 
-  Future<Map<String, dynamic>> getSecurityPulse() =>
-      systemDao.getSecurityPulse();
+  Future<Map<String, dynamic>> getSecurityPulse() async {
+    await database;
+    return systemDao.getSecurityPulse();
+  }
 
   // --- SYNC METADATA HELPERS ---
   Future<void> updateSyncMetadata({
@@ -707,25 +737,36 @@ class DatabaseHelper {
     String? error,
     bool incrementRetry = false,
     bool block = false,
-  }) =>
-      systemDao.updateSyncMetadata(
-          tableName: tableName,
-          recordId: recordId,
-          error: error,
-          incrementRetry: incrementRetry,
-          block: block);
+  }) async {
+    await database;
+    return systemDao.updateSyncMetadata(
+        tableName: tableName,
+        recordId: recordId,
+        error: error,
+        incrementRetry: incrementRetry,
+        block: block);
+  }
 
-  Future<void> clearSyncMetadata(String tableName, String recordId) =>
-      systemDao.clearSyncMetadata(tableName, recordId);
+  Future<void> clearSyncMetadata(String tableName, String recordId) async {
+    await database;
+    return systemDao.clearSyncMetadata(tableName, recordId);
+  }
 
-  Future<List<String>> getBlockedRecords(String tableName) =>
-      systemDao.getBlockedRecords(tableName);
+  Future<List<String>> getBlockedRecords(String tableName) async {
+    await database;
+    return systemDao.getBlockedRecords(tableName);
+  }
 
   Future<Map<String, dynamic>?> getSyncMetadata(
-          String tableName, String recordId) =>
-      systemDao.getSyncMetadata(tableName, recordId);
+      String tableName, String recordId) async {
+    await database;
+    return systemDao.getSyncMetadata(tableName, recordId);
+  }
 
-  Future<List<Map<String, dynamic>>> getAuditLogs() => systemDao.getAuditLogs();
+  Future<List<Map<String, dynamic>>> getAuditLogs() async {
+    await database;
+    return systemDao.getAuditLogs();
+  }
 
   Future<void> clearHistory() async {
     final db = await database;
@@ -908,39 +949,60 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getUnsyncedAlerts() =>
       systemDao.getUnsyncedAlerts();
 
-  Future<List<Map<String, dynamic>>> getUnsyncedSchedules() =>
-      systemDao.getUnsyncedSchedules();
+  Future<List<Map<String, dynamic>>> getUnsyncedSchedules() async {
+    await database;
+    return systemDao.getUnsyncedSchedules();
+  }
 
-  Future<List<Map<String, dynamic>>> getUnsyncedChatMessages() =>
-      systemDao.getUnsyncedChatMessages();
-
-  Future<Map<String, dynamic>?> getVitalSignById(String id) => 
-      vitalsDao.getVitalSignById(id);
+  Future<Map<String, dynamic>?> getVitalSignById(String id) async {
+    await database;
+    return vitalsDao.getVitalSignById(id);
+  }
 
   // --- REMINDERS ---
-  Future<int> insertReminder(Map<String, dynamic> row) =>
-      systemDao.insertReminder(row);
+  Future<int> insertReminder(Map<String, dynamic> row) async {
+    await database;
+    return systemDao.insertReminder(row);
+  }
 
-  Future<List<Map<String, dynamic>>> getReminders(String userId) =>
-      systemDao.getReminders(userId);
+  Future<List<Map<String, dynamic>>> getReminders(String userId) async {
+    await database;
+    return systemDao.getReminders(userId);
+  }
 
-  Future<int> updateReminder(Map<String, dynamic> row) =>
-      systemDao.updateReminder(row);
+  Future<int> updateReminder(Map<String, dynamic> row) async {
+    await database;
+    return systemDao.updateReminder(row);
+  }
 
-  Future<int> deleteReminder(int id) => systemDao.deleteReminder(id);
+  Future<int> deleteReminder(int id) async {
+    await database;
+    return systemDao.deleteReminder(id);
+  }
 
-  Future<int> deleteAllReminders(String userId) =>
-      systemDao.deleteAllReminders(userId);
+  Future<int> deleteAllReminders(String userId) async {
+    await database;
+    return systemDao.deleteAllReminders(userId);
+  }
 
   // --- SYSTEM LOGS ---
-  Future<void> createSystemLog(SystemLog log) => systemDao.createSystemLog(log);
+  Future<void> createSystemLog(SystemLog log) async {
+    await database;
+    return systemDao.createSystemLog(log);
+  }
 
-  Future<List<SystemLog>> getSystemLogs({int limit = 100}) =>
-      systemDao.getSystemLogs(limit: limit);
+  Future<List<SystemLog>> getSystemLogs({int limit = 100}) async {
+    await database;
+    return systemDao.getSystemLogs(limit: limit);
+  }
 
-  Future<List<SystemLog>> getUnsyncedSystemLogs() =>
-      systemDao.getUnsyncedSystemLogs();
+  Future<List<SystemLog>> getUnsyncedSystemLogs() async {
+    await database;
+    return systemDao.getUnsyncedSystemLogs();
+  }
 
-  Future<void> markSystemLogAsSynced(String id) =>
-      systemDao.markSystemLogAsSynced(id);
+  Future<void> markSystemLogAsSynced(String id) async {
+    await database;
+    return systemDao.markSystemLogAsSynced(id);
+  }
 }

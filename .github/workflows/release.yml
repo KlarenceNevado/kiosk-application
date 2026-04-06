@@ -1,0 +1,62 @@
+name: Release & Version Registry
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  update-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract version
+        id: get_version
+        run: echo "VERSION=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')" >> $GITHUB_ENV
+
+      - name: Update version.json
+        run: |
+          VERSION="${{ env.VERSION }}"
+          # Use jq to update the version and set the URLs
+          jq --arg ver "$VERSION" '.version = $ver | .kiosk_linux_url = "https://github.com/${{ github.repository }}/releases/download/v\($ver)/App1_HealthKiosk_Linux.zip"' web/version.json > web/version.json.tmp && mv web/version.json.tmp web/version.json
+
+      - name: Commit version update
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add web/version.json
+          git commit -m "chore: update registry to ${{ env.VERSION }}"
+          git push origin master
+
+  create-release:
+    needs: update-registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++6 libserialport-dev
+
+      - name: Build Kiosk Linux (x64 for analysis)
+        run: flutter build linux --release -t lib/main_kiosk.dart
+
+      - name: Archive Bundle
+        run: |
+          cd build/linux/x64/release/bundle/
+          zip -r ../../../../../App1_HealthKiosk_Linux.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: App1_HealthKiosk_Linux.zip
+          body: "Automated production build for version ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

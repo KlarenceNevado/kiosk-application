@@ -8,9 +8,10 @@ import 'package:kiosk_application/core/config/theme.dart';
 import 'package:kiosk_application/core/errors/error_handler.dart';
 
 import 'package:kiosk_application/core/services/system/app_environment.dart';
-import 'package:kiosk_application/core/services/system/initialization_service.dart';
+
 import 'package:kiosk_application/core/services/system/session_timer_service.dart';
 import 'package:kiosk_application/core/services/hardware/sensor_manager.dart';
+import 'package:kiosk_application/core/widgets/startup_gateway.dart';
 
 // FEATURES
 import 'package:kiosk_application/features/auth/data/auth_repository.dart';
@@ -28,35 +29,46 @@ import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
 import 'package:kiosk_application/core/domain/i_system_repository.dart';
 import 'package:kiosk_application/core/repositories/local_system_repository.dart';
 
-// FIXED: Renamed back to 'main()' so VS Code debugger can find it
-void main() async {
+/// PERFECTION: main() is now synchronous.
+/// This ensures runApp() is called immediately, eliminating the Windows white-screen lag.
+void main() {
+  // Essential Binding
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Set the mode immediately (synchronous)
   AppEnvironment().setMode(AppMode.kiosk);
-  await AppEnvironment().initialize();
+  
+  // Start the Zero-Latency Startup logic
+  runApp(const KioskStartupApp());
+}
 
-  // Centralized Initialization
-  await InitializationService().initialize();
+/// A lightweight wrapper that renders the 'StartupGateway' while core services initialize.
+class KioskStartupApp extends StatelessWidget {
+  const KioskStartupApp({super.key});
 
-  runApp(
-    MultiProvider(
-      providers: [
-        Provider(create: (_) => SensorManager()),
-        ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
-        ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
-        ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-        ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
-        Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
-        ChangeNotifierProvider(
-          create: (context) => HealthWizardProvider(
-            context.read<SensorManager>(),
+  @override
+  Widget build(BuildContext context) {
+    return StartupGateway(
+      builder: (context) => MultiProvider(
+        providers: [
+          Provider(create: (_) => SensorManager()),
+          ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
+          ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
+          ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
+          ChangeNotifierProvider(create: (_) => LanguageProvider()),
+          ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
+          ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+          Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
+          ChangeNotifierProvider(
+            create: (context) => HealthWizardProvider(
+              context.read<SensorManager>(),
+            ),
           ),
-        ),
-      ],
-      child: const KioskApp(),
-    ),
-  );
+        ],
+        child: const KioskApp(),
+      ),
+    );
+  }
 }
 
 class KioskApp extends StatelessWidget {
@@ -88,22 +100,12 @@ class KioskApp extends StatelessWidget {
           isPaused: context.watch<HealthWizardProvider>().isSessionActive,
           duration: const Duration(seconds: 45),
           onTimeout: () {
-            // Check if already at login to prevent redundant redirects
             final String location = appRouter.routerDelegate.currentConfiguration.uri.toString();
-            if (location == AppRoutes.login) {
-              debugPrint("ℹ️ Inactivity Timeout: Already at login.");
-              return;
-            }
+            if (location == AppRoutes.login) return;
 
-            debugPrint("⚠️ Inactivity Timeout: Logging out and redirecting...");
-            
-            // 1. Hard logout
             context.read<IAuthRepository>().logout();
-            
-            // 2. Redirect using Global Router (Safe from context issues)
             appRouter.go(AppRoutes.login);
 
-            // 3. Inform the user
             final messenger = ScaffoldMessenger.maybeOf(context);
             messenger?.clearSnackBars();
             messenger?.showSnackBar(
@@ -116,9 +118,7 @@ class KioskApp extends StatelessWidget {
           },
           child: child,
         );
-
       },
-
     );
   }
 }

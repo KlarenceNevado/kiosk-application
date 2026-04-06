@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,7 @@ import '../database/connection_manager.dart';
 import '../system/system_log_service.dart';
 import '../hardware/sensor_manager.dart';
 import '../hardware/sensor_service_interface.dart';
+import '../hardware/models/hardware_config.dart';
 import 'background_service_helper.dart';
 import '../database/database_helper.dart';
 import 'power_manager_service.dart';
@@ -32,140 +34,138 @@ class InitializationService {
   factory InitializationService() => _instance;
   InitializationService._internal();
 
-  /// Comprehensive initialization for the application based on the current AppMode.
-  Future<void> initialize() async {
+  /// PERFECTION: Split initialization into Fast/Critical and Slow/Deferred paths.
+  /// This eliminates the 'White Screen' lag during fresh starts.
+  
+  /// Tier 1: Fast, local-only tasks that must happen before the first frame.
+  Future<void> initializeCritical() async {
     final mode = AppEnvironment().mode;
-    debugPrint("🚀 [InitializationService] Initializing for mode: $mode");
+    debugPrint("🚀 [InitializationService] Tier 1: Critical Initialization ($mode)");
 
-    // 1. Timezone Initialization
+    // 1. Timezone (Instant)
     _initTimezone();
 
-    // 2. Platform Specific Database Initialization
+    // 2. Database Drivers (Instant)
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
       _initDesktopDatabase();
     }
 
-    // 3. Environment & Config
-    await _initDotEnv();
+    // 3. Environment (Fast - Reduced timeout)
+    await _initDotEnv(timeout: const Duration(seconds: 1));
+    await HardwareConfig.load();
     await ConfigService().loadSettings();
 
-    // 4. Initialize Firebase (Real OS-Level Push)
-    try {
-      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
-        await Firebase.initializeApp();
-        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-        debugPrint("🔥 [InitializationService] Firebase Initialized.");
-      }
-    } catch (e) {
-      debugPrint("⚠️ [InitializationService] Firebase Init Error: $e");
-    }
-
-    // 5. Core Logic & Security Services
+    // 4. Security Core
     ErrorHandler.init();
     await EncryptionService().init();
+    
+    // 5. Minimal UI Config (Colors/Layout)
+    _configureUI(mode);
 
-    // 5. Initialize Supabase (Offline-First Cloud Sync)
-    try {
-      await _initSupabase().timeout(const Duration(seconds: 10));
-    } catch (e) {
-      debugPrint("⚠️ [InitializationService] Supabase Initialization Failed/Timed Out: $e");
-      // We continue anyway so the app can run in offline mode.
-    }
+    debugPrint("⚡ [InitializationService] Tier 1 Complete.");
+  }
 
-    // 6. Mode-specific Services (Resilient Startup)
-    if (AppEnvironment().isMobilePatient) {
-       // CRITICAL: Skip UI/Foreground-only services if running in a background isolate
-       if (DatabaseHelper.isBackground) {
-         debugPrint("📢 [InitializationService] Isolate write-mode: SUPPRESSED (Background Mode).");
-       } else {
-         debugPrint("📦 [InitializationService] Phase: Mobile Patient Setup (Main Isolate)");
-         try {
-           // 6.1. Permissions (Requires UI Thread)
-           await _requestAppPermissions();
-           
-           // 6.2. Notifications (Requires UI Thread)
-           await _initNotifications();
+  /// Tier 2: Heavy network, hardware, and windowing tasks that run in the background.
+  Future<void> initializeDeferred() async {
+    final mode = AppEnvironment().mode;
+    debugPrint("🔄 [InitializationService] Tier 2: Deferred Initialization Starting...");
 
-           // 6.3. Background service (Must only be initialized from Main Isolate)
-           await BackgroundServiceHelper.initializeService();
-           FlutterBackgroundService().invoke('set_ui_active', {'active': true});
-         } catch (e) {
-           debugPrint("⚠️ [InitializationService] Mobile Setup Error: $e");
-         }
-       }
-    } else {
-       debugPrint("📦 [InitializationService] Phase: Hardware/Kiosk Setup (Skipping Background Service)");
-    }
+    // 1. Firebase (Network dependent)
+    _initFirebaseAsync();
 
-    // 7. UI Configuration
-    try {
-      _configureUI(mode);
-    } catch (e) {
-      debugPrint("⚠️ [InitializationService] UI Configuration Error: $e");
-    }
+    // 2. Supabase (Slow - Network dependent)
+    _initSupabaseBackground();
 
-    // 8. Desktop Window Configuration (Linux/Windows/macOS)
+    // 3. Window Configuration (Hardware dependent)
     if (AppEnvironment().isDesktopAdmin || AppEnvironment().mode == AppMode.kiosk) {
-      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
-        try {
-          debugPrint("🪟 [InitializationService] Configuring Desktop Window...");
-          await _initDesktopWindow().timeout(const Duration(seconds: 5));
-        } catch (e) {
-          debugPrint("⚠️ [InitializationService] Desktop Window Initialization Error/Timeout: $e");
-        }
-      }
+      _initDesktopWindowAsync();
     }
 
-    // 9. Sync & Connectivity Services
-    try {
-      ConnectionManager().startMonitoring();
-      if (!AppEnvironment().isDesktopAdmin) {
-        SyncService().startSyncLoop();
-      }
-    } catch (e) {
-      debugPrint("⚠️ [InitializationService] Sync Startup Error: $e");
+    // 4. Mode-specific Services
+    if (AppEnvironment().isMobilePatient) {
+       _initMobilePatientAsync();
     }
 
-    // 10. Initial Uptime & Health Log (H2 Validation)
+    // 5. Monitoring & Logs
+    ConnectionManager().startMonitoring();
+    if (!AppEnvironment().isDesktopAdmin) {
+      SyncService().startSyncLoop();
+    }
+
     if (mode == AppMode.kiosk) {
-        try {
-          PowerManagerService().startMonitoring();
-          _logInitialHealth();
-        } catch (e) {
-          debugPrint("⚠️ [InitializationService] Health Log Error: $e");
-        }
+      PowerManagerService().startMonitoring();
+      // Deferred health log so it doesn't block startup
+      Future.delayed(const Duration(seconds: 3), () => _logInitialHealth());
     }
 
-    debugPrint("✅ [InitializationService] Initialization complete.");
+    debugPrint("✅ [InitializationService] Tier 2 Dispatched.");
+  }
+
+  /// Legacy compatibility wrapper
+  Future<void> initialize() async {
+    await initializeCritical();
+    unawaited(initializeDeferred());
+  }
+
+  /// Non-blocking Firebase initialization
+  void _initFirebaseAsync() {
+    unawaited(() async {
+      try {
+        if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
+          await Firebase.initializeApp();
+          FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+          debugPrint("🔥 [InitializationService] Firebase Initialized.");
+        }
+      } catch (e) {
+        debugPrint("⚠️ [InitializationService] Firebase Init Error: $e");
+      }
+    }());
+  }
+
+  /// Non-blocking Supabase initialization
+  void _initSupabaseBackground() {
+    unawaited(_initSupabase().catchError((e) {
+      debugPrint("⚠️ [InitializationService] Deferred Supabase Error: $e");
+    }));
+  }
+
+  /// Non-blocking Desktop Window configuration
+  void _initDesktopWindowAsync() {
+    unawaited(_initDesktopWindow().catchError((e) {
+      debugPrint("⚠️ [InitializationService] Deferred Window Error: $e");
+    }));
+  }
+
+  /// Non-blocking Mobile Patient setup
+  void _initMobilePatientAsync() {
+    unawaited(() async {
+      try {
+        if (!DatabaseHelper.isBackground) {
+          await _requestAppPermissions();
+          await _initNotifications();
+          await BackgroundServiceHelper.initializeService();
+          FlutterBackgroundService().invoke('set_ui_active', {'active': true});
+        }
+      } catch (e) {
+        debugPrint("⚠️ [InitializationService] Deferred Mobile Error: $e");
+      }
+    }());
   }
 
   /// Centralized permission request flow for Mobile Patient mode
   Future<void> _requestAppPermissions() async {
-    if (kIsWeb) {
-      debugPrint("🔐 [InitializationService] Requesting Web Permissions...");
-      await NotificationService().requestPermissions();
-      return;
-    }
+    if (kIsWeb) return;
     if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) return;
 
     try {
-      debugPrint("🔐 [InitializationService] Checking OS Permissions...");
-      
-      // 1. Notifications (Android 13+)
       if (await Permission.notification.status.isDenied) {
         await Permission.notification.request();
       }
-
-      // 2. IGNORE BATTERY OPTIMIZATIONS (Crucial for sync stability)
       if (defaultTargetPlatform == TargetPlatform.android) {
         if (await Permission.ignoreBatteryOptimizations.status.isDenied) {
-          debugPrint("⚡ [InitializationService] Requesting Battery Optimization Waiver...");
-          // This will open the system dialog or settings page
           await Permission.ignoreBatteryOptimizations.request();
         }
       }
-
-      debugPrint("✅ [InitializationService] Permission flow completed.");
     } catch (e) {
       debugPrint("⚠️ [InitializationService] Permission request error: $e");
     }
@@ -174,7 +174,6 @@ class InitializationService {
   Future<void> _logInitialHealth() async {
     try {
       final sensorManager = SensorManager();
-      // We wait a bit for sensors to report their initial status
       await Future.delayed(const Duration(seconds: 2));
       
       final sensors = {
@@ -184,9 +183,7 @@ class InitializationService {
         'BP': sensorManager.getSensor(SensorType.bloodPressure).currentStatus.toString(),
       };
 
-      await SystemLogService().logUptimeHealth(
-        availableSensors: sensors,
-      );
+      await SystemLogService().logUptimeHealth(availableSensors: sensors);
     } catch (e) {
       debugPrint("⚠️ InitializationService (Health Log): $e");
     }
@@ -210,31 +207,22 @@ class InitializationService {
     }
   }
 
-  Future<void> _initDotEnv() async {
+  Future<void> _initDotEnv({Duration timeout = const Duration(seconds: 3)}) async {
     try {
-      // Try primary asset path
-      await dotenv.load(fileName: "assets/.env").timeout(const Duration(seconds: 3));
+      await dotenv.load(fileName: "assets/.env").timeout(timeout);
       debugPrint("✅ InitializationService: Loaded assets/.env");
     } catch (e) {
-      debugPrint("📢 InitializationService: assets/.env failed, trying root .env...");
       try {
         await dotenv.load(fileName: ".env");
         debugPrint("✅ InitializationService: Loaded root .env");
-      } catch (e2) {
-        debugPrint("⚠️ InitializationService (DotEnv): Both load attempts failed. Using hardcoded fallbacks.");
-      }
+      } catch (_) {}
     }
 
-    // 2. Capture PWA URL from env or fallback
     final pwaUrl = dotenv.env['PWA_URL'];
     if (pwaUrl != null && pwaUrl.isNotEmpty) {
       AppEnvironment().setPwaUrl(pwaUrl);
-      debugPrint("📢 InitializationService: PWA Domain set to $pwaUrl");
     }
 
-    // 3. CAPTURE KIOSK CONFIG (Flexible deployments)
-    // IMPORTANT: Only override from .env if mode is the default 'kiosk'
-    // This allows main_admin.dart to firmly set 'desktopAdmin' mode.
     final currentMode = AppEnvironment().mode;
     final modeStr = dotenv.env['APP_MODE']?.toLowerCase();
     
@@ -244,25 +232,21 @@ class InitializationService {
       } else if (modeStr == 'patient') {
         AppEnvironment().setMode(AppMode.mobilePatient);
       }
-      // If modeStr is 'kiosk', it's already the default.
     }
 
     final simStr = dotenv.env['USE_SIMULATION']?.toLowerCase();
     if (simStr != null) {
       AppEnvironment().setSimulation(simStr == 'true');
-      debugPrint("📢 InitializationService: Simulation Mode = ${AppEnvironment().useSimulation}");
     }
 
     final exitPass = dotenv.env['ADMIN_EXIT_PASSWORD'];
-    if (exitPass != null && exitPass.isNotEmpty) {
+    if (exitPass != null) {
       AppEnvironment().setAdminExitPassword(exitPass);
-      debugPrint("📢 InitializationService: Admin Exit Password loaded.");
     }
   }
 
   Future<void> _initSupabase() async {
     try {
-      // Prioritize --dart-define (injected during build) over .env file
       final supabaseUrl = const String.fromEnvironment('SUPABASE_URL').isNotEmpty 
           ? const String.fromEnvironment('SUPABASE_URL') 
           : dotenv.env['SUPABASE_URL'];
@@ -271,27 +255,28 @@ class InitializationService {
           ? const String.fromEnvironment('SUPABASE_ANON_KEY') 
           : dotenv.env['SUPABASE_ANON_KEY'];
 
-      if (supabaseUrl == null || supabaseUrl.isEmpty || 
-          supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-        throw Exception("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env or --dart-define");
-      }
+      if (supabaseUrl == null || supabaseAnonKey == null) return;
 
-      await Supabase.initialize(
-        url: supabaseUrl,
-        anonKey: supabaseAnonKey,
-      ).timeout(const Duration(seconds: 5));
-      debugPrint("✅ InitializationService: Supabase initialized");
+      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey)
+          .timeout(const Duration(seconds: 5));
+      
+      final client = Supabase.instance.client;
+      if (client.auth.currentSession == null) {
+        try {
+          await client.auth.signInAnonymously().timeout(const Duration(seconds: 15));
+          debugPrint("✅ [InitializationService] Supabase: Anonymous session established");
+        } catch (e) {
+          debugPrint("⚠️ [InitializationService] Supabase Auth Error: $e");
+        }
+      }
     } catch (e) {
       debugPrint("❌ InitializationService (Supabase Critical): $e");
-      // Re-throw or handle as fatal depending on app policy
-      rethrow;
     }
   }
 
   Future<void> _initNotifications() async {
      try {
       await NotificationService().init();
-      debugPrint("✅ InitializationService: Notifications initialized");
     } catch (e) {
       debugPrint("⚠️ InitializationService (Notifications): $e");
     }
@@ -300,39 +285,21 @@ class InitializationService {
   void _configureUI(AppMode mode) {
     try {
       if (mode == AppMode.kiosk) {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-        ]);
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
-        // PI OPTIMIZATION: Hide mouse cursor for touch-only kiosks on Desktop platforms
-        if (!kIsWeb && 
-           (defaultTargetPlatform == TargetPlatform.linux || 
-            defaultTargetPlatform == TargetPlatform.windows || 
-            defaultTargetPlatform == TargetPlatform.macOS)) {
-          debugPrint("🖱️ [InitializationService] Kiosk Mode: Hiding mouse cursor...");
+        if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS)) {
           SystemChannels.mouseCursor.invokeMethod('setCursor', {'kind': 'none'});
         }
       } else {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-        SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.dark,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.dark,
-        ));
       }
-    } catch (e) {
-      debugPrint("⚠️ [InitializationService] UI Config Error: $e");
-    }
+    } catch (_) {}
   }
 
   Future<void> _initDesktopWindow() async {
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
       try {
         await windowManager.ensureInitialized();
-
         final isKiosk = AppEnvironment().mode == AppMode.kiosk;
 
         WindowOptions windowOptions = WindowOptions(
@@ -340,7 +307,7 @@ class InitializationService {
           minimumSize: const Size(1280, 720),
           center: true,
           backgroundColor: Colors.white,
-          skipTaskbar: isKiosk, // Hide from taskbar in Kiosk mode
+          skipTaskbar: isKiosk,
           title: isKiosk ? "Isla Verde Kiosk" : "Isla Verde Admin Command Center",
           titleBarStyle: isKiosk ? TitleBarStyle.hidden : TitleBarStyle.normal,
         );
@@ -348,34 +315,11 @@ class InitializationService {
         await windowManager.waitUntilReadyToShow(windowOptions, () async {
           await windowManager.show();
           await windowManager.focus();
-          
           if (isKiosk) {
-            debugPrint("🔒 [InitializationService] Locking Kiosk Window...");
             await windowManager.setFullScreen(true);
             await windowManager.setAlwaysOnTop(true);
             await windowManager.setResizable(false);
-            await windowManager.setClosable(false); // Prevent accidental closing
-            
-            // PI OPTIMIZATION: Additional Linux checks
-            if (defaultTargetPlatform == TargetPlatform.linux) {
-              _checkLinuxHardwareAccess();
-            }
-          } else {
-            // Admin Desktop Mode: Standard window behavior
-            // We explicitly reset these in case the app was previously a kiosk.
-            debugPrint("🔓 [InitializationService] Restoring Admin Window Controls...");
-            await windowManager.setFullScreen(false);
-            await windowManager.setAlwaysOnTop(false);
-            await windowManager.setResizable(true);
-            await windowManager.setClosable(true);
-            await windowManager.setHasShadow(true);
-            
-            // Ensure title bar is normal for Admin
-            await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-            
-            // Center and show with standard size if not already visible
-            await windowManager.setSize(const Size(1280, 720));
-            await windowManager.center();
+            await windowManager.setClosable(false);
           }
         });
       } catch (e) {
@@ -383,59 +327,18 @@ class InitializationService {
       }
     }
   }
-
-  /// Diagnostic helper for Raspberry Pi / Linux sensor connectivity
-  void _checkLinuxHardwareAccess() {
-    // This is a log-only check to assist setup.
-    // In a real Pi environment, the user must be in the 'dialout' group.
-    debugPrint("🔍 [RPi Diagnostic] Verifying hardware access paths...");
-    debugPrint("💡 Tip: Ensure the user is in the 'dialout' group: sudo usermod -a -G dialout \$USER");
-  }
 }
 
-/// TOP LEVEL FUNCTION FOR FIREBASE BACKGROUND MESSAGES
-/// Must be outside any class to work on Android terminated state.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If we receive a message while terminated, this wakes the CPU.
   await Firebase.initializeApp();
-  debugPrint("📩 [Firebase] Handling background message: ${message.messageId}");
-
   final data = message.data;
   final String? type = data['type'];
   
   if (type == 'chat' || type == 'alert' || type == 'system_alert') {
-     // Decrypt if necessary
      String? body = data['body'] ?? message.notification?.body;
-     if (body != null && body.contains(':')) {
-       try {
-         final encryption = EncryptionService();
-         await encryption.init();
-         body = encryption.decryptData(body);
-       } catch (_) {}
-     }
-
-     if (body != null) {
-       final notificationService = NotificationService();
-       await notificationService.init(showPermissionRequest: false);
-       
-       if (type == 'chat') {
-         await notificationService.showChatNotification(
-           senderName: 'Health Worker',
-           message: body,
-         );
-       } else if (type == 'system_alert') {
-          await notificationService.showSystemAlertNotification(
-            title: data['title'] ?? "System Alert",
-            body: body,
-          );
-       } else {
-          await notificationService.showInstantNotification(
-            id: message.hashCode,
-            title: data['title'] ?? "Alert",
-             body: body,
-          );
-       }
-     }
+     final notificationService = NotificationService();
+     await notificationService.init(showPermissionRequest: false);
+     await notificationService.showInstantNotification(id: message.hashCode, title: data['title'] ?? "Alert", body: body ?? "");
   }
 }
