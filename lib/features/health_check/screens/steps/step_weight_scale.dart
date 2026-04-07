@@ -18,9 +18,9 @@ class StepWeightScale extends StatefulWidget {
 }
 
 class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderStateMixin {
-  // 0 = Prep, 1 = Measuring, 2 = Result
-  int _viewState = 0;
+  int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
+  Timer? _timeoutTimer;
   String _lockedWeight = "--.-";
 
   late AnimationController _pulseController;
@@ -39,8 +39,15 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
     final provider = context.read<HealthWizardProvider>();
     provider.startSensor(SensorType.weight);
     
-    // KEEP SESSION ALIVE
     context.read<IAuthRepository>().resetSessionTimer();
+
+    // HARDENING: Safety Timeout
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted && _viewState == 1) {
+        setState(() => _viewState = 3); // Error State
+      }
+    });
 
     if (!AppEnvironment().useSimulation) return;
 
@@ -52,13 +59,14 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
       if (ticks >= 25) {
         timer.cancel();
         provider.setWeight(targetWeight);
-        _finishTest(targetWeight.toStringAsFixed(1));
+        // Step logic will auto-detect stability from provider via listener
       }
     });
   }
 
   void _finishTest(String weight) {
-    if (!mounted) return;
+    if (!mounted || _viewState == 2) return;
+    _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().captureVital(SensorType.weight);
     context.read<IAuthRepository>().resetSessionTimer();
     
@@ -71,6 +79,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
   @override
   void dispose() {
     _simTimer?.cancel();
+    _timeoutTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -80,12 +89,22 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
     final provider = context.watch<HealthWizardProvider>();
     final isSim = AppEnvironment().useSimulation;
 
+    // HARDENING: Auto-lock when stable OR Fast-Failure if hardware disconnects
+    if (_viewState == 1) {
+      final sStatus = provider.getSensorStatus(SensorType.weight);
+      if (sStatus == SensorStatus.disconnected || sStatus == SensorStatus.error) {
+         Future.delayed(Duration.zero, () => setState(() => _viewState = 3));
+      } else if (provider.isVitalStable(SensorType.weight) && provider.weightKg > 5.0) {
+        Future.delayed(Duration.zero, () => _finishTest(provider.weightKg.toStringAsFixed(1)));
+      }
+    }
+
     return Center(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
         child: _viewState == 0 
             ? _buildPrepView() 
-            : _buildMeasuringView(provider, isSim),
+            : _viewState == 3 ? _buildErrorView(provider) : _buildMeasuringView(provider, isSim),
       ),
     );
   }
@@ -93,8 +112,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
   Widget _buildPrepView() {
     return Column(
       key: const ValueKey(0),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
           padding: const EdgeInsets.all(36),
@@ -123,9 +141,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
             child: ElevatedButton(
               onPressed: _startMeasurement,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
+                  backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                   minimumSize: const Size(320, 72),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
               child: const Text("Start Measurement", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
@@ -138,16 +154,16 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
 
   Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
     bool isDone = _viewState == 2;
-    String displayWeight = isDone ? _lockedWeight : (isSim ? "--.-" : (provider.weightKg > 0 ? provider.weightKg.toStringAsFixed(1) : "0.0"));
+    bool isStable = provider.isVitalStable(SensorType.weight);
+    String displayWeight = isDone ? _lockedWeight : (provider.weightKg > 0 ? provider.weightKg.toStringAsFixed(1) : "0.0");
 
     return Column(
       key: const ValueKey(1),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Stack(
           alignment: Alignment.center,
           children: [
-            // THE OVERHAUL GLOW
             AnimatedContainer(
                  duration: const Duration(milliseconds: 500),
                  width: isDone ? 340 : 300, 
@@ -157,8 +173,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
                    boxShadow: [
                      BoxShadow(
                         color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : Colors.purple.withValues(alpha: 0.12), 
-                        blurRadius: isDone ? 100 : 80, 
-                        spreadRadius: isDone ? 40 : 30
+                        blurRadius: isDone ? 100 : 80, spreadRadius: isDone ? 40 : 30
                      )
                    ],
                  ),
@@ -170,10 +185,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
                 tween: Tween<double>(begin: 1, end: 1.3),
                 builder: (context, val, child) => Container(
                   width: 270 * val, height: 270 * val,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.purple.withValues(alpha: 0.15 / val), width: 2),
-                  ),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.purple.withValues(alpha: 0.15 / val), width: 2)),
                 ),
               )),
             
@@ -181,9 +193,8 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
               width: 280, height: 280,
               child: CircularProgressIndicator(
                 value: isDone ? 1 : null,
-                strokeWidth: 14, 
-                strokeCap: StrokeCap.round,
-                color: isDone ? AppColors.brandGreen : Colors.purple,
+                strokeWidth: 14, strokeCap: StrokeCap.round,
+                color: isDone ? AppColors.brandGreen : (isStable ? AppColors.brandGreen : Colors.purple),
                 backgroundColor: Colors.purple.withValues(alpha: 0.05),
               ),
             ),
@@ -199,7 +210,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
                   else
                     ScaleTransition(
                       scale: Tween(begin: 0.9, end: 1.1).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)),
-                      child: const Icon(Icons.scale_rounded, color: Colors.purple, size: 48),
+                      child: Icon(Icons.scale_rounded, color: isStable ? AppColors.brandGreen : Colors.purple, size: 48),
                     ),
                   const SizedBox(height: 8),
                   Row(
@@ -230,9 +241,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
                child: ElevatedButton(
                  onPressed: widget.onNext,
                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shadowColor: Colors.transparent,
+                    backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                     minimumSize: const Size(260, 72),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
                  child: const Row(
@@ -250,20 +259,53 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-               color: Colors.white, 
-               borderRadius: BorderRadius.circular(50),
+               color: Colors.white, borderRadius: BorderRadius.circular(50),
                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-               border: Border.all(color: Colors.purple.withValues(alpha: 0.1), width: 2),
+               border: Border.all(color: isStable ? AppColors.brandGreen.withValues(alpha: 0.2) : Colors.purple.withValues(alpha: 0.1), width: 2),
             ),
             child: Row(
                mainAxisSize: MainAxisSize.min,
                children: [
-                 const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.purple)),
+                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: isStable ? AppColors.brandGreen : Colors.purple)),
                  const SizedBox(width: 16),
-                 Text("STABILIZING WEIGHT...", style: TextStyle(color: Colors.purple.withValues(alpha: 0.8), fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
+                 Text(isStable ? "STABLE! HOLD..." : "STABILIZING WEIGHT...", style: TextStyle(color: isStable ? AppColors.brandGreen : Colors.purple.withValues(alpha: 0.8), fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
                ],
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView(HealthWizardProvider provider) {
+    return Column(
+      key: const ValueKey(3),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Colors.red, size: 80),
+        const SizedBox(height: 24),
+        const Text("Sensor Not Responding", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const SizedBox(height: 16),
+        const Text("The scale is taking too long to stabilize.", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.grey)),
+        const SizedBox(height: 40),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton(
+              onPressed: () => setState(() => _viewState = 0),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 60), side: const BorderSide(color: Colors.purple)),
+              child: const Text("Retry Scan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple)),
+            ),
+            const SizedBox(width: 20),
+            ElevatedButton(
+              onPressed: () {
+                provider.setWeight(0.0); // Allow skipping if broken
+                widget.onNext();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87, minimumSize: const Size(180, 60)),
+              child: const Text("Skip Step", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -273,8 +315,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
       margin: const EdgeInsets.symmetric(horizontal: 40),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          color: Colors.white, borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.purple.withValues(alpha: 0.1), width: 2),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
       child: Column(
@@ -282,11 +323,7 @@ class _StepWeightScaleState extends State<StepWeightScale> with TickerProviderSt
         children: [
           const Icon(Icons.info_outline, color: Colors.purple, size: 36),
           const SizedBox(height: 16),
-          Text(
-            text, 
-            textAlign: TextAlign.center, // CENTER TEXT
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)
-          ),
+          Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)),
         ],
       ),
     );

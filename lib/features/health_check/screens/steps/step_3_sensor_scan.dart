@@ -17,9 +17,9 @@ class Step3SensorScan extends StatefulWidget {
 }
 
 class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderStateMixin {
-  // 0 = Prep, 1 = Measuring, 2 = Result
-  int _viewState = 0;
+  int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
+  Timer? _timeoutTimer;
   String _lockedTemp = "--.-";
 
   late AnimationController _iconController;
@@ -38,8 +38,15 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
     final provider = context.read<HealthWizardProvider>();
     provider.startSensor(SensorType.thermometer);
     
-    // KEEP SESSION ALIVE
     context.read<IAuthRepository>().resetSessionTimer();
+
+    // HARDENING: Safety Timeout
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted && _viewState == 1) {
+        setState(() => _viewState = 3); // Error State
+      }
+    });
 
     if (!AppEnvironment().useSimulation) return;
 
@@ -51,13 +58,14 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
         timer.cancel();
         final finalTemp = 36.4 + (DateTime.now().millisecond % 10) / 10.0;
         provider.setTemperature(finalTemp);
-        _finishTest(finalTemp.toStringAsFixed(1));
+        // Step logic will auto-detect stability from provider via listener
       }
     });
   }
 
   void _finishTest(String tempValue) {
-    if (!mounted) return;
+    if (!mounted || _viewState == 2) return;
+    _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().captureVital(SensorType.thermometer);
     context.read<IAuthRepository>().resetSessionTimer();
     
@@ -70,6 +78,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
   @override
   void dispose() {
     _simTimer?.cancel();
+    _timeoutTimer?.cancel();
     _iconController.dispose();
     super.dispose();
   }
@@ -79,12 +88,17 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
     final provider = context.watch<HealthWizardProvider>();
     final isSim = AppEnvironment().useSimulation;
 
+    // HARDENING: Auto-lock when stable & realistic
+    if (_viewState == 1 && provider.isVitalStable(SensorType.thermometer) && provider.currentTemp > 34.0) {
+      Future.delayed(Duration.zero, () => _finishTest(provider.currentTemp.toStringAsFixed(1)));
+    }
+
     return Center(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
         child: _viewState == 0 
             ? _buildPrepView() 
-            : _buildMeasuringView(provider, isSim),
+            : _viewState == 3 ? _buildErrorView(provider) : _buildMeasuringView(provider, isSim),
       ),
     );
   }
@@ -92,7 +106,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
   Widget _buildPrepView() {
     return Column(
       key: const ValueKey(0),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
@@ -122,9 +136,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
             child: ElevatedButton(
               onPressed: _startScan,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
+                  backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                   minimumSize: const Size(320, 72),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
               child: const Text("Start Temperature Scan", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
@@ -137,16 +149,16 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
 
   Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
     bool isDone = _viewState == 2;
-    String displayTemp = isDone ? _lockedTemp : (isSim ? "--.-" : (provider.currentTemp > 0 ? provider.currentTemp.toStringAsFixed(1) : "SCANNING"));
+    bool isStable = provider.isVitalStable(SensorType.thermometer);
+    String displayTemp = isDone ? _lockedTemp : (provider.currentTemp > 0 ? provider.currentTemp.toStringAsFixed(1) : "SCANNING");
 
     return Column(
       key: const ValueKey(1),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Stack(
           alignment: Alignment.center,
           children: [
-            // THE PREMIUM GLOW (Bloom)
             AnimatedContainer(
                  duration: const Duration(milliseconds: 500),
                  width: isDone ? 340 : 300, 
@@ -156,8 +168,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
                    boxShadow: [
                      BoxShadow(
                         color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.tempOrange.withValues(alpha: 0.12), 
-                        blurRadius: isDone ? 100 : 80, 
-                        spreadRadius: isDone ? 40 : 30
+                        blurRadius: isDone ? 100 : 80, spreadRadius: isDone ? 40 : 30
                      )
                    ],
                  ),
@@ -169,10 +180,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
                 tween: Tween<double>(begin: 1, end: 1.3),
                 builder: (context, val, child) => Container(
                   width: 270 * val, height: 270 * val,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.tempOrange.withValues(alpha: 0.15 / val), width: 2),
-                  ),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.tempOrange.withValues(alpha: 0.15 / val), width: 2)),
                 ),
               )),
             
@@ -180,9 +188,8 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
               width: 280, height: 280,
               child: CircularProgressIndicator(
                 value: isDone ? 1 : null,
-                strokeWidth: 14,
-                strokeCap: StrokeCap.round,
-                color: isDone ? AppColors.brandGreen : AppColors.tempOrange,
+                strokeWidth: 14, strokeCap: StrokeCap.round,
+                color: isDone ? AppColors.brandGreen : (isStable ? AppColors.brandGreen : AppColors.tempOrange),
                 backgroundColor: AppColors.tempOrange.withValues(alpha: 0.05),
               ),
             ),
@@ -198,7 +205,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
                   else
                     FadeTransition(
                       opacity: Tween(begin: 0.5, end: 1.0).animate(CurvedAnimation(parent: _iconController, curve: Curves.easeInOut)),
-                      child: const Icon(Icons.thermostat_rounded, color: AppColors.tempOrange, size: 48),
+                      child: Icon(Icons.thermostat_rounded, color: isStable ? AppColors.brandGreen : AppColors.tempOrange, size: 48),
                     ),
                   const SizedBox(height: 8),
                   Row(
@@ -206,7 +213,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(displayTemp, style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : AppColors.brandDark, height: 1.0, letterSpacing: -2)),
+                      Text(displayTemp, style: TextStyle(fontSize: displayTemp.length > 5 ? 36 : 64, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : AppColors.brandDark, height: 1.0, letterSpacing: -2)),
                       const SizedBox(width: 4),
                       const Text("°C", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.grey)),
                     ],
@@ -229,9 +236,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
                child: ElevatedButton(
                  onPressed: widget.onNext,
                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shadowColor: Colors.transparent,
+                    backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                     minimumSize: const Size(260, 72),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
                  child: const Row(
@@ -249,20 +254,53 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-               color: Colors.white, 
-               borderRadius: BorderRadius.circular(50),
+               color: Colors.white, borderRadius: BorderRadius.circular(50),
                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-               border: Border.all(color: AppColors.tempOrange.withValues(alpha: 0.1), width: 2),
+               border: Border.all(color: isStable ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.tempOrange.withValues(alpha: 0.1), width: 2),
             ),
-            child: const Row(
+            child: Row(
                mainAxisSize: MainAxisSize.min,
                children: [
-                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.tempOrange)),
-                 SizedBox(width: 16),
-                 Text("STABILIZING READINGS...", style: TextStyle(color: AppColors.tempOrange, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
+                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: isStable ? AppColors.brandGreen : AppColors.tempOrange)),
+                 const SizedBox(width: 16),
+                 Text(isStable ? "STABLE!  LOCKING..." : "READING TEMPERATURE...", style: TextStyle(color: isStable ? AppColors.brandGreen : AppColors.tempOrange, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
                ],
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView(HealthWizardProvider provider) {
+    return Column(
+      key: const ValueKey(3),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 80),
+        const SizedBox(height: 24),
+        const Text("Sensor Timeout", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const SizedBox(height: 16),
+        const Text("Could not get a stable reading.\nPlease ensure you are 5cm from the sensor.", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.grey)),
+        const SizedBox(height: 40),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton(
+              onPressed: () => setState(() => _viewState = 0),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 60), side: const BorderSide(color: AppColors.tempOrange)),
+              child: const Text("Retry Scan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.tempOrange)),
+            ),
+            const SizedBox(width: 20),
+            ElevatedButton(
+              onPressed: () {
+                provider.setTemperature(0.0);
+                widget.onNext();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87, minimumSize: const Size(180, 60)),
+              child: const Text("Skip Step", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -272,8 +310,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
       margin: const EdgeInsets.symmetric(horizontal: 40),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          color: Colors.white, borderRadius: BorderRadius.circular(24),
           border: Border.all(color: AppColors.tempOrange.withValues(alpha: 0.1), width: 2),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
       child: Column(
@@ -281,11 +318,7 @@ class _Step3SensorScanState extends State<Step3SensorScan> with TickerProviderSt
         children: [
           const Icon(Icons.info_outline, color: AppColors.tempOrange, size: 36),
           const SizedBox(height: 16),
-          Text(
-            text, 
-            textAlign: TextAlign.center, // CENTER TEXT
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)
-          ),
+          Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)),
         ],
       ),
     );

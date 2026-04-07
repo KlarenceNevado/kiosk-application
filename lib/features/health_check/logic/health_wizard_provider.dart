@@ -21,8 +21,16 @@ class HealthWizardProvider extends ChangeNotifier {
   double _weightKg = 70.0;
 
   bool _isSessionActive = false;
+  // Updated status tracking
   SensorStatus _status = SensorStatus.disconnected;
+  final Map<SensorType, SensorStatus> _sensorStatuses = {};
   StreamSubscription? _sensorSubscription;
+
+  // HARDENING: Stability & Heartbeat
+  final Map<SensorType, List<double>> _stabilityBuffers = {};
+  final Map<SensorType, DateTime> _lastHeartbeat = {};
+  final Map<SensorType, bool> _sensorIsStable = {};
+  final int _bufferSize = 5;
 
   bool get isSessionActive => _isSessionActive;
 
@@ -38,15 +46,14 @@ class HealthWizardProvider extends ChangeNotifier {
   double get currentTemp => _currentTemp;
   int get currentSystolic => _currentSystolic;
   int get currentDiastolic => _currentDiastolic;
-
-  // BMI Getters
-  int get heightCm => _heightCm;
-  // FIXED: Added missing getter for weightKg
   double get weightKg => _weightKg;
+  int get heightCm => _heightCm;
 
   SensorStatus get status => _status;
   bool get isScanning => _status == SensorStatus.reading;
   bool get isConnecting => _status == SensorStatus.connecting;
+
+  SensorStatus getSensorStatus(SensorType type) => _sensorStatuses[type] ?? SensorStatus.disconnected;
 
   bool isVitalLocked(SensorType type) {
     switch (type) {
@@ -56,6 +63,16 @@ class HealthWizardProvider extends ChangeNotifier {
       case SensorType.bloodPressure: return _isBpLocked;
       case SensorType.battery: return false;
     }
+  }
+
+  bool isVitalStable(SensorType type) => _sensorIsStable[type] ?? false;
+
+  /// Returns true if the sensor hasn't sent data in the last 3.5 seconds
+  bool isSensorSilent(SensorType type) {
+    if (getSensorStatus(type) == SensorStatus.disconnected || getSensorStatus(type) == SensorStatus.error) return true;
+    final last = _lastHeartbeat[type];
+    if (last == null) return true;
+    return DateTime.now().difference(last).inMilliseconds > 3500;
   }
 
   double get bmi {
@@ -73,83 +90,121 @@ class HealthWizardProvider extends ChangeNotifier {
     return "Obese";
   }
 
-  HealthWizardProvider(this._sensorManager);
-
-  // --- ACTIONS ---
-
-  void setHeight(int height) {
-    _heightCm = height;
-    notifyListeners();
-  }
-
-  // Simulation / Manual Setters
-  void setTemperature(double temp) {
-    _currentTemp = temp;
-    notifyListeners();
-  }
-
-  void setBloodPressure(int sys, int dia) {
-    _currentSystolic = sys;
-    _currentDiastolic = dia;
-    notifyListeners();
-  }
-
-  void setPulseOx(int hr, int spo2) {
-    _currentHeartRate = hr;
-    _currentSpO2 = spo2;
-    notifyListeners();
-  }
-
-  void setWeight(double weight) {
-    _weightKg = weight;
-    notifyListeners();
-  }
-
-  void startHealthCheck() {
-    _isSessionActive = true;
-    notifyListeners();
-    SystemLogService().logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
-
-    _sensorSubscription?.cancel();
+  HealthWizardProvider(this._sensorManager) {
+    // Proactive background listening for all sensors
     _sensorSubscription = _sensorManager.allDataStream.listen((event) {
-      _status = event.status;
-
+      _sensorStatuses[event.type] = event.status;
+      if (event.status == SensorStatus.reading) {
+         _status = SensorStatus.reading;
+      }
+      
       if (event.data != null) {
+        _lastHeartbeat[event.type] = DateTime.now();
         switch (event.type) {
           case SensorType.weight:
-            if (!_isWeightLocked) _weightKg = event.data as double;
+            if (!_isWeightLocked) {
+              _weightKg = (event.data as num).toDouble();
+              _updateStability(SensorType.weight, _weightKg);
+            }
             break;
           case SensorType.oximeter:
             if (!_isPulseOxLocked) {
               final oximeter = event.data as Map<String, dynamic>;
               _currentSpO2 = oximeter['spo2'] as int;
               _currentHeartRate = oximeter['bpm'] as int;
+              _updateStability(SensorType.oximeter, _currentSpO2.toDouble());
             }
             break;
           case SensorType.thermometer:
-            if (!_isTempLocked) _currentTemp = event.data as double;
+            if (!_isTempLocked) {
+              _currentTemp = (event.data as num).toDouble();
+              _updateStability(SensorType.thermometer, _currentTemp);
+            }
             break;
           case SensorType.bloodPressure:
             if (!_isBpLocked) {
               final bp = event.data as Map<String, dynamic>;
               _currentSystolic = bp['sys'] as int;
               _currentDiastolic = bp['dia'] as int;
+              _updateStability(SensorType.bloodPressure, _currentSystolic.toDouble());
             }
             break;
           case SensorType.battery:
-            // Handled by PowerManager, not used in Wizard UI
             break;
         }
       }
       notifyListeners();
-    }, onError: (e) {
-      debugPrint("❌ HealthWizardProvider: Sensor Error Observed: $e");
-      _status = SensorStatus.error;
-      notifyListeners();
     });
   }
 
-  /// Captures the current vital reading, locks it, and stops the sensor.
+  void setHeight(int height) {
+    _heightCm = height;
+    notifyListeners();
+  }
+
+  void setTemperature(double temp) {
+    _currentTemp = temp;
+    _updateStability(SensorType.thermometer, temp);
+    notifyListeners();
+  }
+
+  void setBloodPressure(int sys, int dia) {
+    _currentSystolic = sys;
+    _currentDiastolic = dia;
+    _updateStability(SensorType.bloodPressure, sys.toDouble());
+    notifyListeners();
+  }
+
+  void setPulseOx(int hr, int spo2) {
+    _currentHeartRate = hr;
+    _currentSpO2 = spo2;
+    _updateStability(SensorType.oximeter, spo2.toDouble());
+    notifyListeners();
+  }
+
+  void setWeight(double weight) {
+    _weightKg = weight;
+    _updateStability(SensorType.weight, weight);
+    notifyListeners();
+  }
+
+  void _updateStability(SensorType type, double value) {
+    _lastHeartbeat[type] = DateTime.now();
+    
+    _stabilityBuffers.putIfAbsent(type, () => []);
+    final buffer = _stabilityBuffers[type]!;
+    
+    buffer.add(value);
+    if (buffer.length > _bufferSize) buffer.removeAt(0);
+
+    if (buffer.length == _bufferSize) {
+      double min = buffer.reduce((a, b) => a < b ? a : b);
+      double max = buffer.reduce((a, b) => a > b ? a : b);
+      double diff = max - min;
+
+      double tolerance = (type == SensorType.weight || type == SensorType.thermometer) ? 0.2 : 1.5;
+      
+      bool wasStable = _sensorIsStable[type] ?? false;
+      _sensorIsStable[type] = diff <= tolerance;
+
+      if (_sensorIsStable[type]! && !wasStable) {
+        debugPrint("🟢 [HealthWizardProvider] Sensor $type is now STABLE.");
+      }
+    }
+  }
+
+  void startHealthCheck() {
+    _isSessionActive = true;
+    _sensorIsStable.clear();
+    _stabilityBuffers.clear();
+    _isWeightLocked = false;
+    _isTempLocked = false;
+    _isPulseOxLocked = false;
+    _isBpLocked = false;
+    notifyListeners();
+    SystemLogService().logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
+  }
+
   void captureVital(SensorType type) {
     debugPrint("📥 [HealthWizardProvider] Capturing Final $type Reading...");
     
@@ -166,26 +221,23 @@ class HealthWizardProvider extends ChangeNotifier {
     SystemLogService().logAction(
       action: 'VITAL_CAPTURE_LOCKED',
       module: 'HEALTH_CHECK',
+      userId: 'N/A',
       sensorFailures: 'Reading locked for $type',
     );
     
     notifyListeners();
   }
 
-
-
   void stopHealthCheck() {
     _isSessionActive = false;
     SystemLogService().logAction(action: 'HEALTH_CHECK_STOP', module: 'HEALTH_CHECK');
     _sensorManager.stopAll();
-    _sensorSubscription?.cancel();
-
     _status = SensorStatus.disconnected;
+    _sensorIsStable.clear();
+    _stabilityBuffers.clear();
     notifyListeners();
   }
 
-  // Generate Final Data for Saving
-  // FIXED: Ensure userId is required
   VitalSigns generateFinalResult(String userId) {
     SystemLogService().logAction(
       action: 'VITAL_SIGNS_CAPTURED',
@@ -196,12 +248,12 @@ class HealthWizardProvider extends ChangeNotifier {
       id: const Uuid().v4(),
       userId: userId,
       timestamp: DateTime.now(),
-      heartRate: _currentHeartRate == 0 ? 75 : _currentHeartRate,
-      systolicBP: _currentSystolic == 0 ? 120 : _currentSystolic,
-      diastolicBP: _currentDiastolic == 0 ? 80 : _currentDiastolic,
-      oxygen: _currentSpO2 == 0 ? 98 : _currentSpO2,
+      heartRate: _currentHeartRate,
+      systolicBP: _currentSystolic,
+      diastolicBP: _currentDiastolic,
+      oxygen: _currentSpO2,
       temperature: _currentTemp == 0
-          ? 36.6
+          ? 0.0
           : double.parse(_currentTemp.toStringAsFixed(1)),
       bmi: bmi,
       bmiCategory: bmiCategory,
@@ -223,4 +275,3 @@ class HealthWizardProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

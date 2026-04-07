@@ -18,9 +18,9 @@ class StepBpConnect extends StatefulWidget {
 }
 
 class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateMixin {
-  // 0 = Prep, 1 = Measuring, 2 = Result
-  int _viewState = 0;
+  int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
+  Timer? _timeoutTimer;
   String _lockedSys = "--";
   String _lockedDia = "--";
 
@@ -40,8 +40,16 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     final provider = context.read<HealthWizardProvider>();
     provider.startSensor(SensorType.bloodPressure);
     
-    // KEEP SESSION ALIVE
     context.read<IAuthRepository>().resetSessionTimer();
+
+    // HARDENING: Safety Timeout
+    // BP takes time, so 30s is more reasonable for the entire cycle.
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 45), () {
+      if (mounted && _viewState == 1) {
+        setState(() => _viewState = 3); // Error State
+      }
+    });
 
     if (!AppEnvironment().useSimulation) return;
 
@@ -54,13 +62,14 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
         final sys = 115 + Random().nextInt(15);
         final dia = 75 + Random().nextInt(10);
         provider.setBloodPressure(sys, dia);
-        _finishTest(sys.toString(), dia.toString());
+        // Step logic will auto-detect result from provider via listener
       }
     });
   }
 
   void _finishTest(String sys, String dia) {
-    if (!mounted) return;
+    if (!mounted || _viewState == 2) return;
+    _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().captureVital(SensorType.bloodPressure);
     context.read<IAuthRepository>().resetSessionTimer();
     
@@ -74,6 +83,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
   @override
   void dispose() {
     _simTimer?.cancel();
+    _timeoutTimer?.cancel();
     _iconController.dispose();
     super.dispose();
   }
@@ -83,9 +93,9 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     final provider = context.watch<HealthWizardProvider>();
     final isSim = AppEnvironment().useSimulation;
 
-    // Handle real hardware finish
-    if (!isSim && _viewState == 1 && provider.currentSystolic > 0 && provider.currentDiastolic > 0) {
-       Future.microtask(() => _finishTest(provider.currentSystolic.toString(), provider.currentDiastolic.toString()));
+    // HARDENING: Auto-lock when result arrives
+    if (_viewState == 1 && provider.currentSystolic > 30 && provider.currentDiastolic > 30) {
+       Future.delayed(Duration.zero, () => _finishTest(provider.currentSystolic.toString(), provider.currentDiastolic.toString()));
     }
 
     return Center(
@@ -93,7 +103,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
         duration: const Duration(milliseconds: 500),
         child: _viewState == 0 
             ? _buildPrepView() 
-            : _buildMeasuringView(provider, isSim),
+            : _viewState == 3 ? _buildErrorView(provider) : _buildMeasuringView(provider, isSim),
       ),
     );
   }
@@ -101,7 +111,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
   Widget _buildPrepView() {
     return Column(
       key: const ValueKey(0),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
@@ -131,9 +141,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
             child: ElevatedButton(
               onPressed: _startMeasurement,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
+                  backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                   minimumSize: const Size(320, 72),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
               child: const Text("Start BP Inflation", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
@@ -146,17 +154,16 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
 
   Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
     bool isDone = _viewState == 2;
-    String sysVal = isDone ? _lockedSys : (isSim ? "--" : (provider.currentSystolic > 0 ? provider.currentSystolic.toString() : "0"));
-    String diaVal = isDone ? _lockedDia : (isSim ? "--" : (provider.currentDiastolic > 0 ? provider.currentDiastolic.toString() : "0"));
+    String sysVal = isDone ? _lockedSys : (provider.currentSystolic > 0 ? provider.currentSystolic.toString() : "0");
+    String diaVal = isDone ? _lockedDia : (provider.currentDiastolic > 0 ? provider.currentDiastolic.toString() : "0");
 
     return Column(
       key: const ValueKey(1),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Stack(
           alignment: Alignment.center,
           children: [
-             // THE OVERHAUL GLOW
             AnimatedContainer(
                  duration: const Duration(milliseconds: 500),
                  width: isDone ? 340 : 300, 
@@ -166,8 +173,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
                    boxShadow: [
                      BoxShadow(
                         color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.bpBlue.withValues(alpha: 0.12), 
-                        blurRadius: isDone ? 100 : 80, 
-                        spreadRadius: isDone ? 40 : 30
+                        blurRadius: isDone ? 100 : 80, spreadRadius: isDone ? 40 : 30
                      )
                    ],
                  ),
@@ -179,10 +185,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
                 tween: Tween<double>(begin: 1, end: 1.4),
                 builder: (context, val, child) => Container(
                   width: 270 * val, height: 270 * val,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.15 / val), width: 2),
-                  ),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.15 / val), width: 2)),
                 ),
               )),
             
@@ -190,8 +193,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
               width: 280, height: 280,
               child: CircularProgressIndicator(
                 value: isDone ? 1 : null,
-                strokeWidth: 14,
-                strokeCap: StrokeCap.round,
+                strokeWidth: 14, strokeCap: StrokeCap.round,
                 color: isDone ? AppColors.brandGreen : AppColors.bpBlue,
                 backgroundColor: AppColors.bpBlue.withValues(alpha: 0.05),
               ),
@@ -231,9 +233,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
                child: ElevatedButton(
                  onPressed: widget.onNext,
                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shadowColor: Colors.transparent,
+                    backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                     minimumSize: const Size(260, 72),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
                  child: const Row(
@@ -251,9 +251,8 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-               color: Colors.white, 
-               borderRadius: BorderRadius.circular(50),
-               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+               color: Colors.white, borderRadius: BorderRadius.circular(50),
+               boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
                border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
             ),
             child: const Row(
@@ -269,13 +268,46 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     );
   }
 
+  Widget _buildErrorView(HealthWizardProvider provider) {
+    return Column(
+      key: const ValueKey(3),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.heart_broken_rounded, color: Colors.red, size: 80),
+        const SizedBox(height: 24),
+        const Text("Cuff Error", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const SizedBox(height: 16),
+        const Text("Ensure the cuff is tightened correctly and repeat.", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.grey)),
+        const SizedBox(height: 40),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton(
+              onPressed: () => setState(() => _viewState = 0),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 60), side: const BorderSide(color: AppColors.bpBlue)),
+              child: const Text("Retry BP", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.bpBlue)),
+            ),
+            const SizedBox(width: 20),
+            ElevatedButton(
+              onPressed: () {
+                provider.setBloodPressure(0, 0);
+                widget.onNext();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87, minimumSize: const Size(180, 60)),
+              child: const Text("Skip Step", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildInstructionCard(String text) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 40),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          color: Colors.white, borderRadius: BorderRadius.circular(24),
           border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
       child: Column(
@@ -283,11 +315,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
         children: [
           const Icon(Icons.info_outline, color: AppColors.bpBlue, size: 36),
           const SizedBox(height: 16),
-          Text(
-            text, 
-            textAlign: TextAlign.center, // CENTER TEXT
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)
-          ),
+          Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)),
         ],
       ),
     );

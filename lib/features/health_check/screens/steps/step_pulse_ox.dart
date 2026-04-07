@@ -18,9 +18,9 @@ class StepPulseOx extends StatefulWidget {
 }
 
 class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin {
-  // 0 = Prep, 1 = Measuring, 2 = Result
-  int _viewState = 0;
+  int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
+  Timer? _timeoutTimer;
   
   String _lockedHR = "--";
   String _lockedSpO2 = "--";
@@ -41,8 +41,15 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
     final provider = context.read<HealthWizardProvider>();
     provider.startSensor(SensorType.oximeter);
     
-    // KEEP SESSION ALIVE
     context.read<IAuthRepository>().resetSessionTimer();
+
+    // HARDENING: Safety Timeout
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted && _viewState == 1) {
+        setState(() => _viewState = 3); // Error State
+      }
+    });
 
     if (!AppEnvironment().useSimulation) return;
 
@@ -54,15 +61,15 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
         timer.cancel();
         final hr = 72 + Random().nextInt(8);
         final spo2 = 97 + Random().nextInt(3);
-        
         provider.setPulseOx(hr, spo2);
-        _finishTest(hr.toString(), spo2.toString());
+        // Step logic will auto-detect stability from provider via listener
       }
     });
   }
 
   void _finishTest(String hr, String spo2) {
-    if (!mounted) return;
+    if (!mounted || _viewState == 2) return;
+    _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().captureVital(SensorType.oximeter);
     context.read<IAuthRepository>().resetSessionTimer();
     
@@ -76,6 +83,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
   @override
   void dispose() {
     _simTimer?.cancel();
+    _timeoutTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -85,9 +93,14 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
     final provider = context.watch<HealthWizardProvider>();
     final isSim = AppEnvironment().useSimulation;
 
-    // Handle real hardware finish
-    if (!isSim && _viewState == 1 && provider.currentHeartRate > 0 && provider.currentSpO2 > 0) {
-       Future.microtask(() => _finishTest(provider.currentHeartRate.toString(), provider.currentSpO2.toString()));
+    // HARDENING: Auto-lock when stable OR Fast-Failure
+    if (_viewState == 1) {
+      final sStatus = provider.getSensorStatus(SensorType.oximeter);
+      if (sStatus == SensorStatus.disconnected || sStatus == SensorStatus.error) {
+         Future.delayed(Duration.zero, () => setState(() => _viewState = 3));
+      } else if (provider.isVitalStable(SensorType.oximeter) && provider.currentSpO2 > 80 && provider.currentHeartRate > 40) {
+        Future.delayed(Duration.zero, () => _finishTest(provider.currentHeartRate.toString(), provider.currentSpO2.toString()));
+      }
     }
 
     return Center(
@@ -95,7 +108,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
         duration: const Duration(milliseconds: 500),
         child: _viewState == 0 
             ? _buildPrepView() 
-            : _buildMeasurementView(provider, isSim),
+            : _viewState == 3 ? _buildErrorView(provider) : _buildMeasurementView(provider, isSim),
       ),
     );
   }
@@ -103,7 +116,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
   Widget _buildPrepView() {
     return Column(
       key: const ValueKey(0),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
@@ -133,9 +146,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
             child: ElevatedButton(
               onPressed: _startMeasurement,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
+                  backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                   minimumSize: const Size(320, 72),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
               child: const Text("Start Vital Measurement", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
@@ -148,17 +159,17 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
 
   Widget _buildMeasurementView(HealthWizardProvider provider, bool isSim) {
     bool isDone = _viewState == 2;
-    String hrValue = isDone ? _lockedHR : (isSim ? "--" : (provider.currentHeartRate > 0 ? provider.currentHeartRate.toString() : "READ"));
-    String spo2Value = isDone ? _lockedSpO2 : (isSim ? "--" : (provider.currentSpO2 > 0 ? provider.currentSpO2.toString() : "READ"));
+    bool isStable = provider.isVitalStable(SensorType.oximeter);
+    String hrValue = isDone ? _lockedHR : (provider.currentHeartRate > 0 ? provider.currentHeartRate.toString() : "READ");
+    String spo2Value = isDone ? _lockedSpO2 : (provider.currentSpO2 > 0 ? provider.currentSpO2.toString() : "READ");
 
     return Column(
       key: const ValueKey(1),
-      mainAxisAlignment: MainAxisAlignment.center, // STRICT CENTER
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Stack(
           alignment: Alignment.center,
           children: [
-            // PREMIUM GLOW
             AnimatedContainer(
                  duration: const Duration(milliseconds: 500),
                  width: isDone ? 340 : 300, 
@@ -168,8 +179,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
                    boxShadow: [
                      BoxShadow(
                         color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.hrRed.withValues(alpha: 0.12), 
-                        blurRadius: isDone ? 100 : 80, 
-                        spreadRadius: isDone ? 40 : 30
+                        blurRadius: isDone ? 100 : 80, spreadRadius: isDone ? 40 : 30
                      )
                    ],
                  ),
@@ -181,10 +191,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
                 tween: Tween<double>(begin: 1, end: 1.3),
                 builder: (context, val, child) => Container(
                   width: 270 * val, height: 270 * val,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.15 / val), width: 2),
-                  ),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.15 / val), width: 2)),
                 ),
               )),
             
@@ -192,9 +199,8 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
               width: 280, height: 280,
               child: CircularProgressIndicator(
                 value: isDone ? 1 : null,
-                strokeWidth: 14,
-                strokeCap: StrokeCap.round,
-                color: isDone ? AppColors.brandGreen : AppColors.hrRed,
+                strokeWidth: 14, strokeCap: StrokeCap.round,
+                color: isDone ? AppColors.brandGreen : (isStable ? AppColors.brandGreen : AppColors.hrRed),
                 backgroundColor: AppColors.hrRed.withValues(alpha: 0.05),
               ),
             ),
@@ -210,7 +216,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
                   else
                     ScaleTransition(
                       scale: Tween(begin: 1.0, end: 1.25).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)),
-                      child: const Icon(Icons.favorite_rounded, color: AppColors.hrRed, size: 48),
+                      child: Icon(Icons.favorite_rounded, color: isStable ? AppColors.brandGreen : AppColors.hrRed, size: 48),
                     ),
                   const SizedBox(height: 8),
                   Text(hrValue, style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : AppColors.brandDark, height: 1.0, letterSpacing: -3)),
@@ -224,7 +230,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
         Row(
            mainAxisAlignment: MainAxisAlignment.center,
            children: [
-             _buildRichMiniCard("OXYGEN LEVEL", spo2Value, "% SpO2", AppColors.spO2Cyan, isDone),
+             _buildRichMiniCard("OXYGEN LEVEL", spo2Value, "% SpO2", isStable ? AppColors.brandGreen : AppColors.spO2Cyan, isDone),
            ],
         ),
         const SizedBox(height: 48),
@@ -240,9 +246,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
                child: ElevatedButton(
                  onPressed: widget.onNext,
                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shadowColor: Colors.transparent,
+                    backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
                     minimumSize: const Size(260, 72),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
                  child: const Row(
@@ -260,20 +264,53 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-               color: Colors.white, 
-               borderRadius: BorderRadius.circular(50),
+               color: Colors.white, borderRadius: BorderRadius.circular(50),
                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-               border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.1), width: 2),
+               border: Border.all(color: isStable ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.hrRed.withValues(alpha: 0.1), width: 2),
             ),
-            child: const Row(
+            child: Row(
                mainAxisSize: MainAxisSize.min,
                children: [
-                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.hrRed)),
-                 SizedBox(width: 16),
-                 Text("STABILIZING READINGS...", style: TextStyle(color: AppColors.hrRed, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
+                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: isStable ? AppColors.brandGreen : AppColors.hrRed)),
+                 const SizedBox(width: 16),
+                 Text(isStable ? "STABLE! HOLD..." : "STABILIZING READINGS...", style: TextStyle(color: isStable ? AppColors.brandGreen : AppColors.hrRed, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
                ],
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView(HealthWizardProvider provider) {
+    return Column(
+      key: const ValueKey(3),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.signal_wifi_off_rounded, color: Colors.orange, size: 80),
+        const SizedBox(height: 24),
+        const Text("Unable to Detect Pulse", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const SizedBox(height: 16),
+        const Text("Ensure your finger is correctly inserted into the clip\nand keep your hand very still.", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.grey)),
+        const SizedBox(height: 40),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton(
+              onPressed: () => setState(() => _viewState = 0),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 60), side: const BorderSide(color: AppColors.hrRed)),
+              child: const Text("Retry Scan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.hrRed)),
+            ),
+            const SizedBox(width: 20),
+            ElevatedButton(
+              onPressed: () {
+                provider.setPulseOx(0, 0);
+                widget.onNext();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87, minimumSize: const Size(180, 60)),
+              child: const Text("Skip Step", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -311,8 +348,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
       margin: const EdgeInsets.symmetric(horizontal: 40),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          color: Colors.white, borderRadius: BorderRadius.circular(24),
           border: Border.all(color: AppColors.hrRed.withValues(alpha: 0.1), width: 2),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
       child: Column(
@@ -320,11 +356,7 @@ class _StepPulseOxState extends State<StepPulseOx> with TickerProviderStateMixin
         children: [
           const Icon(Icons.info_outline, color: AppColors.hrRed, size: 36),
           const SizedBox(height: 16),
-          Text(
-            text, 
-            textAlign: TextAlign.center, // CENTER TEXT
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)
-          ),
+          Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)),
         ],
       ),
     );

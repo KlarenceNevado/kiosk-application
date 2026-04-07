@@ -27,11 +27,10 @@ class SingleSensorTestScreen extends StatefulWidget {
 }
 
 class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with TickerProviderStateMixin {
-  // 0 = Prep, 1 = Scanning, 2 = Result
-  int _viewState = 0;
-  String _simDisplay = "--";
+  int _viewState = 0; // 0=Prep, 1=Scanning, 2=Result, 3=Error
   String _lockedResult = ""; 
   Timer? _simTimer;
+  Timer? _timeoutTimer;
   late AnimationController _pulseController;
 
   @override
@@ -51,6 +50,14 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
     setState(() => _viewState = 1);
     final provider = context.read<HealthWizardProvider>();
     
+    // HARDENING: Safety Timeout
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(Duration(seconds: widget.type == TestSensorType.bloodPressure ? 45 : 15), () {
+      if (mounted && _viewState == 1) {
+        setState(() => _viewState = 3);
+      }
+    });
+
     switch (widget.type) {
       case TestSensorType.temperature: provider.startSensor(hw.SensorType.thermometer); break;
       case TestSensorType.bloodPressure: provider.startSensor(hw.SensorType.bloodPressure); break;
@@ -66,48 +73,38 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
       ticks++;
       if (!mounted) { timer.cancel(); return; }
       
-      setState(() {
-        if (widget.type == TestSensorType.temperature) {
-          _simDisplay = (36.0 + Random().nextDouble() * 0.5).toStringAsFixed(1);
-        } else if (widget.type == TestSensorType.heartRate) {
-          _simDisplay = (70 + Random().nextInt(15)).toString();
-        } else if (widget.type == TestSensorType.oxygen) {
-          _simDisplay = (97 + Random().nextInt(3)).toString();
-        } else if (widget.type == TestSensorType.bloodPressure) {
-          _simDisplay = "${100 + ticks * 2}"; 
-        }
-      });
+      if (widget.type == TestSensorType.temperature) {
+        provider.setTemperature(36.1 + Random().nextDouble() * 0.5);
+      } else if (widget.type == TestSensorType.heartRate || widget.type == TestSensorType.oxygen) {
+        provider.setPulseOx(72 + Random().nextInt(10), 97 + Random().nextInt(3));
+      } else if (widget.type == TestSensorType.bloodPressure) {
+        if (ticks >= 20) provider.setBloodPressure(120 + Random().nextInt(10), 80 + Random().nextInt(5));
+      }
 
-      if (ticks >= 20) {
+      if (ticks >= 25) {
         timer.cancel();
-        _lockValueAndFinish();
       }
     });
   }
 
   void _lockValueAndFinish() {
+    if (!mounted || _viewState == 2) return;
+    _timeoutTimer?.cancel();
     final provider = context.read<HealthWizardProvider>();
+    
     setState(() {
       _viewState = 2;
-      // Capture the final value
-      if (AppEnvironment().useSimulation) {
-          if (widget.type == TestSensorType.bloodPressure) {
-            _lockedResult = "120/80";
-          } else {
-            _lockedResult = _simDisplay;
-          }
-      } else {
-         switch (widget.type) {
-           case TestSensorType.temperature: _lockedResult = provider.currentTemp.toStringAsFixed(1); break;
-           case TestSensorType.heartRate: _lockedResult = "${provider.currentHeartRate}"; break;
-           case TestSensorType.oxygen: _lockedResult = "${provider.currentSpO2}"; break;
-           case TestSensorType.bloodPressure: _lockedResult = "${provider.currentSystolic}/${provider.currentDiastolic}"; break;
-         }
+      switch (widget.type) {
+        case TestSensorType.temperature: _lockedResult = provider.currentTemp.toStringAsFixed(1); break;
+        case TestSensorType.heartRate: _lockedResult = "${provider.currentHeartRate}"; break;
+        case TestSensorType.oxygen: _lockedResult = "${provider.currentSpO2}"; break;
+        case TestSensorType.bloodPressure: _lockedResult = "${provider.currentSystolic}/${provider.currentDiastolic}"; break;
       }
     });
   }
 
   void _stopAndExit() {
+    _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().stopHealthCheck();
     context.pop();
   }
@@ -138,6 +135,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
   @override
   void dispose() {
     _simTimer?.cancel();
+    _timeoutTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -148,17 +146,26 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
     final Color testColor = _getColor();
     final IconData icon = _getIcon();
 
-    // Map hardware data OR use locked value
-    String liveValue = _simDisplay;
-    if (_viewState == 2) {
-       liveValue = _lockedResult; 
-    } else if (!AppEnvironment().useSimulation) {
-       switch (widget.type) {
-         case TestSensorType.temperature: liveValue = provider.currentTemp > 0 ? provider.currentTemp.toStringAsFixed(1) : "SCAN"; if (provider.currentTemp > 30) _lockValueAndFinish(); break;
-         case TestSensorType.heartRate: liveValue = provider.currentHeartRate > 0 ? "${provider.currentHeartRate}" : "READ"; break;
-         case TestSensorType.oxygen: liveValue = provider.currentSpO2 > 0 ? "${provider.currentSpO2}" : "READ"; break;
-         case TestSensorType.bloodPressure: liveValue = (provider.currentSystolic > 0) ? "${provider.currentSystolic}/${provider.currentDiastolic}" : "CUFF"; break;
-       }
+    // HARDENING: Auto-lock logic
+    if (_viewState == 1) {
+      bool shouldFinish = false;
+      switch (widget.type) {
+        case TestSensorType.temperature: shouldFinish = provider.isVitalStable(hw.SensorType.thermometer) && provider.currentTemp > 34; break;
+        case TestSensorType.heartRate: 
+        case TestSensorType.oxygen: shouldFinish = provider.isVitalStable(hw.SensorType.oximeter) && provider.currentHeartRate > 40; break;
+        case TestSensorType.bloodPressure: shouldFinish = provider.currentSystolic > 30; break;
+      }
+      if (shouldFinish) Future.delayed(Duration.zero, _lockValueAndFinish);
+    }
+
+    String displayValue = _lockedResult;
+    if (_viewState == 1) {
+      switch (widget.type) {
+        case TestSensorType.temperature: displayValue = provider.currentTemp > 0 ? provider.currentTemp.toStringAsFixed(1) : "READING"; break;
+        case TestSensorType.heartRate: displayValue = provider.currentHeartRate > 0 ? "${provider.currentHeartRate}" : "READING"; break;
+        case TestSensorType.oxygen: displayValue = provider.currentSpO2 > 0 ? "${provider.currentSpO2}" : "READING"; break;
+        case TestSensorType.bloodPressure: displayValue = provider.currentSystolic > 0 ? "${provider.currentSystolic}/${provider.currentDiastolic}" : "INFLATING"; break;
+      }
     }
 
     return KioskScaffold(
@@ -179,7 +186,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
               duration: const Duration(milliseconds: 400),
               child: _viewState == 0 
                   ? _buildPrepView(testColor, icon) 
-                  : _buildMeasurementView(testColor, icon, liveValue),
+                  : _viewState == 3 ? _buildErrorView(testColor) : _buildMeasurementView(testColor, icon, displayValue),
             ),
           ),
         ),
@@ -289,7 +296,7 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
         ),
         
         const SizedBox(height: 48),
-        if (isDone || (!AppEnvironment().useSimulation && _viewState == 1))
+        if (isDone)
           FlowAnimatedButton(
             child: ElevatedButton(
               onPressed: _saveAndFinish,
@@ -302,6 +309,26 @@ class _SingleSensorTestScreenState extends State<SingleSensorTestScreen> with Ti
               child: const Text("Save & Record Result", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView(Color color) {
+    return Column(
+      key: const ValueKey(3),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Colors.red, size: 80),
+        const SizedBox(height: 24),
+        const Text("Measurement Failed", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const SizedBox(height: 12),
+        const Text("The sensor timed out. Please try again.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.grey)),
+        const SizedBox(height: 40),
+        ElevatedButton(
+          onPressed: () => setState(() => _viewState = 0),
+          style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
+          child: const Text("Retry Measurement", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
       ],
     );
   }
