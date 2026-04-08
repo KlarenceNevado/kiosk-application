@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/constants/app_colors.dart';
+import '../logic/broadcast_alert_service.dart';
 
 class HighRiskPatientsCard extends StatelessWidget {
   final List<User> users;
@@ -32,22 +33,42 @@ class HighRiskPatientsCard extends StatelessWidget {
     final List<Map<String, dynamic>> highRiskProfiles = [];
 
     for (var user in users) {
-      final latest = latestUserRecords[user.id];
-      if (latest != null) {
-        bool isHypertensive = latest.systolicBP > 140;
-        bool isHypoxic = latest.oxygen < 90;
+      final userRecords = records.where((r) => r.userId == user.id).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-        if (isHypertensive || isHypoxic) {
-          highRiskProfiles.add({
-            'user': user,
-            'vitals': latest,
-            'reasons': [
-              if (isHypertensive)
-                "High BP (${latest.systolicBP}/${latest.diastolicBP})",
-              if (isHypoxic) "Low O2 (${latest.oxygen}%)"
-            ],
-          });
+      if (userRecords.isEmpty) continue;
+
+      final latest = userRecords.first;
+      bool isHypertensive = latest.systolicBP > 140;
+      bool isHypoxic = latest.oxygen < 90;
+
+      final List<String> reasons = [];
+      if (isHypertensive) reasons.add("High BP (${latest.systolicBP}/${latest.diastolicBP})");
+      if (isHypoxic) reasons.add("Low O2 (${latest.oxygen}%)");
+
+      // TREND ANALYSIS: Check last 3 records
+      if (userRecords.length >= 3) {
+        final r1 = userRecords[0];
+        final r2 = userRecords[1];
+        final r3 = userRecords[2];
+
+        // 1. Worsening BP Trend
+        if (r1.systolicBP > r2.systolicBP && r2.systolicBP > r3.systolicBP) {
+          reasons.add("Worsening BP Trend 📈");
         }
+
+        // 2. Declining O2 Trend
+        if (r1.oxygen < r2.oxygen && r2.oxygen < r3.oxygen) {
+          reasons.add("Declining O2 Trend 📉");
+        }
+      }
+
+      if (reasons.isNotEmpty) {
+        highRiskProfiles.add({
+          'user': user,
+          'vitals': latest,
+          'reasons': reasons,
+        });
       }
     }
 
@@ -185,10 +206,17 @@ class HighRiskPatientsCard extends StatelessWidget {
                   ),
                 ),
                 trailing: TextButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text(
-                            "Broadcast Inbox capability coming in next phase!")));
+                  onPressed: () async {
+                    final success = await BroadcastAlertService().sendPersonalAlert(
+                      user: user,
+                      message: "Critical Health Alert: Please visit the Barangay Health Center for a checkup regarding your recent vital trends.",
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(success ? "Alert sent to ${user.firstName}." : "Failed to send alert."),
+                        backgroundColor: success ? AppColors.brandGreen : Colors.red,
+                      ));
+                    }
                   },
                   icon: const Icon(Icons.campaign, size: 18),
                   label: const Text("Alert"),

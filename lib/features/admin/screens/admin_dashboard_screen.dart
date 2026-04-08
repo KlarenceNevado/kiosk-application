@@ -736,6 +736,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         _buildNavigationItem("System Info", Icons.info,
                             onTap: () =>
                                 context.push(AppRoutes.adminSystemInfo)),
+                        _buildNavigationItem("System Logs", Icons.terminal,
+                            onTap: () =>
+                                context.push(AppRoutes.adminDiagnostics)),
                         _buildNavigationItem("Admin Settings", Icons.settings,
                             onTap: () => context.push(AppRoutes.adminSettings)),
                       ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../services/system/app_environment.dart';
 
 class LogoGlow extends StatefulWidget {
   final double size;
@@ -28,7 +29,15 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2), 
-    )..repeat(reverse: true);
+    );
+
+    // Initial state check
+    if (!AppEnvironment().isEcoModeActive.value) {
+      _controller.repeat(reverse: true);
+    }
+
+    // Listen to Eco Mode changes
+    AppEnvironment().isEcoModeActive.addListener(_handleEcoChange);
 
     _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
@@ -39,8 +48,17 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
     );
   }
 
+  void _handleEcoChange() {
+    if (AppEnvironment().isEcoModeActive.value) {
+      _controller.stop();
+    } else {
+      _controller.repeat(reverse: true);
+    }
+  }
+
   @override
   void dispose() {
+    AppEnvironment().isEcoModeActive.removeListener(_handleEcoChange);
     _controller.dispose();
     super.dispose();
   }
@@ -51,13 +69,13 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
       animation: _controller,
       builder: (context, child) {
         return FadeTransition(
-          opacity: const AlwaysStoppedAnimation(1.0), // Always visible after initial fade
+          opacity: const AlwaysStoppedAnimation(1.0),
           child: ScaleTransition(
             scale: _scaleAnimation,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Layer 1: Subtle outer aura with pulsing spread
+                // Layer 1: Subtle outer aura
                 Container(
                   width: widget.size * _pulseAnimation.value,
                   height: widget.size * _pulseAnimation.value,
@@ -72,7 +90,7 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
                     ],
                   ),
                 ),
-                // Layer 2: Soft core glow
+                // Layer 2: Core glow
                 Container(
                   width: widget.size * 0.77,
                   height: widget.size * 0.77,
@@ -87,7 +105,7 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
                     ],
                   ),
                 ),
-                // Layer 3: Solid White container with subtle depth
+                // Layer 3: Main container
                 Container(
                   padding: EdgeInsets.all(widget.size * 0.15),
                   decoration: BoxDecoration(

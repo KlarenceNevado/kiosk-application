@@ -23,6 +23,7 @@ class AppRoutes {
   static const String adminUsers = '/admin/users';
   static const String adminSystemInfo = '/admin/info';
   static const String adminSettings = '/admin/settings';
+  static const String adminDiagnostics = '/admin/diagnostics';
 
   static const String patientLogin = '/patient/login';
   static const String patientDashboard = '/patient/dashboard';

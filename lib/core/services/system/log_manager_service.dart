@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+enum LogSeverity { info, warning, error, critical }
+
 class LogManagerService {
   static final LogManagerService _instance = LogManagerService._internal();
   factory LogManagerService() => _instance;
@@ -11,6 +13,7 @@ class LogManagerService {
 
   static const String _diagnosticsDirName = 'diagnostics';
   static const int _maxLogAgeDays = 7;
+  Timer? _maintenanceTimer;
 
   /// Initializes the diagnostics directory and performs a background cleanup.
   Future<void> initialize() async {
@@ -23,11 +26,26 @@ class LogManagerService {
         debugPrint("📂 [LogManagerService] Created diagnostics directory.");
       }
       
-      // Perform cleanup in the background
-      unawaited(_cleanupOldLogs());
+      // Perform initial cleanup
+      await _cleanupOldLogs();
     } catch (e) {
       debugPrint("❌ [LogManagerService] initialization error: $e");
     }
+  }
+
+  /// Starts a periodic background task to clean up old logs.
+  void startLogMaintenance() {
+    _maintenanceTimer?.cancel();
+    // Run cleanup every 24 hours
+    _maintenanceTimer = Timer.periodic(const Duration(hours: 24), (_) => _cleanupOldLogs());
+    debugPrint("⚙️ [LogManagerService] Background log maintenance started.");
+  }
+
+  /// Writes a structured event to the log.
+  Future<void> logEvent(String eventName, String details, {LogSeverity severity = LogSeverity.info}) async {
+    final severityStr = severity.toString().split('.').last.toUpperCase();
+    final message = "[$severityStr] [$eventName] $details";
+    await log(message);
   }
 
   /// Writes a message to the primary system log file in the diagnostics folder.
@@ -98,11 +116,7 @@ class LogManagerService {
 
   /// Resolves the absolute path to the diagnostics directory.
   Future<Directory> _getDiagnosticsDirectory() async {
-    // We attempt to find the project root or the app support dir.
-    // On the Pi/Linux, we target the workspace-relative diagnostics if available, 
-    // otherwise the system app support path.
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      // In development/kiosk, we often have a local diagnostics folder in the bin/work dir.
       final Directory localDir = Directory(p.join(Directory.current.path, _diagnosticsDirName));
       return localDir;
     }
@@ -110,4 +124,39 @@ class LogManagerService {
     final appSupportDir = await getApplicationSupportDirectory();
     return Directory(p.join(appSupportDir.path, _diagnosticsDirName));
   }
+
+  /// Returns the content of a specific log file.
+  Future<String> getLogContent(String fileName) async {
+    try {
+      final dir = await _getDiagnosticsDirectory();
+      final file = File(p.join(dir.path, fileName));
+      if (await file.exists()) {
+        return await file.readAsString();
+      }
+      return "Log file $fileName not found.";
+    } catch (e) {
+      return "Error reading log: $e";
+    }
+  }
+
+  /// Lists all log files in the diagnostics directory.
+  Future<List<String>> listLogs() async {
+    try {
+      final dir = await _getDiagnosticsDirectory();
+      if (!await dir.exists()) return [];
+      
+      final entities = await dir.list().toList();
+      return entities
+          .whereType<File>()
+          .where((f) => p.extension(f.path) == '.log')
+          .map((f) => p.basename(f.path))
+          .toList()
+        ..sort((a, b) => b.compareTo(a)); // Newest first by filename
+    } catch (e) {
+      debugPrint("❌ [LogManagerService] Error listing logs: $e");
+      return [];
+    }
+  }
 }
+
+

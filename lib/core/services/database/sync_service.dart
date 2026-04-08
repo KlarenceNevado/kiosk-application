@@ -425,20 +425,24 @@ class SyncService with WidgetsBindingObserver {
   Future<void> deleteScheduleCloud(String id) =>
       systemHandler.deleteScheduleCloud(id);
 
-  Future<void> pushAlert(
-          {required String id,
-          required String message,
-          required String targetGroup,
-          required bool isEmergency,
-          required DateTime timestamp,
-          required bool isActive}) =>
+  Future<void> pushAlert({
+    required String id,
+    required String message,
+    required String targetGroup,
+    required bool isEmergency,
+    required DateTime timestamp,
+    required bool isActive,
+    String? targetUserId,
+  }) =>
       systemHandler.pushAlert(
-          id: id,
-          message: message,
-          targetGroup: targetGroup,
-          isEmergency: isEmergency,
-          timestamp: timestamp,
-          isActive: isActive);
+        id: id,
+        message: message,
+        targetGroup: targetGroup,
+        isEmergency: isEmergency,
+        timestamp: timestamp,
+        isActive: isActive,
+        targetUserId: targetUserId,
+      );
 
   Future<void> deleteAlert(String id) => systemHandler.deleteAlert(id);
 

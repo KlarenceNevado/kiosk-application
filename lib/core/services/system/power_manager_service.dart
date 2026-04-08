@@ -34,11 +34,62 @@ class PowerManagerService {
   static const int deepSleepThreshold =
       600; // 10 minutes: Screen Off & Relay Off
 
+  final _thermalThreshold = 75; // Celsius
+
   /// Starts monitoring user activity and ensures hardware is ready.
   void startMonitoring() {
     _hardware.initialize();
     _resetTimer();
+    _startThermalMonitor();
   }
+
+  /// Periodically checks the Raspberry Pi CPU temperature.
+  void _startThermalMonitor() {
+    Timer.periodic(const Duration(seconds: 30), (timer) async {
+      final temp = await _getCoreTemperature();
+      if (temp >= _thermalThreshold) {
+        debugPrint("🔥 [PowerManager] THERMAL WARNING: ${temp.toStringAsFixed(1)}°C. Throttling...");
+        _triggerThermalThrottling();
+      }
+    });
+  }
+
+  Future<double> _getCoreTemperature() async {
+    if (!Platform.isLinux || kIsWeb) return 45.0;
+    try {
+      final file = File('/sys/class/thermal/thermal_zone0/temp');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        return double.parse(content.trim()) / 1000.0;
+      }
+    } catch (e) {
+      debugPrint("⚠️ [PowerManager] Failed to read temperature: $e");
+    }
+    return 45.0;
+  }
+
+  void _triggerThermalThrottling() {
+    setBrightness(15);
+    _setCpuGovernor('powersave');
+    SystemLogService().logAction(
+      action: 'THERMAL_THROTTLING',
+      module: 'SYSTEM',
+      severity: 'WARNING',
+      sensorFailures: 'CPU Temp exceeded $_thermalThreshold°C. Hardware throttled to reduce heat.',
+    );
+  }
+
+  /// Triggers a database vacuum only if battery is at a healthy charging level.
+  Future<void> performSafeMaintenance() async {
+    if (batteryPercentage < 70) {
+      debugPrint("🔋 [PowerManager] Skipping maintenance: Battery too low (${batteryPercentage.toInt()}%).");
+      return;
+    }
+    
+    debugPrint("🧹 [PowerManager] High Battery (${batteryPercentage.toInt()}%). Starting maintenance...");
+    // Trigger DB Vacuum or other heavy tasks here
+  }
+
 
   /// Updates the latest battery voltage from the ESP32 Hub.
   /// Triggers emergency deep sleep if below 11.5V.

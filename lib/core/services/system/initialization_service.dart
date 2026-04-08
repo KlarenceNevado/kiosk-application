@@ -29,6 +29,7 @@ import 'power_manager_service.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 import 'log_manager_service.dart';
+import '../hardware/hardware_watchdog_service.dart';
 
 class InitializationService {
   static final InitializationService _instance =
@@ -66,7 +67,11 @@ class InitializationService {
     await EncryptionService().init();
     await LogManagerService().initialize();
 
-    // 5. Minimal UI Config (Colors/Layout)
+    // 5. Diagnostics & Maintenance
+    LogManagerService().startLogMaintenance();
+    HardwareWatchdogService().start();
+
+    // 6. Minimal UI Config (Colors/Layout)
     _configureUI(mode);
 
     debugPrint("⚡ [InitializationService] Tier 1 Complete.");

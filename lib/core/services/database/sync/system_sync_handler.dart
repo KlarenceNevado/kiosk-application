@@ -236,13 +236,15 @@ class SystemSyncHandler extends SyncHandler {
     }).eq('id', id);
   }
 
-  Future<void> pushAlert(
-      {required String id,
-      required String message,
-      required String targetGroup,
-      required bool isEmergency,
-      required DateTime timestamp,
-      required bool isActive}) async {
+  Future<void> pushAlert({
+    required String id,
+    required String message,
+    required String targetGroup,
+    required bool isEmergency,
+    required DateTime timestamp,
+    required bool isActive,
+    String? targetUserId,
+  }) async {
     final data = {
       'id': id,
       'message': message,
@@ -250,6 +252,7 @@ class SystemSyncHandler extends SyncHandler {
       'is_emergency': isEmergency,
       'timestamp': timestamp.toIso8601String(),
       'is_active': isActive,
+      'target_user_id': targetUserId,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
     await supabase.from('alerts').upsert(data);
