@@ -6,6 +6,7 @@ import 'mock_sensor_service.dart';
 import 'drivers/serial_service.dart';
 import 'drivers/sensor_hub_service.dart';
 import 'sensor_data_models.dart';
+import 'drivers/null_sensor_service.dart';
 import 'models/hardware_config.dart';
 import '../system/app_environment.dart';
 import '../system/power_manager_service.dart';
@@ -176,14 +177,19 @@ class SensorManager {
         type: SensorType.bloodPressure,
         portName: finalBp,
         baudRate: config.bloodPressure.baudRate);
+
+    // Explicitly map battery to the Hub service which provides the telemetry
+    _sensors[SensorType.battery] = _sensors[SensorType.weight]!;
   }
 
-  ISensorService getSensor(SensorType type) => _sensors[type]!;
+  ISensorService getSensor(SensorType type) => 
+      _sensors[type] ?? NullSensorService(type);
 
-  ISensorService get weightSensor => _sensors[SensorType.weight]!;
-  ISensorService get oximeterSensor => _sensors[SensorType.oximeter]!;
-  ISensorService get thermometerSensor => _sensors[SensorType.thermometer]!;
-  ISensorService get bpSensor => _sensors[SensorType.bloodPressure]!;
+  ISensorService get weightSensor => getSensor(SensorType.weight);
+  ISensorService get oximeterSensor => getSensor(SensorType.oximeter);
+  ISensorService get thermometerSensor => getSensor(SensorType.thermometer);
+  ISensorService get bpSensor => getSensor(SensorType.bloodPressure);
+  ISensorService get batterySensor => getSensor(SensorType.battery);
 
   Future<void> startAll() async {
     for (var s in _sensors.values) {
