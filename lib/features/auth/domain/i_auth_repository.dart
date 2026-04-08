@@ -11,26 +11,27 @@ abstract class IAuthRepository extends ChangeNotifier {
   Future<void> get initialization;
 
   Future<void> refreshUsers();
-  
+
   // Registration & User Management
   Future<List<User>> searchPatients(String query);
   Future<String?> registerUser(User newUser);
   Future<void> updateUser(User updatedUser);
   Future<void> deleteUser(String userId);
   Future<void> toggleUserStatus(User user, bool isActive);
-  
+
   // Login Flows
   Future<String?> login(String firstName, String phoneNumber);
   Future<String?> loginWithId(String userId);
   Future<String?> loginPatientDevice(String phone, String pin);
   Future<void> logout();
   void resetSessionTimer();
-  
+
   // PIN specific logic (mainly for Patient apps)
-  Future<bool> verifyAdminAccess(String pin) async => false; // Default implementations to avoid massive refactoring overhead
+  Future<bool> verifyAdminAccess(String pin) async =>
+      false; // Default implementations to avoid massive refactoring overhead
   Future<bool> setPinCode(String newPin) async => false;
   Future<bool> verifyPatientPin(String enteredPin) async => false;
-  
+
   // Family/Dependent Links
   List<User> getLinkedAccounts();
   void switchUser(User account);

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
-
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/services/system/config_service.dart';
@@ -33,6 +32,7 @@ import '../../../core/services/system/export_service.dart';
 import '../widgets/admin_analytics_card.dart';
 import '../widgets/high_risk_patients_card.dart';
 import '../widgets/admin_patient_profile_sidebar.dart';
+import '../../../core/widgets/sync_status_indicator.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -147,10 +147,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _checkSystemHealth() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
+    final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
     if (mounted) {
       setState(() {
-        if (connectivityResult == ConnectivityResult.none) {
+        if (results.contains(ConnectivityResult.none) || results.isEmpty) {
           _networkStatus = "Offline";
           _networkColor = Colors.orange;
         } else {
@@ -768,6 +768,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 backgroundColor: Colors.white,
                 elevation: 0,
                 actions: [
+                  const SyncStatusIndicator(),
+                  const SizedBox(width: 8),
                   IconButton(
                       icon: const Icon(Icons.refresh, color: Colors.black),
                       onPressed: () =>
@@ -1261,7 +1263,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       child: SizedBox(
                         height: 40,
                         child: TextField(
-                          onChanged: (val) => setState(() => _searchQuery = val),
+                          onChanged: (val) =>
+                              setState(() => _searchQuery = val),
                           decoration: InputDecoration(
                             hintText: "Search patients...",
                             prefixIcon: const Icon(Icons.search, size: 20),

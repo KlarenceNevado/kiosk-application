@@ -27,7 +27,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onChatChanged);
-    
+
     // With reverse: true, we don't need a repository listener for scrolling
     // because index 0 is always the bottom and stays pinned automatically.
     // But we might want it for other UI reactive elements if needed.
@@ -52,7 +52,6 @@ class _AdminChatTabState extends State<AdminChatTab> {
     _messageController.dispose();
     super.dispose();
   }
-
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -177,12 +176,13 @@ class _AdminChatTabState extends State<AdminChatTab> {
                               itemBuilder: (context, index) {
                                 final msg = chatRepo.messages[index];
                                 final isMe = msg.senderId == 'admin';
-                                
+
                                 // In a reversed list, "previous" in time is index + 1
-                                final prevInTimeMsg = index < chatRepo.messages.length - 1 
-                                    ? chatRepo.messages[index + 1] 
-                                    : null;
-                                
+                                final prevInTimeMsg =
+                                    index < chatRepo.messages.length - 1
+                                        ? chatRepo.messages[index + 1]
+                                        : null;
+
                                 final showDate = prevInTimeMsg == null ||
                                     DateFormat('yyyy-MM-dd')
                                             .format(msg.phtTimestamp) !=
@@ -544,8 +544,8 @@ class _AdminChatTabState extends State<AdminChatTab> {
     chatRepo.sendMessage(message);
     _messageController.clear();
     setState(() => _replyingToId = null);
-    
-    // No manual scroll needed with reverse: true! 
+
+    // No manual scroll needed with reverse: true!
     // It stays at 0 (bottom) if we're already there.
   }
 

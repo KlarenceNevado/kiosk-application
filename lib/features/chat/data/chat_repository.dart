@@ -102,7 +102,8 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     _chatChannel?.unsubscribe();
     _chatChannel = null;
 
-    final String channelName = 'public:chat_user_${currentUserId.replaceAll('-', '_')}';
+    final String channelName =
+        'public:chat_user_${currentUserId.replaceAll('-', '_')}';
     final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
@@ -117,7 +118,8 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
             column: 'receiver_id',
             value: currentUserId,
           ),
-          callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+          callback: (payload) =>
+              _onRealtimeChange(payload, currentUserId, otherUserId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -129,7 +131,8 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
             column: 'sender_id',
             value: currentUserId,
           ),
-          callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
+          callback: (payload) =>
+              _onRealtimeChange(payload, currentUserId, otherUserId),
         )
         .subscribe((status, [error]) {
       debugPrint("📡 Chat Realtime ($currentUserId): Status is $status");
@@ -139,7 +142,8 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     });
   }
 
-  void _onRealtimeChange(PostgresChangePayload payload, String currentUserId, String otherUserId) async {
+  void _onRealtimeChange(PostgresChangePayload payload, String currentUserId,
+      String otherUserId) async {
     final row = payload.newRecord;
     if (payload.eventType == PostgresChangeEvent.delete) {
       final deletedId = payload.oldRecord['id'];
@@ -169,8 +173,9 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     final msg = ChatMessage.fromMap(fullData);
 
     // Final client-side filter for THIS conversation view
-    final bool isRelevant = (msg.senderId == currentUserId && msg.receiverId == otherUserId) ||
-                            (msg.senderId == otherUserId && msg.receiverId == currentUserId);
+    final bool isRelevant =
+        (msg.senderId == currentUserId && msg.receiverId == otherUserId) ||
+            (msg.senderId == otherUserId && msg.receiverId == currentUserId);
 
     if (isRelevant) {
       _handleIncomingMessage(msg);
@@ -244,7 +249,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     try {
       final db = await DatabaseHelper.instance.database;
       await db.insert(
-        'chat_messages', 
+        'chat_messages',
         message.toMap()..['is_synced'] = 0,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -253,13 +258,15 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
       try {
         final encryptedMap = message.toSupabaseMap();
         // Encrypt content before pushing to cloud
-        if (encryptedMap['content'] != null && !encryptedMap['content'].toString().startsWith('http')) {
-          encryptedMap['content'] = EncryptionService().encryptData(encryptedMap['content']);
+        if (encryptedMap['content'] != null &&
+            !encryptedMap['content'].toString().startsWith('http')) {
+          encryptedMap['content'] =
+              EncryptionService().encryptData(encryptedMap['content']);
           encryptedMap['message'] = encryptedMap['content'];
         }
-        
+
         await _supabase.from('chat_messages').insert(encryptedMap);
-        
+
         // 3. Mark as synced
         await db.update(
           'chat_messages',
@@ -267,14 +274,15 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
           where: 'id = ?',
           whereArgs: [message.id],
         );
-        
+
         final updatedIdx = _messages.indexWhere((m) => m.id == message.id);
         if (updatedIdx != -1) {
           _messages[updatedIdx] = message.copyWith(isSynced: true);
           notifyListeners();
         }
       } catch (e) {
-        debugPrint("⚠️ Chat Cloud Push failed: $e. Message saved locally for background sync.");
+        debugPrint(
+            "⚠️ Chat Cloud Push failed: $e. Message saved locally for background sync.");
         // We don't throw here, as it's saved locally and SyncService will pick it up.
       }
     } catch (e) {
@@ -332,7 +340,8 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
           whereArgs: [messageId],
         );
       } catch (e) {
-         debugPrint("⚠️ Reaction Cloud update failed: $e. Saved locally for background sync.");
+        debugPrint(
+            "⚠️ Reaction Cloud update failed: $e. Saved locally for background sync.");
       }
     } catch (e) {
       debugPrint("❌ Reaction Error: $e");

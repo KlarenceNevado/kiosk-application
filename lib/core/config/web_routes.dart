@@ -19,12 +19,16 @@ class WebAppRoutes {
 final GoRouter webPatientRouter = GoRouter(
   initialLocation: WebAppRoutes.patientSplash,
   redirect: (context, state) async {
-    final protectedPaths = [WebAppRoutes.patientHome, WebAppRoutes.patientDashboard];
+    final protectedPaths = [
+      WebAppRoutes.patientHome,
+      WebAppRoutes.patientDashboard
+    ];
     final isProtected = protectedPaths.contains(state.matchedLocation);
-    
+
     if (isProtected) {
       final prefs = await SharedPreferences.getInstance();
-      final hasSession = prefs.getString('pwa_session_user_id')?.isNotEmpty ?? false;
+      final hasSession =
+          prefs.getString('pwa_session_user_id')?.isNotEmpty ?? false;
       if (!hasSession) {
         return WebAppRoutes.patientLogin;
       }

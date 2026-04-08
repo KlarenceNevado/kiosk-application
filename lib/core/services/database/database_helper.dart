@@ -22,14 +22,15 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
   static Completer<Database>? _dbInitCompleter;
-  
+
   // Isolate-safety: Only the UI isolate should perform migrations.
   static bool _isBackground = false;
 
   /// Set to true in the background isolate to skip migrations and heavy sanity checks.
   void setIsBackground(bool value) {
     _isBackground = value;
-    debugPrint("📂 [DatabaseHelper] Mode set to: ${_isBackground ? 'BACKGROUND' : 'MAIN UI'}");
+    debugPrint(
+        "📂 [DatabaseHelper] Mode set to: ${_isBackground ? 'BACKGROUND' : 'MAIN UI'}");
   }
 
   static bool get isBackground => _isBackground;
@@ -49,7 +50,8 @@ class DatabaseHelper {
 
     if (kIsWeb) {
       try {
-        debugPrint("🌐 [DatabaseHelper] Web Platform detected. Initializing SQLite for Web...");
+        debugPrint(
+            "🌐 [DatabaseHelper] Web Platform detected. Initializing SQLite for Web...");
         databaseFactory = databaseFactoryFfiWeb;
         _database = await _initDB('kiosk_health.db');
         _dbInitCompleter!.complete(_database);
@@ -63,7 +65,9 @@ class DatabaseHelper {
     }
 
     try {
-      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.linux)) {
         sqfliteFfiInit();
         if (databaseFactory != databaseFactoryFfi) {
           databaseFactory = databaseFactoryFfi;
@@ -87,19 +91,21 @@ class DatabaseHelper {
     } else {
       // 1. Check for dedicated NVMe SSD on Kiosk
       final ssdDir = Directory('/media/kiosk/Kiosk 256 SSD');
-      
+
       if (AppEnvironment().isKiosk && ssdDir.existsSync()) {
         final kioskDataDir = Directory(join(ssdDir.path, 'kiosk_health_data'));
         if (!kioskDataDir.existsSync()) {
           kioskDataDir.createSync(recursive: true);
         }
         path = join(kioskDataDir.path, filePath);
-        debugPrint("💾 [DatabaseHelper] Using Dedicated NVMe SSD Storage: $path");
+        debugPrint(
+            "💾 [DatabaseHelper] Using Dedicated NVMe SSD Storage: $path");
       } else {
         // Fallback to shared absolute path on SD card
         final directory = await getApplicationSupportDirectory();
         path = join(directory.path, filePath);
-        debugPrint("💾 [DatabaseHelper] Using Default Support Directory: $path");
+        debugPrint(
+            "💾 [DatabaseHelper] Using Default Support Directory: $path");
       }
     }
 
@@ -121,7 +127,8 @@ class DatabaseHelper {
       await migrationService.runMigrations(db);
       await migrationService.performSanityCheck(db);
     } else {
-      debugPrint("📂 [DatabaseHelper] Background Isolate: Skipping migrations & sanity checks.");
+      debugPrint(
+          "📂 [DatabaseHelper] Background Isolate: Skipping migrations & sanity checks.");
     }
 
     // 4. Initialize DAOs
@@ -337,8 +344,8 @@ class DatabaseHelper {
   // Handle schema changes cleanly
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     debugPrint("🛠️ Database Upgrade: v$oldVersion -> v$newVersion");
-    
-    // Sqflite calls onUpgrade within a transaction. 
+
+    // Sqflite calls onUpgrade within a transaction.
     // We add logging for academic/audit purposes.
     // If upgrading from an older version, ensure audit_logs exists
     if (oldVersion < 4) {
@@ -474,15 +481,19 @@ class DatabaseHelper {
     }
 
     // Legacy version handling - delegating structural checks to MigrationService
-    debugPrint("📂 [DatabaseHelper] Performing upgrade check from v$oldVersion to v$newVersion");
-    
+    debugPrint(
+        "📂 [DatabaseHelper] Performing upgrade check from v$oldVersion to v$newVersion");
+
     // We keep historical execute blocks if they are critical and not covered by sanityCheck
     if (oldVersion < 12) {
       // Chat Indexes
       try {
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_timestamp ON chat_messages(timestamp)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_chat_timestamp ON chat_messages(timestamp)');
       } catch (_) {}
     }
 
@@ -507,12 +518,13 @@ class DatabaseHelper {
       ''');
       debugPrint("🚀 Database Upgraded to Version 18 (System Logs Table)");
     }
-    
+
     if (oldVersion < 22) {
       try {
         await db.execute('ALTER TABLE patients ADD COLUMN pin_hash TEXT');
         await db.execute('ALTER TABLE patients ADD COLUMN pin_salt TEXT');
-        debugPrint("🚀 Database Upgraded to Version 22 (Zero-Knowledge Architecture)");
+        debugPrint(
+            "🚀 Database Upgraded to Version 22 (Zero-Knowledge Architecture)");
       } catch (_) {}
     }
   }
@@ -704,17 +716,19 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (final id in ids) {
-        batch.update(table, {'is_synced': 1, 'updated_at': DateTime.now().toIso8601String()},
+        batch.update(table,
+            {'is_synced': 1, 'updated_at': DateTime.now().toIso8601String()},
             where: 'id = ?', whereArgs: [id]);
       }
       await batch.commit(noResult: true);
     });
-    debugPrint("✅ Database: Marked ${ids.length} records in '$table' as synced: ${ids.take(3).join(', ')}${ids.length > 3 ? '...' : ''}");
+    debugPrint(
+        "✅ Database: Marked ${ids.length} records in '$table' as synced: ${ids.take(3).join(', ')}${ids.length > 3 ? '...' : ''}");
   }
 
   // --- SECURITY METHODS ---
   Future<void> logSecurityEvent(String action, String description,
-          {String severity = 'LOW', String? userId}) async {
+      {String severity = 'LOW', String? userId}) async {
     await database;
     return systemDao.logSecurityEvent(action, description,
         severity: severity, userId: userId);
@@ -793,7 +807,8 @@ class DatabaseHelper {
       'middle_initial': map['middle_initial'] ?? map['middleInitial'],
       'sitio': map['sitio'],
       'phone_number': _encrypt(map['phone_number'] ?? map['phoneNumber']),
-      'pin_code': _encrypt(map['pin_code'] ?? map['pin_code'] ?? map['pinCode']),
+      'pin_code':
+          _encrypt(map['pin_code'] ?? map['pin_code'] ?? map['pinCode']),
       'gender': map['gender'],
       'date_of_birth': map['date_of_birth'] ?? map['dateOfBirth'],
       'parent_id': map['parent_id'] ?? map['parentId'],
@@ -801,7 +816,12 @@ class DatabaseHelper {
       'updated_at': map['updated_at'] ?? DateTime.now().toIso8601String(),
       'is_deleted':
           (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
-      'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
+      'is_active': (map['is_active'] == true ||
+              map['is_active'] == 1 ||
+              map['isActive'] == true ||
+              map['isActive'] == 1)
+          ? 1
+          : 0,
       'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
       'device_token': map['device_token'] ?? map['deviceToken'],
       'pin_hash': map['pin_hash'] ?? map['pinHash'],
@@ -818,7 +838,8 @@ class DatabaseHelper {
         where: 'is_deleted = ?', whereArgs: [0], orderBy: 'last_name ASC');
     return result.map((json) {
       final decrypted = Map<String, dynamic>.from(json);
-      decrypted['phoneNumber'] = _decrypt(json['phone_number']?.toString() ?? '');
+      decrypted['phoneNumber'] =
+          _decrypt(json['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(json['pin_code']?.toString() ?? '');
       decrypted['pin_hash'] = json['pin_hash'];
       decrypted['pin_salt'] = json['pin_salt'];
@@ -833,7 +854,8 @@ class DatabaseHelper {
     final maps = await db.query('patients', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
       final decrypted = Map<String, dynamic>.from(maps.first);
-      decrypted['phoneNumber'] = _decrypt(maps.first['phone_number']?.toString() ?? '');
+      decrypted['phoneNumber'] =
+          _decrypt(maps.first['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = _decrypt(maps.first['pin_code']?.toString() ?? '');
       decrypted['pin_hash'] = maps.first['pin_hash'];
       decrypted['pin_salt'] = maps.first['pin_salt'];
@@ -853,7 +875,8 @@ class DatabaseHelper {
       'middle_initial': map['middle_initial'] ?? map['middleInitial'],
       'sitio': map['sitio'],
       'phone_number': _encrypt(map['phone_number'] ?? map['phoneNumber']),
-      'pin_code': _encrypt(map['pin_code'] ?? map['pin_code'] ?? map['pinCode']),
+      'pin_code':
+          _encrypt(map['pin_code'] ?? map['pin_code'] ?? map['pinCode']),
       'gender': map['gender'],
       'date_of_birth': map['date_of_birth'] ?? map['dateOfBirth'],
       'parent_id': map['parent_id'] ?? map['parentId'],
@@ -861,7 +884,12 @@ class DatabaseHelper {
       'updated_at': DateTime.now().toIso8601String(),
       'is_deleted':
           (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
-      'is_active': (map['is_active'] == true || map['is_active'] == 1 || map['isActive'] == true || map['isActive'] == 1) ? 1 : 0,
+      'is_active': (map['is_active'] == true ||
+              map['is_active'] == 1 ||
+              map['isActive'] == true ||
+              map['isActive'] == 1)
+          ? 1
+          : 0,
       'is_synced': 0, // Mark for re-sync
       'device_token': map['device_token'] ?? map['deviceToken'],
       'pin_hash': map['pin_hash'] ?? map['pinHash'],

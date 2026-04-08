@@ -9,7 +9,6 @@ import '../../auth/models/user_model.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/config/route_names.dart';
 
-
 class MobileLoginScreen extends StatefulWidget {
   const MobileLoginScreen({super.key});
 

@@ -24,7 +24,8 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
   Future<void> _loadReminders() async {
     final user = context.read<IAuthRepository>().currentUser;
     if (user != null) {
-      final dbReminders = await context.read<ISystemRepository>().getReminders(user.id);
+      final dbReminders =
+          await context.read<ISystemRepository>().getReminders(user.id);
       if (mounted) {
         setState(() {
           _reminders.clear();
@@ -105,13 +106,15 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () async {
-                        final user = context.read<IAuthRepository>().currentUser;
+                        final user =
+                            context.read<IAuthRepository>().currentUser;
                         if (user != null) {
                           final timeStr =
                               "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}";
 
-                          final reminderId =
-                              await context.read<ISystemRepository>().insertReminder({
+                          final reminderId = await context
+                              .read<ISystemRepository>()
+                              .insertReminder({
                             'title': titleCtrl.text,
                             'time': timeStr,
                             'isActive': 1,
@@ -231,12 +234,16 @@ class _PatientRemindersTabState extends State<PatientRemindersTab> {
                       activeThumbColor: AppColors.brandGreen,
                       onChanged: (val) async {
                         setState(() => r['isActive'] = val);
-                        
+
                         // Update SQLite
-                        final timeStr = "${(r['time'] as TimeOfDay).hour.toString().padLeft(2, '0')}:${(r['time'] as TimeOfDay).minute.toString().padLeft(2, '0')}";
-                        final user = context.read<IAuthRepository>().currentUser;
+                        final timeStr =
+                            "${(r['time'] as TimeOfDay).hour.toString().padLeft(2, '0')}:${(r['time'] as TimeOfDay).minute.toString().padLeft(2, '0')}";
+                        final user =
+                            context.read<IAuthRepository>().currentUser;
                         if (user != null) {
-                          await context.read<ISystemRepository>().updateReminder({
+                          await context
+                              .read<ISystemRepository>()
+                              .updateReminder({
                             'id': r['id'],
                             'title': r['title'],
                             'time': timeStr,

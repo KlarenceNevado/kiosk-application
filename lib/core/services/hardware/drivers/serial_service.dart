@@ -43,7 +43,7 @@ class SerialSensorService implements ISensorService {
 
   @override
   void startReading() async {
-    // YIELD IMMEDIATELY: Ensure the UI/event loop can respond to the tap action 
+    // YIELD IMMEDIATELY: Ensure the UI/event loop can respond to the tap action
     // before the potentially heavy serial port operations begin.
     await Future.delayed(Duration.zero);
 
@@ -53,12 +53,11 @@ class SerialSensorService implements ISensorService {
 
     _updateStatus(SensorStatus.connecting);
 
-    
     try {
       // SMART CACHE: Check if port exists before attempting to open
       // Use a 5-second cache to avoid redundant bus scans across multiple sensors.
-      if (_availablePortsCache == null || 
-          _lastCacheUpdate == null || 
+      if (_availablePortsCache == null ||
+          _lastCacheUpdate == null ||
           DateTime.now().difference(_lastCacheUpdate!).inSeconds > 5) {
         _availablePortsCache = SerialPort.availablePorts;
         _lastCacheUpdate = DateTime.now();
@@ -66,16 +65,18 @@ class SerialSensorService implements ISensorService {
 
       if (!_availablePortsCache!.contains(portName)) {
         _updateStatus(SensorStatus.disconnected);
-        debugPrint("ℹ️ [SerialSensorService] Port $portName not found. Hardware is likely disconnected.");
-        return; 
+        debugPrint(
+            "ℹ️ [SerialSensorService] Port $portName not found. Hardware is likely disconnected.");
+        return;
       }
 
       _port = SerialPort(portName);
-      
+
       if (!_port!.openReadWrite()) {
-        throw Exception("Could not open port $portName. Error: ${SerialPort.lastError}");
+        throw Exception(
+            "Could not open port $portName. Error: ${SerialPort.lastError}");
       }
-      
+
       // Configure port
       _port!.config = SerialPortConfig()
         ..baudRate = baudRate
@@ -85,14 +86,13 @@ class SerialSensorService implements ISensorService {
 
       _updateStatus(SensorStatus.reading);
       _startWatchdog();
-      
+
       // Start reading stream
       _reader = SerialPortReader(_port!);
       _reader!.stream.listen(_handleRawData, onError: (e) {
         _updateStatus(SensorStatus.error);
         _dataController.addError("Serial stream error: $e");
       });
-      
     } catch (e) {
       _updateStatus(SensorStatus.error);
       _dataController.addError("Serial Connection Failed: $e");
@@ -116,10 +116,12 @@ class SerialSensorService implements ISensorService {
         timer.cancel();
         return;
       }
-      
+
       final idleTime = DateTime.now().difference(_lastDataReceived!).inSeconds;
-      if (idleTime > 8) { // 8 second silence = Hang
-        debugPrint("⚠️ [SerialWatchdog] No data from $type for 8s. Auto-reconnecting...");
+      if (idleTime > 8) {
+        // 8 second silence = Hang
+        debugPrint(
+            "⚠️ [SerialWatchdog] No data from $type for 8s. Auto-reconnecting...");
         _reconnect();
       }
     });
@@ -134,9 +136,10 @@ class SerialSensorService implements ISensorService {
 
   @override
   Future<void> calibrate() async {
-    // Standard serial sensors usually don't support remote calibration 
+    // Standard serial sensors usually don't support remote calibration
     // unless they have a specific command protocol. Handled by Hub.
-    debugPrint("ℹ️ [SerialSensorService] $type does not support software calibration.");
+    debugPrint(
+        "ℹ️ [SerialSensorService] $type does not support software calibration.");
   }
 
   void _updateStatus(SensorStatus status) {
@@ -147,13 +150,15 @@ class SerialSensorService implements ISensorService {
   @override
   Future<void> sendCommand(Uint8List command) async {
     if (_port == null || _status != SensorStatus.reading) {
-      debugPrint("⚠️ [SerialSensorService] Cannot send command to $type: Port not open.");
+      debugPrint(
+          "⚠️ [SerialSensorService] Cannot send command to $type: Port not open.");
       return;
     }
     try {
       final bytesWritten = _port!.write(command);
       if (bytesWritten != command.length) {
-        debugPrint("⚠️ [SerialSensorService] Partial write for $type. Sent $bytesWritten/${command.length}");
+        debugPrint(
+            "⚠️ [SerialSensorService] Partial write for $type. Sent $bytesWritten/${command.length}");
       }
     } catch (e) {
       debugPrint("❌ [SerialSensorService] Error sending command to $type: $e");
@@ -181,17 +186,18 @@ class SerialSensorService implements ISensorService {
 
   void _processBuffer() {
     bool foundPacket = true;
-    
+
     while (foundPacket && _buffer.isNotEmpty) {
       foundPacket = false;
       final currentBuffer = Uint8List.fromList(_buffer);
-      
+
       switch (type) {
         case SensorType.weight:
           // ASCII Weight typically ends with \n or \r
           final newlineIndex = _buffer.indexOf(10); // \n
           if (newlineIndex != -1) {
-            final packet = Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
+            final packet =
+                Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
             final weight = WeightParser.parse(packet);
             if (weight != null) _dataController.add(weight);
             _buffer.removeRange(0, newlineIndex + 1);
@@ -221,7 +227,8 @@ class SerialSensorService implements ISensorService {
           // Assuming standalone thermometer also uses ASCII/Newline
           final newlineIndex = _buffer.indexOf(10);
           if (newlineIndex != -1) {
-            final packet = Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
+            final packet =
+                Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
             final temp = TempParser.parse(packet);
             if (temp != null) _dataController.add(temp);
             _buffer.removeRange(0, newlineIndex + 1);
@@ -233,10 +240,11 @@ class SerialSensorService implements ISensorService {
           break;
       }
 
-      // Safeguard: If buffer is getting too large without finding a packet, 
+      // Safeguard: If buffer is getting too large without finding a packet,
       // clear old data to prevent memory issues.
       if (_buffer.length > 1024) {
-        debugPrint("⚠️ [SerialSensorService] Buffer overflow for $type. Clearing...");
+        debugPrint(
+            "⚠️ [SerialSensorService] Buffer overflow for $type. Clearing...");
         _buffer.clear();
         break;
       }

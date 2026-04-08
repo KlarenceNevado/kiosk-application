@@ -36,9 +36,9 @@ class ChatListenerService {
           if (data['sender_id'] == 'admin' || data['sender'] == 'admin') {
             final String rawMessage =
                 data['message'] ?? data['content'] ?? 'You have a new message.';
-            
+
             String displayMessage = rawMessage;
-            
+
             // Decrypt the message if it appears to be encrypted (contains colon marker)
             if (rawMessage.contains(':')) {
               try {
@@ -48,7 +48,8 @@ class ChatListenerService {
               } catch (e) {
                 debugPrint("🔐 [ChatListener] Decryption failed: $e");
                 // Fallback to generic message if decryption fails for safety
-                displayMessage = "You have a new message from the Health Worker.";
+                displayMessage =
+                    "You have a new message from the Health Worker.";
               }
             }
 

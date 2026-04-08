@@ -7,12 +7,14 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() async {
   sqfliteFfiInit();
   var dbFactory = databaseFactoryFfi;
-  const dbPath = "C:\\Users\\Klarence Nevado\\AppData\\Roaming\\com.example\\kiosk_application\\kiosk_health.db";
+  const dbPath =
+      "C:\\Users\\Klarence Nevado\\AppData\\Roaming\\com.example\\kiosk_application\\kiosk_health.db";
   final db = await dbFactory.openDatabase(dbPath);
 
   // Verified Credentials
   const url = "https://zumghuyvofohqbxgnnmf.supabase.co";
-  const key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bWdodXl2b2ZvaHFieGdubm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDE3NTIsImV4cCI6MjA4ODAxNzc1Mn0.n1a0PXVvDhGvXKmHrSm6wdaxYVNnHXktp_D82JmPets";
+  const key =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bWdodXl2b2ZvaHFieGdubm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDE3NTIsImV4cCI6MjA4ODAxNzc1Mn0.n1a0PXVvDhGvXKmHrSm6wdaxYVNnHXktp_D82JmPets";
 
   final headers = {
     'apikey': key,
@@ -36,10 +38,13 @@ void main() async {
     print("\n📦 Processing Vital for User: $userId");
 
     // A. Check/Push Patient
-    final pCheckRes = await http.get(Uri.parse("$url/rest/v1/patients?id=eq.$userId&select=*"), headers: headers);
+    final pCheckRes = await http.get(
+        Uri.parse("$url/rest/v1/patients?id=eq.$userId&select=*"),
+        headers: headers);
     if (pCheckRes.statusCode == 200 && jsonDecode(pCheckRes.body).isEmpty) {
       print("⚠️ Patient $userId missing in cloud. Pushing...");
-      final pLocal = await db.query('patients', where: 'id = ?', whereArgs: [userId]);
+      final pLocal =
+          await db.query('patients', where: 'id = ?', whereArgs: [userId]);
       if (pLocal.isNotEmpty) {
         final pData = Map<String, dynamic>.from(pLocal.first);
         final pPayload = {
@@ -51,18 +56,21 @@ void main() async {
           'pin_code': pData['pin_code']?.toString(),
           'sitio': pData['sitio'],
         };
-        final pPushRes = await http.post(Uri.parse("$url/rest/v1/patients"), headers: headers, body: jsonEncode(pPayload));
+        final pPushRes = await http.post(Uri.parse("$url/rest/v1/patients"),
+            headers: headers, body: jsonEncode(pPayload));
         if (pPushRes.statusCode == 201 || pPushRes.statusCode == 200) {
           print("  ✅ Patient pushed.");
         } else {
-          print("  ❌ Patient push failed: ${pPushRes.statusCode} - ${pPushRes.body}");
+          print(
+              "  ❌ Patient push failed: ${pPushRes.statusCode} - ${pPushRes.body}");
           continue;
         }
       }
     } else if (pCheckRes.statusCode == 200) {
       print("  ✅ Patient exists in cloud.");
     } else {
-      print("  ❌ Patient check failed: ${pCheckRes.statusCode} - ${pCheckRes.body}");
+      print(
+          "  ❌ Patient check failed: ${pCheckRes.statusCode} - ${pCheckRes.body}");
       continue;
     }
 
@@ -76,16 +84,23 @@ void main() async {
       'diastolic_bp': row['diastolic_bp'].toString(),
       'oxygen': row['oxygen'].toString(),
       'temperature': row['temperature'].toString(),
-      'bmi': row['bmi'] is num ? row['bmi'] : double.tryParse(row['bmi'].toString()) ?? 0.0,
+      'bmi': row['bmi'] is num
+          ? row['bmi']
+          : double.tryParse(row['bmi'].toString()) ?? 0.0,
       'status': row['status'] ?? 'pending',
       'remarks': row['remarks'],
       'report_url': row['report_url'],
     };
 
-    final vPushRes = await http.post(Uri.parse("$url/rest/v1/vitals"), headers: headers..addAll({'Prefer': 'resolution=merge-duplicates'}), body: jsonEncode(vPayload));
-    if (vPushRes.statusCode == 201 || vPushRes.statusCode == 204 || vPushRes.statusCode == 200) {
+    final vPushRes = await http.post(Uri.parse("$url/rest/v1/vitals"),
+        headers: headers..addAll({'Prefer': 'resolution=merge-duplicates'}),
+        body: jsonEncode(vPayload));
+    if (vPushRes.statusCode == 201 ||
+        vPushRes.statusCode == 204 ||
+        vPushRes.statusCode == 200) {
       print("✅ Vital ${row['id']} synced successfully!");
-      await db.update('vitals', {'is_synced': 1}, where: 'id = ?', whereArgs: [row['id']]);
+      await db.update('vitals', {'is_synced': 1},
+          where: 'id = ?', whereArgs: [row['id']]);
     } else {
       print("❌ Vital sync failed: ${vPushRes.statusCode} - ${vPushRes.body}");
     }

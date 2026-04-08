@@ -7,7 +7,8 @@ import '../domain/i_history_repository.dart';
 
 /// Web-safe HistoryRepository that uses Supabase directly.
 /// No DatabaseHelper, SyncService, FileStorageService, dart:io, or open_file.
-class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository {
+class WebHistoryRepository extends ChangeNotifier
+    implements IHistoryRepository {
   final _supabase = Supabase.instance.client;
   final _encryption = EncryptionService();
   List<VitalSigns> _records = [];
@@ -21,7 +22,13 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
   /// Decrypts encrypted vital fields from Supabase before mapping to model.
   Map<String, dynamic> _decryptVitalsRow(Map<String, dynamic> row) {
     final decrypted = Map<String, dynamic>.from(row);
-    const encryptedFields = ['heart_rate', 'systolic_bp', 'diastolic_bp', 'oxygen', 'temperature'];
+    const encryptedFields = [
+      'heart_rate',
+      'systolic_bp',
+      'diastolic_bp',
+      'oxygen',
+      'temperature'
+    ];
     for (final field in encryptedFields) {
       if (decrypted[field] != null && decrypted[field] is String) {
         final raw = _encryption.decryptData(decrypted[field] as String);
@@ -47,7 +54,9 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
           .order('timestamp', ascending: false);
 
       final List<dynamic> data = response as List;
-      _records = data.map((row) => VitalSigns.fromMap(_decryptVitalsRow(row))).toList();
+      _records = data
+          .map((row) => VitalSigns.fromMap(_decryptVitalsRow(row)))
+          .toList();
     } catch (e) {
       debugPrint("Error loading user history from cloud: $e");
     } finally {
@@ -70,7 +79,9 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
           .order('timestamp', ascending: false);
 
       final List<dynamic> data = response as List;
-      _records = data.map((row) => VitalSigns.fromMap(_decryptVitalsRow(row))).toList();
+      _records = data
+          .map((row) => VitalSigns.fromMap(_decryptVitalsRow(row)))
+          .toList();
     } catch (e) {
       debugPrint("Error loading all history from cloud: $e");
     } finally {
@@ -82,7 +93,8 @@ class WebHistoryRepository extends ChangeNotifier implements IHistoryRepository 
   // Stubs for methods that are native-only (no local DB on web)
   @override
   Future<void> addRecord(VitalSigns record) async {
-    debugPrint("⚠️ Web: addRecord is a no-op. Vitals are recorded at the Kiosk.");
+    debugPrint(
+        "⚠️ Web: addRecord is a no-op. Vitals are recorded at the Kiosk.");
   }
 
   @override

@@ -63,7 +63,8 @@ void _generateAdminIcon() {
 
   for (int py = shieldTopY; py <= shieldBotY; py++) {
     final t = (py - shieldTopY) / (shieldBotY - shieldTopY).toDouble();
-    final int halfW = t < 0.55 ? shieldW ~/ 2 : ((1.0 - t) / 0.45 * (shieldW / 2)).toInt();
+    final int halfW =
+        t < 0.55 ? shieldW ~/ 2 : ((1.0 - t) / 0.45 * (shieldW / 2)).toInt();
 
     for (int px = cx - halfW; px <= cx + halfW; px++) {
       final bool onLeftEdge = px <= cx - halfW + thick;

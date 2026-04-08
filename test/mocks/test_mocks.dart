@@ -12,13 +12,21 @@ import 'package:kiosk_application/features/user_history/domain/i_history_reposit
 
 // REUSABLE MOCKS
 class MockSupabaseClient extends Mock implements SupabaseClient {}
+
 class MockDatabaseHelper extends Mock implements DatabaseHelper {}
+
 class MockSyncService extends Mock implements SyncService {}
+
 class MockNotificationService extends Mock implements NotificationService {}
+
 class MockEncryptionService extends Mock implements EncryptionService {}
+
 class MockInitializationService extends Mock implements InitializationService {}
+
 class MockAdminSecurityService extends Mock implements AdminSecurityService {}
+
 class MockAuthRepository extends Mock implements IAuthRepository {}
+
 class MockHistoryRepository extends Mock implements IHistoryRepository {}
 
 void main() {

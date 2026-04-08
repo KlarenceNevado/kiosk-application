@@ -34,8 +34,8 @@ class AdminProvider extends ChangeNotifier {
 
   // Check Network Health
   Future<void> checkSystemHealth() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    if (connectivityResult == ConnectivityResult.none) {
+    final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
+    if (results.contains(ConnectivityResult.none) || results.isEmpty) {
       _networkStatus = "Offline";
       _networkColor = Colors.orange;
     } else {

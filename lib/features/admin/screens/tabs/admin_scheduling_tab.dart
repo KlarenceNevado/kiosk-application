@@ -423,11 +423,14 @@ class _AdminSchedulingTabState extends State<AdminSchedulingTab> {
                               if (!context.mounted) return;
 
                               if (_autoAnnounce) {
-                                final format = DateFormat('MMM dd, yyyy').format(_selectedDate);
+                                final format = DateFormat('MMM dd, yyyy')
+                                    .format(_selectedDate);
                                 final timeFmt = _selectedTime.format(context);
                                 await adminRepo.addAnnouncement(
-                                  title: "Upcoming ${_selectedActivity.replaceAll('_', ' ').toUpperCase()}",
-                                  content: "There will be a ${_selectedActivity.replaceAll('_', ' ')} on $format at $timeFmt. Location: ${_locationController.text}. BHW in charge: $_selectedAssigned.",
+                                  title:
+                                      "Upcoming ${_selectedActivity.replaceAll('_', ' ').toUpperCase()}",
+                                  content:
+                                      "There will be a ${_selectedActivity.replaceAll('_', ' ')} on $format at $timeFmt. Location: ${_locationController.text}. BHW in charge: $_selectedAssigned.",
                                   targetGroup: 'all',
                                 );
                               }

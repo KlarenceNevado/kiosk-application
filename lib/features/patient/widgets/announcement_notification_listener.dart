@@ -27,10 +27,18 @@ class _AnnouncementNotificationListenerState
   @override
   void initState() {
     super.initState();
-    _subscription = SyncEventBus.instance.newAnnouncementStream.listen((announcement) {
-      final isActive = announcement['is_active'] == 1 || announcement['is_active'] == true || announcement['isActive'] == 1 || announcement['isActive'] == true;
-      final isArchived = announcement['is_archived'] == 1 || announcement['is_archived'] == true || announcement['isArchived'] == 1 || announcement['isArchived'] == true;
-      final isDeleted = announcement['is_deleted'] == 1 || announcement['is_deleted'] == true;
+    _subscription =
+        SyncEventBus.instance.newAnnouncementStream.listen((announcement) {
+      final isActive = announcement['is_active'] == 1 ||
+          announcement['is_active'] == true ||
+          announcement['isActive'] == 1 ||
+          announcement['isActive'] == true;
+      final isArchived = announcement['is_archived'] == 1 ||
+          announcement['is_archived'] == true ||
+          announcement['isArchived'] == 1 ||
+          announcement['isArchived'] == true;
+      final isDeleted =
+          announcement['is_deleted'] == 1 || announcement['is_deleted'] == true;
 
       // Only show notification if it's active, not archived, and not deleted
       if (isActive && !isArchived && !isDeleted) {

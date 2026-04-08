@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 /// Service to control Raspberry Pi hardware components via GPIO.
 /// Primarily used for triggering the 4-channel relay module.
 class HardwareControlService {
-  static final HardwareControlService _instance = HardwareControlService._internal();
+  static final HardwareControlService _instance =
+      HardwareControlService._internal();
   factory HardwareControlService() => _instance;
   HardwareControlService._internal();
 
@@ -42,11 +43,12 @@ class HardwareControlService {
     if (!_isInitialized) return;
 
     try {
-      // Active Low Logic: 'dl' (drive low) usually turns relay ON, 
+      // Active Low Logic: 'dl' (drive low) usually turns relay ON,
       // 'dh' (drive high) usually turns it OFF.
       final level = isOn ? 'dl' : 'dh';
       await Process.run('raspi-gpio', ['set', pin.toString(), level]);
-      debugPrint('HardwareControlService: Pin $pin set to ${isOn ? 'ON' : 'OFF'}');
+      debugPrint(
+          'HardwareControlService: Pin $pin set to ${isOn ? 'ON' : 'OFF'}');
     } catch (e) {
       debugPrint('HardwareControlService: Failed to set relay state: $e');
     }

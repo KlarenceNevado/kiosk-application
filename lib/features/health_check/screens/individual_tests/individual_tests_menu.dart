@@ -14,7 +14,8 @@ class IndividualTestsMenu extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.brandDark, size: 24), // Enlarged
+          icon: const Icon(Icons.arrow_back_ios_new,
+              color: AppColors.brandDark, size: 24), // Enlarged
           onPressed: () => context.pop(),
         ),
         title: const Text("Individual Tests",
@@ -167,7 +168,8 @@ class IndividualTestsMenu extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade300, size: 28),
+                Icon(Icons.chevron_right_rounded,
+                    color: Colors.grey.shade300, size: 28),
               ],
             ),
           ),

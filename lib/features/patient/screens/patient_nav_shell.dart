@@ -39,7 +39,8 @@ class PatientNavShell extends StatelessWidget {
                   CircularProgressIndicator(color: AppColors.brandGreen),
                   SizedBox(height: 16),
                   Text("Restoring session...",
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                      style: TextStyle(
+                          color: Colors.grey, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
@@ -83,7 +84,8 @@ class PatientNavShell extends StatelessWidget {
                   unselectedItemColor: Colors.grey.shade400,
                   selectedFontSize: 13,
                   unselectedFontSize: 12,
-                  selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  selectedLabelStyle:
+                      const TextStyle(fontWeight: FontWeight.bold),
                   iconSize: 28,
                   elevation: 0,
                   items: [
@@ -265,16 +267,20 @@ class _PatientProfileTab extends StatelessWidget {
                   return StatefulBuilder(
                     builder: (context, setInternalState) {
                       return SwitchListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         title: const Text("Push Notifications",
                             style: TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 16)),
                         subtitle: const Text("Receive alerts and reminders"),
                         secondary: Icon(
-                          isEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+                          isEnabled
+                              ? Icons.notifications_active_rounded
+                              : Icons.notifications_off_rounded,
                           color: isEnabled ? AppColors.brandGreen : Colors.grey,
                         ),
-                        thumbColor: WidgetStateProperty.all(AppColors.brandGreen),
+                        thumbColor:
+                            WidgetStateProperty.all(AppColors.brandGreen),
                         trackColor: WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.selected)) {
                             return AppColors.brandGreen.withValues(alpha: 0.3);
@@ -286,7 +292,8 @@ class _PatientProfileTab extends StatelessWidget {
                           if (val) {
                             await NotificationService().requestPermissions();
                           }
-                          await NotificationService().setNotificationsEnabled(val);
+                          await NotificationService()
+                              .setNotificationsEnabled(val);
                           setInternalState(() {}); // Local refresh
                         },
                       );
@@ -295,13 +302,15 @@ class _PatientProfileTab extends StatelessWidget {
                 },
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             _buildSettingCard(
               child: ListTile(
-                leading: const Icon(Icons.info_outline_rounded, color: Colors.blue),
-                title: const Text("About Kiosk Application", style: TextStyle(fontWeight: FontWeight.bold)),
+                leading:
+                    const Icon(Icons.info_outline_rounded, color: Colors.blue),
+                title: const Text("About Kiosk Application",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text("v1.2.5 - Stable Build"),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
@@ -309,34 +318,40 @@ class _PatientProfileTab extends StatelessWidget {
                     context: context,
                     applicationName: "Barangay Health Kiosk",
                     applicationVersion: "1.2.5",
-                    applicationIcon: const Icon(Icons.monitor_heart, color: AppColors.brandGreen, size: 48),
+                    applicationIcon: const Icon(Icons.monitor_heart,
+                        color: AppColors.brandGreen, size: 48),
                     children: [
-                      const Text("A comprehensive digital health monitoring system for community barangays."),
+                      const Text(
+                          "A comprehensive digital health monitoring system for community barangays."),
                     ],
                   );
                 },
               ),
             ),
-            
+
             const SizedBox(height: 16),
 
-             _buildSettingCard(
+            _buildSettingCard(
               child: ListTile(
-                leading: const Icon(Icons.cloud_sync_rounded, color: Colors.orange),
-                title: const Text("Last Synchronized", style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("Updated ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')} today"),
+                leading:
+                    const Icon(Icons.cloud_sync_rounded, color: Colors.orange),
+                title: const Text("Last Synchronized",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    "Updated ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')} today"),
                 trailing: const Icon(Icons.refresh),
                 onTap: () async {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Syncing all data..."), duration: Duration(seconds: 1)));
-                   await context.read<ISystemRepository>().syncNow(
-                     authRepo: context.read<IAuthRepository>(),
-                     historyRepo: context.read<IHistoryRepository>(),
-                   );
-                   if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Data synchronized for offline use.")));
-                   }
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text("Syncing all data..."),
+                      duration: Duration(seconds: 1)));
+                  await context.read<ISystemRepository>().syncNow(
+                        authRepo: context.read<IAuthRepository>(),
+                        historyRepo: context.read<IHistoryRepository>(),
+                      );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text("Data synchronized for offline use.")));
+                  }
                 },
               ),
             ),
@@ -466,16 +481,16 @@ class _PatientProfileTab extends StatelessWidget {
     String relation = "Child"; // Default
 
     DateTime? selectedDob;
-    
+
     showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(builder: (context, setInternalState) {
-          
           Future<void> selectDate() async {
             final DateTime? picked = await showDatePicker(
               context: context,
-              initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)), // Default to 18 years ago
+              initialDate: DateTime.now().subtract(
+                  const Duration(days: 365 * 18)), // Default to 18 years ago
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
               builder: (context, child) {
@@ -498,6 +513,7 @@ class _PatientProfileTab extends StatelessWidget {
               });
             }
           }
+
           return AlertDialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -545,7 +561,8 @@ class _PatientProfileTab extends StatelessWidget {
                     items: ["Male", "Female", "Other"].map((g) {
                       return DropdownMenuItem(value: g, child: Text(g));
                     }).toList(),
-                    onChanged: (val) => setInternalState(() => selectedGender = val!),
+                    onChanged: (val) =>
+                        setInternalState(() => selectedGender = val!),
                   ),
                   const SizedBox(height: 12),
                   TextField(

@@ -23,12 +23,11 @@ import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import 'package:intl/intl.dart';
 
-
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
-  void _showProfileDialog(BuildContext context, User? user, VitalSigns? lastRecord) {
-
+  void _showProfileDialog(
+      BuildContext context, User? user, VitalSigns? lastRecord) {
     if (user == null) return;
 
     showGeneralDialog(
@@ -77,7 +76,6 @@ class MainMenuScreen extends StatelessWidget {
                                       AppColors.brandGreenDark,
                                     ],
                                   ),
-
                                 ),
                                 child: const CircleAvatar(
                                   radius: 40,
@@ -111,15 +109,23 @@ class MainMenuScreen extends StatelessWidget {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            user.isSynced ? Icons.cloud_done : Icons.cloud_off_rounded,
+                                            user.isSynced
+                                                ? Icons.cloud_done
+                                                : Icons.cloud_off_rounded,
                                             size: 14,
-                                            color: user.isSynced ? AppColors.brandGreen : Colors.orange,
+                                            color: user.isSynced
+                                                ? AppColors.brandGreen
+                                                : Colors.orange,
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
-                                            user.isSynced ? "SYNCED" : "OFFLINE",
+                                            user.isSynced
+                                                ? "SYNCED"
+                                                : "OFFLINE",
                                             style: TextStyle(
-                                              color: user.isSynced ? AppColors.brandGreenDark : Colors.orange[800],
+                                              color: user.isSynced
+                                                  ? AppColors.brandGreenDark
+                                                  : Colors.orange[800],
                                               fontWeight: FontWeight.w900,
                                               fontSize: 12,
                                             ),
@@ -143,19 +149,21 @@ class MainMenuScreen extends StatelessWidget {
                             childAspectRatio: 2.2,
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
-                              _buildInfoCard(Icons.cake_outlined, "Age", "${user.age} Years Old"),
-                              _buildInfoCard(Icons.wc_outlined, "Gender", user.gender),
-                              _buildInfoCard(Icons.location_on_outlined, "Sitio", user.sitio),
+                              _buildInfoCard(Icons.cake_outlined, "Age",
+                                  "${user.age} Years Old"),
                               _buildInfoCard(
-                                Icons.calendar_month_outlined, 
-                                "Last Checkup", 
-                                lastRecord != null 
-                                  ? DateFormat('MMM dd, yyyy').format(lastRecord.timestamp) 
-                                  : "No Record Yet"
-                              ),
+                                  Icons.wc_outlined, "Gender", user.gender),
+                              _buildInfoCard(Icons.location_on_outlined,
+                                  "Sitio", user.sitio),
+                              _buildInfoCard(
+                                  Icons.calendar_month_outlined,
+                                  "Last Checkup",
+                                  lastRecord != null
+                                      ? DateFormat('MMM dd, yyyy')
+                                          .format(lastRecord.timestamp)
+                                      : "No Record Yet"),
                             ],
                           ),
-
 
                           const SizedBox(height: 48),
 
@@ -170,9 +178,11 @@ class MainMenuScreen extends StatelessWidget {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.brandGreen,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 20),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 20),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16)),
+                                          borderRadius:
+                                              BorderRadius.circular(16)),
                                       elevation: 0,
                                     ),
                                     child: const Text("CLOSE",
@@ -190,17 +200,22 @@ class MainMenuScreen extends StatelessWidget {
                                   child: OutlinedButton(
                                     onPressed: () async {
                                       Navigator.pop(ctx);
-                                      await context.read<IAuthRepository>().logout();
+                                      await context
+                                          .read<IAuthRepository>()
+                                          .logout();
                                       if (context.mounted) {
                                         context.go(AppRoutes.login);
                                       }
                                     },
                                     style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Colors.redAccent, width: 2),
+                                      side: const BorderSide(
+                                          color: Colors.redAccent, width: 2),
                                       foregroundColor: Colors.redAccent,
-                                      padding: const EdgeInsets.symmetric(vertical: 20),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 20),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16)),
+                                          borderRadius:
+                                              BorderRadius.circular(16)),
                                     ),
                                     child: const Text("LOGOUT",
                                         style: TextStyle(
@@ -237,7 +252,6 @@ class MainMenuScreen extends StatelessWidget {
             offset: Offset(0, 4),
           ),
         ],
-
       ),
       child: Row(
         children: [
@@ -249,7 +263,10 @@ class MainMenuScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold)),
                 Text(value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -264,7 +281,6 @@ class MainMenuScreen extends StatelessWidget {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +300,7 @@ class MainMenuScreen extends StatelessWidget {
             const Expanded(
               flex: 5,
               child: Center(
-              child: SizedBox.shrink(),
+                child: SizedBox.shrink(),
               ),
             ),
 
@@ -325,23 +341,29 @@ class MainMenuScreen extends StatelessWidget {
                                   style: AppTextStyles.h1
                                       .copyWith(fontSize: c.maxHeight * 0.4),
                                 ),
-                                  InkWell(
-                                    onTap: () async {
-                                      // Pre-load history to get last record
-                                      final history = context.read<IHistoryRepository>();
-                                      await history.loadUserHistory(currentUser!.id);
-                                      final lastRecord = history.records.isNotEmpty ? history.records.first : null;
-                                      
-                                      if (context.mounted) {
-                                        _showProfileDialog(context, currentUser, lastRecord);
-                                      }
-                                    },
-                                    borderRadius: BorderRadius.circular(c.maxHeight),
-                                    child: Icon(Icons.account_circle_outlined,
-                                        size: c.maxHeight * 0.7,
-                                        color: Colors.grey[600]),
-                                  ),
+                                InkWell(
+                                  onTap: () async {
+                                    // Pre-load history to get last record
+                                    final history =
+                                        context.read<IHistoryRepository>();
+                                    await history
+                                        .loadUserHistory(currentUser!.id);
+                                    final lastRecord =
+                                        history.records.isNotEmpty
+                                            ? history.records.first
+                                            : null;
 
+                                    if (context.mounted) {
+                                      _showProfileDialog(
+                                          context, currentUser, lastRecord);
+                                    }
+                                  },
+                                  borderRadius:
+                                      BorderRadius.circular(c.maxHeight),
+                                  child: Icon(Icons.account_circle_outlined,
+                                      size: c.maxHeight * 0.7,
+                                      color: Colors.grey[600]),
+                                ),
                               ],
                             );
                           }),

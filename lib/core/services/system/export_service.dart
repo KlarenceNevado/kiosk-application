@@ -43,7 +43,9 @@ class ExportService {
         directory = await getApplicationDocumentsDirectory();
       }
 
-      if (directory == null) throw Exception("Could not find a valid storage directory.");
+      if (directory == null) {
+        throw Exception("Could not find a valid storage directory.");
+      }
 
       final fullPath = '${directory.path}/$fileName.csv.aes';
       final file = File(fullPath);
@@ -64,7 +66,7 @@ class ExportService {
       return file;
     } catch (e) {
       debugPrint("❌ ExportService: Export failed: $e");
-      
+
       await SystemLogService().logAction(
         action: 'DATA_EXPORT_FAILURE',
         module: 'ADMIN_COMMAND',
@@ -72,7 +74,7 @@ class ExportService {
         userId: userId,
         sensorFailures: 'Error: $e',
       );
-      
+
       return null;
     }
   }

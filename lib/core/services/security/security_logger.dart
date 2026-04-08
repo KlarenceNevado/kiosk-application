@@ -6,7 +6,7 @@ class SecurityLogger {
   /// Masks a string (e.g., "Juan Dela Cruz" -> "J*** D*** C***")
   static String maskPII(String? input) {
     if (input == null || input.isEmpty) return "N/A";
-    
+
     // If it's a phone number (mostly digits)
     if (RegExp(r'^[0-9+ ]+$').hasMatch(input)) {
       if (input.length <= 4) return "****";
@@ -41,7 +41,8 @@ class SecurityLogger {
   static void _internalLog(String level, String message) {
     // In a real production app, we would strip these entirely or send to a secure private sink (like Sentry/Firebase)
     // For this Kiosk, we allow console logging but enforce maskPII.
-    final timestamp = DateTime.now().toIso8601String().split('T').last.substring(0, 12);
+    final timestamp =
+        DateTime.now().toIso8601String().split('T').last.substring(0, 12);
     debugPrint("[$timestamp] [$level] $message");
   }
 }

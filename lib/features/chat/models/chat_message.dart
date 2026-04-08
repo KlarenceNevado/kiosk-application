@@ -62,7 +62,7 @@ class ChatMessage {
 
     // Extraction & Decryption
     String content = map['message'] ?? map['content'] ?? '';
-    
+
     // Decrypt if it looks like E2EE content (contains IV separator ':')
     if (content.contains(':') && !content.startsWith('http')) {
       try {
@@ -86,9 +86,10 @@ class ChatMessage {
       reactions: parsedReactions,
       isForwarded: parseBool(map['is_forwarded']),
       isDeleted: parseBool(map['is_deleted']),
-      updatedAt:
-          DateTime.parse(map['updated_at'] ?? map['timestamp']?.toString() ?? DateTime.now().toIso8601String())
-              .toLocal(),
+      updatedAt: DateTime.parse(map['updated_at'] ??
+              map['timestamp']?.toString() ??
+              DateTime.now().toIso8601String())
+          .toLocal(),
       isSynced: map['is_synced'] == 1,
       mediaUrl: map['media_url'],
       mediaPath: map['media_path'],

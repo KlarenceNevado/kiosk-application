@@ -42,18 +42,19 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   /// Initialize real-time listener for a specific chat between two users
   @override
   void initChat(String currentUserId, String otherUserId) {
-    if (_activeCurrentUserId == currentUserId && 
-        _activeOtherUserId == otherUserId && 
+    if (_activeCurrentUserId == currentUserId &&
+        _activeOtherUserId == otherUserId &&
         _chatChannel != null) {
-      debugPrint("ℹ️ Web Chat: Already initialized for $currentUserId <-> $otherUserId");
+      debugPrint(
+          "ℹ️ Web Chat: Already initialized for $currentUserId <-> $otherUserId");
       return;
     }
-    
+
     _activeCurrentUserId = currentUserId;
     _activeOtherUserId = otherUserId;
     _retryCount = 0;
     _isRealtimeOperational = false;
-    
+
     _messages.clear();
     _stopPolling(); // Stop any existing fallback
     _syncDownCloudMessages(currentUserId, otherUserId);
@@ -72,7 +73,8 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
       final List<dynamic> data = response as List;
       _messages.clear();
-      _messages.addAll(data.map((row) => ChatMessage.fromMap({...row, 'is_synced': 1})));
+      _messages.addAll(
+          data.map((row) => ChatMessage.fromMap({...row, 'is_synced': 1})));
       _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp)); // DESC
       notifyListeners();
     } catch (e) {
@@ -89,77 +91,86 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
     // Diagnostic: Log Session State
     final session = _supabase.auth.currentSession;
-    debugPrint("🔐 Supabase Session: ${session == null ? 'ANON' : 'ACTIVE'} (User: ${session?.user.id})");
+    debugPrint(
+        "🔐 Supabase Session: ${session == null ? 'ANON' : 'ACTIVE'} (User: ${session?.user.id})");
 
     // 1. UNIQUE CHANNEL NAME (Using 'public:' prefix for better anon compatibility)
-    final String channelName = 'public:chat_user_${currentUserId.replaceAll('-', '_')}';
+    final String channelName =
+        'public:chat_user_${currentUserId.replaceAll('-', '_')}';
     final channel = _supabase.channel(channelName);
     _chatChannel = channel;
 
     // 2. BROAD LISTENERS but ENFORCED FILTERS (Security layer on top of RLS)
     channel
         .onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'chat_messages',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'receiver_id',
-        value: currentUserId,
-      ),
-      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
-    )
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'receiver_id',
+            value: currentUserId,
+          ),
+          callback: (payload) =>
+              _onRealtimeChange(payload, currentUserId, otherUserId),
+        )
         .onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'chat_messages',
-      // For updates/deletes we can't easily filter by receiver_id only if they are sender.
-      // But RLS will catch it. We add this second listener for self-sent message sync if needed.
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'sender_id',
-        value: currentUserId,
-      ),
-      callback: (payload) => _onRealtimeChange(payload, currentUserId, otherUserId),
-    ).onBroadcast(
-      // 3. BROADCAST SIGNAL (Immediate "New Message" ping)
-      event: 'new_message',
-      callback: (payload) {
-        debugPrint("🔔 Web Chat: Received Broadcast new_message.");
-        _syncDownCloudMessages(currentUserId, otherUserId);
-      },
-    )
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          // For updates/deletes we can't easily filter by receiver_id only if they are sender.
+          // But RLS will catch it. We add this second listener for self-sent message sync if needed.
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'sender_id',
+            value: currentUserId,
+          ),
+          callback: (payload) =>
+              _onRealtimeChange(payload, currentUserId, otherUserId),
+        )
+        .onBroadcast(
+          // 3. BROADCAST SIGNAL (Immediate "New Message" ping)
+          event: 'new_message',
+          callback: (payload) {
+            debugPrint("🔔 Web Chat: Received Broadcast new_message.");
+            _syncDownCloudMessages(currentUserId, otherUserId);
+          },
+        )
         .subscribe((status, [error]) {
       // Only log first status change to reduce noise
       if (_retryCount == 0) {
         debugPrint("📡 Web Chat Realtime: $status");
       }
-      
+
       if (status == RealtimeSubscribeStatus.subscribed) {
-        _retryCount = 0; 
+        _retryCount = 0;
         _isRealtimeOperational = true;
-        _stopPolling(); 
+        _stopPolling();
         debugPrint("✅ Web Chat: Realtime Operational.");
       }
-      
-      if (status == RealtimeSubscribeStatus.channelError || status == RealtimeSubscribeStatus.timedOut) {
+
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
         _isRealtimeOperational = false;
         _retryCount++;
-        
+
         // Start polling immediately
         _startPolling(currentUserId, otherUserId, interval: 3);
 
         // CAP RETRIES: After 5 failures, give up on Realtime entirely
         if (_retryCount >= 5) {
-          debugPrint("🛑 Web Chat: WebSocket unavailable. Using REST polling only.");
+          debugPrint(
+              "🛑 Web Chat: WebSocket unavailable. Using REST polling only.");
           _chatChannel?.unsubscribe();
           _chatChannel = null;
           return;
         }
 
-        final int delaySeconds = (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 4)))).inSeconds;
+        final int delaySeconds =
+            (const Duration(seconds: 1) * (1 << (_retryCount.clamp(1, 4))))
+                .inSeconds;
         debugPrint("🔄 Realtime retry $_retryCount/5 in ${delaySeconds}s...");
-        
+
         _retryTimer = Timer(Duration(seconds: delaySeconds), () {
           _setupRealtime(currentUserId, otherUserId);
         });
@@ -169,15 +180,16 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
   int _pollCount = 0;
   int _activePollingInterval = 0;
-  
-  void _startPolling(String currentUserId, String otherUserId, {int interval = 10}) {
+
+  void _startPolling(String currentUserId, String otherUserId,
+      {int interval = 10}) {
     // Skip if already polling at this interval
     if (_pollingTimer != null && _activePollingInterval == interval) return;
-    
+
     // If interval changed, restart
     _pollingTimer?.cancel();
     _pollingTimer = null;
-    
+
     _activePollingInterval = interval;
     debugPrint("⚡ Web Chat: REST polling active (${interval}s).");
     _pollingTimer = Timer.periodic(Duration(seconds: interval), (_) {
@@ -196,9 +208,10 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     _pollingTimer = null;
   }
 
-  void _onRealtimeChange(PostgresChangePayload payload, String currentUserId, String otherUserId) {
+  void _onRealtimeChange(
+      PostgresChangePayload payload, String currentUserId, String otherUserId) {
     final row = payload.newRecord;
-    
+
     if (payload.eventType == PostgresChangeEvent.delete) {
       final deletedId = payload.oldRecord['id'];
       if (deletedId != null) {
@@ -212,8 +225,9 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
     final String? msgReceiverId = row['receiver_id'];
 
     // Ensure message belongs to the CURRENT conversation view
-    final bool isRelevant = (msgSenderId == currentUserId && msgReceiverId == otherUserId) ||
-                            (msgSenderId == otherUserId && msgReceiverId == currentUserId);
+    final bool isRelevant =
+        (msgSenderId == currentUserId && msgReceiverId == otherUserId) ||
+            (msgSenderId == otherUserId && msgReceiverId == currentUserId);
 
     if (!isRelevant) return;
 
@@ -241,7 +255,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
       await _presenceChannel!.unsubscribe();
       _presenceChannel = null;
     }
-    
+
     // Using 'public:' prefix for better compatibility with anon roles
     _presenceChannel = _supabase.channel('public:online-users');
 
@@ -295,7 +309,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
 
     try {
       await _supabase.from('chat_messages').insert(message.toSupabaseMap());
-      
+
       // 5. BROADCAST NOTIFICATION (Optional: Speed-up signal)
       // _chatChannel?.send(type: RealtimeListenTypes.broadcast, event: 'new_message', payload: {'id': message.id});
     } catch (e) {

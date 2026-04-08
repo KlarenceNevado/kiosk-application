@@ -95,7 +95,8 @@ class VitalSigns {
       status: map['status'] ?? 'pending',
       remarks: map['remarks'],
       followUpAction: map['followUpAction'] ?? map['follow_up_action'],
-      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
+      updatedAt:
+          map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
       isDeleted: map['is_deleted'] == 1 || map['is_deleted'] == true,
       isSynced: map['is_synced'] == 1 || map['is_synced'] == true,
     );

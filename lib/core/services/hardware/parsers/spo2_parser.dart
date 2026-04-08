@@ -8,7 +8,7 @@ class SpO2ParserResult {
 
 class SpO2Parser {
   /// Parses the CMS50D+ 5-byte pulse oximeter binary format from a buffer.
-  /// 
+  ///
   /// Protocol:
   /// Byte 1: Header (Bit 7 is always 1, usually 0b10000001 or 0x81)
   /// Byte 2-5: Data (Bit 7 is usually 0)
@@ -20,8 +20,8 @@ class SpO2Parser {
       // In some modes, it's exactly 0x81.
       if ((buffer[i] & 0x80) != 0) {
         final packet = buffer.sublist(i, i + 5);
-        
-        // Basic validation: the following 4 bytes should NOT have Bit 7 set 
+
+        // Basic validation: the following 4 bytes should NOT have Bit 7 set
         // (This depends on the specific CMS50D+ protocol version)
         bool isValid = true;
         for (int j = 1; j < 5; j++) {
@@ -44,10 +44,9 @@ class SpO2Parser {
         }
       }
     }
-    
-    // If we have a lot of junk at the start, we might want to clear it, 
+
+    // If we have a lot of junk at the start, we might want to clear it,
     // but the SerialService should handle the 'bytesConsumed' logic.
     return null;
   }
 }
-

@@ -5,18 +5,20 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() async {
   sqfliteFfiInit();
   var dbFactory = databaseFactoryFfi;
-  const dbPath = "C:\\Users\\Klarence Nevado\\AppData\\Roaming\\com.example\\kiosk_application\\kiosk_health.db";
-  
+  const dbPath =
+      "C:\\Users\\Klarence Nevado\\AppData\\Roaming\\com.example\\kiosk_application\\kiosk_health.db";
+
   if (!File(dbPath).existsSync()) {
     print("❌ Database not found.");
     return;
   }
 
   final db = await dbFactory.openDatabase(dbPath);
-  
+
   print("🛠️ Starting Local Schema Alignment...");
 
-  Future<void> renameColumn(String table, String oldName, String newName, String type) async {
+  Future<void> renameColumn(
+      String table, String oldName, String newName, String type) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
     bool hasOld = columns.any((c) => c['name'] == oldName);
     bool hasNew = columns.any((c) => c['name'] == newName);
@@ -26,10 +28,12 @@ void main() async {
       // SQLite doesn't support RENAME COLUMN in older versions, so we use ALTER TABLE RENAME if possible
       // But standard way is:
       try {
-        await db.execute('ALTER TABLE $table RENAME COLUMN $oldName TO $newName');
+        await db
+            .execute('ALTER TABLE $table RENAME COLUMN $oldName TO $newName');
         print("  ✅ Done.");
       } catch (e) {
-        print("  ⚠️ Failed to rename via ALTER: $e. Using fallback (Add + Copy + Drop not possible here easily).");
+        print(
+            "  ⚠️ Failed to rename via ALTER: $e. Using fallback (Add + Copy + Drop not possible here easily).");
       }
     } else if (hasNew) {
       print("  ✅ $table.$newName already exists.");
@@ -56,13 +60,15 @@ void main() async {
   // 3. Ensure other columns exist for sync
   final vitalCols = await db.rawQuery('PRAGMA table_info(vitals)');
   if (!vitalCols.any((c) => c['name'] == 'is_synced')) {
-    await db.execute('ALTER TABLE vitals ADD COLUMN is_synced INTEGER DEFAULT 0');
+    await db
+        .execute('ALTER TABLE vitals ADD COLUMN is_synced INTEGER DEFAULT 0');
   }
   if (!vitalCols.any((c) => c['name'] == 'updated_at')) {
     await db.execute('ALTER TABLE vitals ADD COLUMN updated_at TEXT');
   }
   if (!vitalCols.any((c) => c['name'] == 'is_deleted')) {
-    await db.execute('ALTER TABLE vitals ADD COLUMN is_deleted INTEGER DEFAULT 0');
+    await db
+        .execute('ALTER TABLE vitals ADD COLUMN is_deleted INTEGER DEFAULT 0');
   }
 
   await db.close();

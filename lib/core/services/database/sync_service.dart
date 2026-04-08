@@ -25,7 +25,11 @@ class SyncService with WidgetsBindingObserver {
     LogSyncHandler? lHandler,
   }) {
     // In unit tests, we may provide all handlers to bypass Supabase initialization
-    if (pHandler != null && vHandler != null && sHandler != null && cHandler != null && lHandler != null) {
+    if (pHandler != null &&
+        vHandler != null &&
+        sHandler != null &&
+        cHandler != null &&
+        lHandler != null) {
       patientHandler = pHandler;
       vitalsHandler = vHandler;
       systemHandler = sHandler;
@@ -61,7 +65,7 @@ class SyncService with WidgetsBindingObserver {
       cHandler: c,
     );
   }
-  
+
   static SyncService? _instance;
   factory SyncService() => _instance ??= SyncService._internal();
 
@@ -77,13 +81,25 @@ class SyncService with WidgetsBindingObserver {
 
   SupabaseClient get supabase => Supabase.instance.client;
 
+  DateTime? _lastSyncTime;
+  DateTime? get lastSyncTime => _lastSyncTime;
+
+  final _syncStatusController = StreamController<DateTime?>.broadcast();
+  Stream<DateTime?> get lastSyncStream => _syncStatusController.stream;
+
   // --- PUBLIC STREAMS (Delegated) ---
-  Stream<List<Map<String, dynamic>>> get announcementStream => systemHandler.announcementStream;
-  Stream<Map<String, dynamic>> get newAnnouncementStream => systemHandler.newAnnouncementStream;
-  Stream<Map<String, dynamic>> get newVitalStream => vitalsHandler.newRecordStream;
-  Stream<Map<String, dynamic>> get newAlertStream => systemHandler.newAlertStream;
-  Stream<List<Map<String, dynamic>>> get scheduleStream => systemHandler.scheduleStream;
-  Stream<List<Map<String, dynamic>>> get alertStream => systemHandler.alertStream;
+  Stream<List<Map<String, dynamic>>> get announcementStream =>
+      systemHandler.announcementStream;
+  Stream<Map<String, dynamic>> get newAnnouncementStream =>
+      systemHandler.newAnnouncementStream;
+  Stream<Map<String, dynamic>> get newVitalStream =>
+      vitalsHandler.newRecordStream;
+  Stream<Map<String, dynamic>> get newAlertStream =>
+      systemHandler.newAlertStream;
+  Stream<List<Map<String, dynamic>>> get scheduleStream =>
+      systemHandler.scheduleStream;
+  Stream<List<Map<String, dynamic>>> get alertStream =>
+      systemHandler.alertStream;
   Stream<void> get patientStream => patientHandler.stream;
   Stream<void> get vitalsStream => vitalsHandler.stream;
 
@@ -136,10 +152,10 @@ class SyncService with WidgetsBindingObserver {
     _syncTimer = null;
     _connectionSubscription?.cancel();
     _connectionSubscription = null;
-    
+
     stopListening(); // Removes WidgetsBinding observer and unsubscribes most handlers
     chatHandler.unsubscribe();
-    
+
     _isSyncing = false;
     _syncMutex = null;
     _syncCallbacks.clear();
@@ -147,13 +163,15 @@ class SyncService with WidgetsBindingObserver {
 
   void _listenToPowerMode() {
     PowerManagerService().modeStream.listen((mode) {
-      debugPrint("🔄 SyncService: Power mode changed to $mode. Adjusting interval...");
+      debugPrint(
+          "🔄 SyncService: Power mode changed to $mode. Adjusting interval...");
       _syncTimer?.cancel();
-      
+
       Duration interval;
       switch (mode) {
         case PowerMode.active:
-          interval = kIsWeb ? const Duration(seconds: 10) : const Duration(minutes: 1);
+          interval =
+              kIsWeb ? const Duration(seconds: 10) : const Duration(minutes: 1);
           break;
         case PowerMode.eco:
           interval = const Duration(minutes: 15);
@@ -162,7 +180,7 @@ class SyncService with WidgetsBindingObserver {
           interval = const Duration(minutes: 60); // Very rare sync
           break;
       }
-      
+
       _syncTimer = Timer.periodic(interval, (_) => _attemptSync());
     });
   }
@@ -222,7 +240,6 @@ class SyncService with WidgetsBindingObserver {
       systemHandler.subscribeAll();
       patientHandler.subscribe((_) => patientHandler.pull());
       vitalsHandler.subscribe((_) => vitalsHandler.pull());
-
     }
   }
 
@@ -275,7 +292,8 @@ class SyncService with WidgetsBindingObserver {
         if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
         // Only push logs if we have a valid session (Proper fix for 42501 RLS noise)
-        if (Supabase.instance.client.auth.currentSession != null) logHandler.push(),
+        if (Supabase.instance.client.auth.currentSession != null)
+          logHandler.push(),
       ]);
 
       // Parallel Pull
@@ -288,6 +306,9 @@ class SyncService with WidgetsBindingObserver {
       ]);
 
       await _cacheFilesInBackground();
+      
+      _lastSyncTime = DateTime.now();
+      _syncStatusController.add(_lastSyncTime);
     } finally {
       _isSyncing = false;
     }
@@ -302,19 +323,24 @@ class SyncService with WidgetsBindingObserver {
 
       final db = await DatabaseHelper.instance.database;
       // Vitals Reports
-      final List<Map<String, dynamic>> vr = await db.query('vitals', where: 'report_url IS NOT NULL AND report_path IS NULL');
+      final List<Map<String, dynamic>> vr = await db.query('vitals',
+          where: 'report_url IS NOT NULL AND report_path IS NULL');
       for (final row in vr) {
-        final file = await FileStorageService().getCachedFile(row['report_url']);
+        final file =
+            await FileStorageService().getCachedFile(row['report_url']);
         if (file != null) {
-          await db.update('vitals', {'report_path': file.path}, where: 'id = ?', whereArgs: [row['id']]);
+          await db.update('vitals', {'report_path': file.path},
+              where: 'id = ?', whereArgs: [row['id']]);
         }
       }
       // Announcements
-      final List<Map<String, dynamic>> ar = await db.query('announcements', where: 'media_url IS NOT NULL AND media_path IS NULL');
+      final List<Map<String, dynamic>> ar = await db.query('announcements',
+          where: 'media_url IS NOT NULL AND media_path IS NULL');
       for (final row in ar) {
         final file = await FileStorageService().getCachedFile(row['media_url']);
         if (file != null) {
-          await db.update('announcements', {'media_path': file.path}, where: 'id = ?', whereArgs: [row['id']]);
+          await db.update('announcements', {'media_path': file.path},
+              where: 'id = ?', whereArgs: [row['id']]);
         }
       }
     } catch (_) {}
@@ -337,38 +363,90 @@ class SyncService with WidgetsBindingObserver {
   // --- DELEGATION: PATIENTS ---
   Future<User?> createPatient(User user) => patientHandler.createPatient(user);
   Future<bool> updatePatient(User user) => patientHandler.updatePatient(user);
-  Future<bool> deletePatient(String userId) => patientHandler.deletePatient(userId);
-  Future<List<User>> searchPatients(String query) => patientHandler.searchPatients(query);
-  Future<User?> authenticatePatient(String phone, String pin) => patientHandler.authenticatePatient(phone, pin);
-  Future<List<User>> fetchDependents(String parentId) => patientHandler.fetchDependents(parentId);
-  Future<List<Map<String, dynamic>>> findPatient(String name, String phone) => patientHandler.findPatient(name, phone);
+  Future<bool> deletePatient(String userId) =>
+      patientHandler.deletePatient(userId);
+  Future<List<User>> searchPatients(String query) =>
+      patientHandler.searchPatients(query);
+  Future<User?> authenticatePatient(String phone, String pin) =>
+      patientHandler.authenticatePatient(phone, pin);
+  Future<List<User>> fetchDependents(String parentId) =>
+      patientHandler.fetchDependents(parentId);
+  Future<List<Map<String, dynamic>>> findPatient(String name, String phone) =>
+      patientHandler.findPatient(name, phone);
 
   // --- DELEGATION: VITALS ---
-  Future<void> createVitalSign(VitalSigns vital) => vitalsHandler.createVitalSign(vital);
-  Future<void> updateVitalSign(VitalSigns vital) => vitalsHandler.updateVitalSign(vital);
-  Future<List<VitalSigns>> fetchPatientVitalsLocal(String userId) => vitalsHandler.fetchPatientVitalsLocal(userId);
-  Future<List<VitalSigns>> fetchPatientVitals(String userId) => vitalsHandler.fetchPatientVitals(userId);
-  Future<void> syncFamilyVitals(List<String> ids) => vitalsHandler.syncFamilyVitals(ids);
+  Future<void> createVitalSign(VitalSigns vital) =>
+      vitalsHandler.createVitalSign(vital);
+  Future<void> updateVitalSign(VitalSigns vital) =>
+      vitalsHandler.updateVitalSign(vital);
+  Future<List<VitalSigns>> fetchPatientVitalsLocal(String userId) =>
+      vitalsHandler.fetchPatientVitalsLocal(userId);
+  Future<List<VitalSigns>> fetchPatientVitals(String userId) =>
+      vitalsHandler.fetchPatientVitals(userId);
+  Future<void> syncFamilyVitals(List<String> ids) =>
+      vitalsHandler.syncFamilyVitals(ids);
 
   // --- DELEGATION: SYSTEM ---
-  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive, bool isArchived = false}) =>
-      systemHandler.pushAnnouncement(id: id, title: title, content: content, targetGroup: targetGroup, timestamp: timestamp, isActive: isActive, isArchived: isArchived);
+  Future<void> pushAnnouncement(
+          {required String id,
+          required String title,
+          required String content,
+          required String targetGroup,
+          required DateTime timestamp,
+          required bool isActive,
+          bool isArchived = false}) =>
+      systemHandler.pushAnnouncement(
+          id: id,
+          title: title,
+          content: content,
+          targetGroup: targetGroup,
+          timestamp: timestamp,
+          isActive: isActive,
+          isArchived: isArchived);
 
-  Future<void> deleteAnnouncement(String id) => systemHandler.deleteAnnouncement(id);
+  Future<void> deleteAnnouncement(String id) =>
+      systemHandler.deleteAnnouncement(id);
 
-  Future<void> pushSchedule({required String id, required String type, required DateTime date, required String location, required String assigned, required int colorValue}) =>
-      systemHandler.pushSchedule(id: id, type: type, date: date, location: location, assigned: assigned, colorValue: colorValue);
+  Future<void> pushSchedule(
+          {required String id,
+          required String type,
+          required DateTime date,
+          required String location,
+          required String assigned,
+          required int colorValue}) =>
+      systemHandler.pushSchedule(
+          id: id,
+          type: type,
+          date: date,
+          location: location,
+          assigned: assigned,
+          colorValue: colorValue);
 
-  Future<void> deleteScheduleCloud(String id) => systemHandler.deleteScheduleCloud(id);
+  Future<void> deleteScheduleCloud(String id) =>
+      systemHandler.deleteScheduleCloud(id);
 
-  Future<void> pushAlert({required String id, required String message, required String targetGroup, required bool isEmergency, required DateTime timestamp, required bool isActive}) =>
-      systemHandler.pushAlert(id: id, message: message, targetGroup: targetGroup, isEmergency: isEmergency, timestamp: timestamp, isActive: isActive);
+  Future<void> pushAlert(
+          {required String id,
+          required String message,
+          required String targetGroup,
+          required bool isEmergency,
+          required DateTime timestamp,
+          required bool isActive}) =>
+      systemHandler.pushAlert(
+          id: id,
+          message: message,
+          targetGroup: targetGroup,
+          isEmergency: isEmergency,
+          timestamp: timestamp,
+          isActive: isActive);
 
   Future<void> deleteAlert(String id) => systemHandler.deleteAlert(id);
 
-  Future<void> reactToAnnouncement(String id, String emoji, String userId) => systemHandler.reactToAnnouncement(id, emoji, userId);
+  Future<void> reactToAnnouncement(String id, String emoji, String userId) =>
+      systemHandler.reactToAnnouncement(id, emoji, userId);
 
-  Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
+  Future<List<Map<String, dynamic>>> fetchAnnouncements(
+      {dynamic currentUser}) async {
     await DatabaseHelper.instance.database;
     return systemHandler.fetchAnnouncements(currentUser: currentUser);
   }
@@ -378,9 +456,11 @@ class SyncService with WidgetsBindingObserver {
     return systemHandler.fetchAlerts(currentUser: currentUser);
   }
 
-  Future<void> forceDownSyncAndRefresh(var authRepo, var historyRepo, {bool triggerStream = true}) async {
+  Future<void> forceDownSyncAndRefresh(var authRepo, var historyRepo,
+      {bool triggerStream = true}) async {
     await _withSyncMutex(() async {
-      await Future.wait([patientHandler.pull(), vitalsHandler.pull(), systemHandler.pull()]);
+      await Future.wait(
+          [patientHandler.pull(), vitalsHandler.pull(), systemHandler.pull()]);
       if (authRepo != null) {
         await authRepo.refreshUsers();
       }
@@ -390,16 +470,16 @@ class SyncService with WidgetsBindingObserver {
     });
   }
 
-  /// Resolves the current user ID by checking Supabase Native Auth 
+  /// Resolves the current user ID by checking Supabase Native Auth
   /// and falling back to the local database session (for PWA compatibility).
   String? _getCurrentUserId() {
     // 2. Check Native Supabase Auth (Crucial for RLS identification)
     final nativeId = Supabase.instance.client.auth.currentUser?.id;
     if (nativeId != null) return nativeId;
-    
+
     // 3. Explicitly set ID fallback
     if (_userId != null) return _userId;
 
-    return null; 
+    return null;
   }
 }

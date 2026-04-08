@@ -16,12 +16,14 @@ Future<void> requestWebPermission() async {
 /// Shows a browser notification
 void showWebNotification(String title, String body, {String? tag}) {
   if (web.Notification.permission == 'granted') {
-    web.Notification(title, web.NotificationOptions(
-      body: body,
-      icon: 'icons/Icon-192.png',
-      badge: 'icons/patient_icon.png',
-      tag: tag ?? 'default',
-      vibrate: [200.toJS, 100.toJS, 200.toJS].toJS,
-    ));
+    web.Notification(
+        title,
+        web.NotificationOptions(
+          body: body,
+          icon: 'icons/Icon-192.png',
+          badge: 'icons/patient_icon.png',
+          tag: tag ?? 'default',
+          vibrate: [200.toJS, 100.toJS, 200.toJS].toJS,
+        ));
   }
 }

@@ -37,7 +37,7 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
         setState(() => _isLoading = false);
         return;
       }
-      
+
       final historyRepo = context.read<IHistoryRepository>();
       await historyRepo.loadUserHistory(user.id);
       final records = historyRepo.records;
@@ -128,16 +128,19 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                     ),
                     Text(
                       timeStr,
-                      style: TextStyle(fontSize: 13, color: Colors.blueGrey.shade400),
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.blueGrey.shade400),
                     ),
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.brandGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.brandGreen.withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: AppColors.brandGreen.withValues(alpha: 0.2)),
                   ),
                   child: Text(
                     "ID: $recordId",
@@ -207,11 +210,15 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(CupertinoIcons.chat_bubble_text_fill, size: 14, color: Colors.blueGrey.shade400),
+                        Icon(CupertinoIcons.chat_bubble_text_fill,
+                            size: 14, color: Colors.blueGrey.shade400),
                         const SizedBox(width: 8),
                         const Text(
                           "MEDICAL REMARKS",
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B)),
                         ),
                         const Spacer(),
                         _buildStatusBadge(record.status),
@@ -220,7 +227,8 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                     const SizedBox(height: 8),
                     Text(
                       record.remarks!,
-                      style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xFF334155)),
+                      style: const TextStyle(
+                          fontSize: 13, height: 1.4, color: Color(0xFF334155)),
                     ),
                   ],
                 ),
@@ -232,7 +240,8 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final authRepo = Provider.of<IAuthRepository>(context, listen: false);
+                  final authRepo =
+                      Provider.of<IAuthRepository>(context, listen: false);
                   await PatientPdfService.generateAndPrintRecord(
                     patient: authRepo.currentUser!,
                     record: record,
@@ -242,7 +251,8 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
                 label: const Text("ACCESS CLINICAL PDF"),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.brandGreen,
-                  side: BorderSide(color: AppColors.brandGreen.withValues(alpha: 0.3)),
+                  side: BorderSide(
+                      color: AppColors.brandGreen.withValues(alpha: 0.3)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
@@ -253,7 +263,8 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
     );
   }
 
-  Widget _clinicalMetric(String label, String value, String unit, IconData icon, Color color) {
+  Widget _clinicalMetric(
+      String label, String value, String unit, IconData icon, Color color) {
     return SizedBox(
       width: 145,
       child: Row(
@@ -339,7 +350,6 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
     );
   }
 
-
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -378,5 +388,4 @@ class _MobileHistoryScreenState extends State<MobileHistoryScreen> {
       ),
     );
   }
-
 }

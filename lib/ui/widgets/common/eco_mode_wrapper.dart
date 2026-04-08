@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/system/app_environment.dart';
 
-/// A wrapper widget that suspends all animations (Tickers) system-wide 
+/// A wrapper widget that suspends all animations (Tickers) system-wide
 /// when PowerManagerService enters Eco-Mode.
 class EcoModeWrapper extends StatelessWidget {
   final Widget child;
@@ -19,8 +19,7 @@ class EcoModeWrapper extends StatelessWidget {
           child: Stack(
             children: [
               child!,
-              if (isEcoActive)
-                _buildEcoOverlay(),
+              if (isEcoActive) _buildEcoOverlay(),
             ],
           ),
         );

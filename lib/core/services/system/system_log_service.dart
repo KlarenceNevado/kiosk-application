@@ -22,7 +22,7 @@ class SystemLogService {
     _currentUserId = userId;
     _currentSessionId = _uuid.v4();
     _sessionStartTime = DateTime.now();
-    
+
     logAction(
       action: 'SESSION_START',
       module: 'AUTH',
@@ -75,10 +75,11 @@ class SystemLogService {
 
     try {
       await _db.createSystemLog(log);
-      
+
       // Also mirror to SecurityLogger for console output (sanitized)
       if (severity == 'ERROR') {
-        SecurityLogger.error("System Log Error: $action", error: sensorFailures);
+        SecurityLogger.error("System Log Error: $action",
+            error: sensorFailures);
       } else if (severity == 'WARNING') {
         SecurityLogger.warning("System Log Warning: $action");
       } else {
@@ -99,11 +100,11 @@ class SystemLogService {
     final voltage = power.currentVoltage;
     final batteryLevel = power.batteryPercentage;
 
-    final sensorStatusStr = availableSensors?.entries
-        .map((e) => "${e.key}: ${e.value}")
-        .join(", ");
-    
-    final remarks = "Solar: ${isSolarActive ? 'ON' : 'OFF'}, Battery: $batteryLevel% ($voltage V), Sensors: ${sensorStatusStr ?? 'None detected'}";
+    final sensorStatusStr =
+        availableSensors?.entries.map((e) => "${e.key}: ${e.value}").join(", ");
+
+    final remarks =
+        "Solar: ${isSolarActive ? 'ON' : 'OFF'}, Battery: $batteryLevel% ($voltage V), Sensors: ${sensorStatusStr ?? 'None detected'}";
 
     await logAction(
       action: 'SYSTEM_UPTIME_HEALTH',
@@ -111,7 +112,7 @@ class SystemLogService {
       severity: 'INFO',
       sensorFailures: remarks,
     );
-    
+
     debugPrint("📊 [SystemLogService] Uptime health logged for H2 validation.");
   }
 
@@ -119,7 +120,8 @@ class SystemLogService {
   Future<void> exportLogsToConsole({int limit = 20}) async {
     final logs = await _db.getSystemLogs(limit: limit);
     debugPrint("\n--- UNIFIED SYSTEM LOG EXPORT ---");
-    debugPrint("LogID | UserID | SessionID | Date | Time | Action | Duration | Result | Failed Sensor | Remarks");
+    debugPrint(
+        "LogID | UserID | SessionID | Date | Time | Action | Duration | Result | Failed Sensor | Remarks");
     for (final log in logs) {
       debugPrint(log.toCsvRow());
     }

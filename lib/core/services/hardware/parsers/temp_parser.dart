@@ -16,4 +16,3 @@ class TempParser {
     return null;
   }
 }
-

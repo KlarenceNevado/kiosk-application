@@ -35,11 +35,14 @@ void main() {
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository()),
-          ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
+          ChangeNotifierProvider<IAuthRepository>(
+              create: (_) => LocalAuthRepository()),
+          ChangeNotifierProvider<IHistoryRepository>(
+              create: (_) => LocalHistoryRepository()),
           ChangeNotifierProvider(create: (_) => LanguageProvider()),
           ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-          ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+          ChangeNotifierProvider<IChatRepository>(
+              create: (_) => LocalChatRepository()),
           Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
         ],
         child: const PatientMobileApp(),

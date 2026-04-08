@@ -68,7 +68,8 @@ void main() {
       await tester.pumpWidget(createMainMenu());
       await tester.pump();
 
-      expect(find.text('What would you like to do today, Jane?'), findsOneWidget);
+      expect(
+          find.text('What would you like to do today, Jane?'), findsOneWidget);
     });
 
     testWidgets('shows all core health check options', (tester) async {

@@ -17,7 +17,7 @@ class _AdminHardwareTabState extends State<AdminHardwareTab> {
 
   void _startCalibration(String sensorName) async {
     final sensorManager = context.read<SensorManager>();
-    
+
     setState(() {
       _isCalibrating = true;
       _calibrationProgress = 0.1;
@@ -31,7 +31,7 @@ class _AdminHardwareTabState extends State<AdminHardwareTab> {
         await sensorManager.weightSensor.calibrate();
         // Add others if they support calibration
       }
-      
+
       // Visual feedback loop for the UI
       for (int i = 1; i <= 10; i++) {
         await Future.delayed(const Duration(milliseconds: 200));

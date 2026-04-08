@@ -40,15 +40,17 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
 
   Future<void> _fetchRecord() async {
     try {
-      final syncHandler = Provider.of<VitalsSyncHandler>(context, listen: false);
+      final syncHandler =
+          Provider.of<VitalsSyncHandler>(context, listen: false);
       final record = await syncHandler.fetchVitalSignById(widget.recordId);
-      
+
       if (mounted) {
         setState(() {
           _record = record;
           _isLoading = false;
           if (record == null) {
-            _error = "Record not found. It may still be syncing from the Kiosk.";
+            _error =
+                "Record not found. It may still be syncing from the Kiosk.";
           }
         });
       }
@@ -64,14 +66,15 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
 
   Future<void> _exportPdf() async {
     if (_record == null) return;
-    
+
     setState(() => _isExporting = true);
-    
+
     try {
       final pdf = pw.Document();
       final record = _record!;
-      final dateStr = DateFormat('MMMM dd, yyyy - hh:mm a').format(record.timestamp);
-      
+      final dateStr =
+          DateFormat('MMMM dd, yyyy - hh:mm a').format(record.timestamp);
+
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
@@ -88,55 +91,82 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text("ISLA VERDE HEALTH KIOSK", 
-                            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
-                          pw.Text("Official Clinical Summary Report", 
-                            style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
+                          pw.Text("ISLA VERDE HEALTH KIOSK",
+                              style: pw.TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.green900)),
+                          pw.Text("Official Clinical Summary Report",
+                              style: const pw.TextStyle(
+                                  fontSize: 14, color: PdfColors.grey700)),
                         ],
                       ),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
-                          pw.Text("RECORD ID", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey500)),
-                          pw.Text(record.id.toUpperCase(), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          pw.Text("RECORD ID",
+                              style: const pw.TextStyle(
+                                  fontSize: 10, color: PdfColors.grey500)),
+                          pw.Text(record.id.toUpperCase(),
+                              style: pw.TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: pw.FontWeight.bold)),
                         ],
                       ),
                     ],
                   ),
                   pw.Divider(thickness: 2, color: PdfColors.green),
                   pw.SizedBox(height: 20),
-                  
+
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text("DATE: $dateStr", style: const pw.TextStyle(fontSize: 12)),
-                      pw.Text("SOURCE: Isla Verde Community Kiosk #1", style: const pw.TextStyle(fontSize: 12)),
+                      pw.Text("DATE: $dateStr",
+                          style: const pw.TextStyle(fontSize: 12)),
+                      pw.Text("SOURCE: Isla Verde Community Kiosk #1",
+                          style: const pw.TextStyle(fontSize: 12)),
                     ],
                   ),
                   pw.SizedBox(height: 40),
-                  
-                  pw.Text("CLINICAL MEASUREMENTS", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+
+                  pw.Text("CLINICAL MEASUREMENTS",
+                      style: pw.TextStyle(
+                          fontSize: 16, fontWeight: pw.FontWeight.bold)),
                   pw.SizedBox(height: 10),
                   pw.Table(
                     border: pw.TableBorder.all(color: PdfColors.grey300),
                     children: [
                       _buildPdfHeaderRow(),
-                      _buildPdfRow("Blood Pressure", "${record.systolicBP}/${record.diastolicBP}", "mmHg", VitalValidator.evaluateBP(record.systolicBP, record.diastolicBP)),
-                      _buildPdfRow("Heart Rate", "${record.heartRate}", "bpm", VitalValidator.evaluateHR(record.heartRate)),
-                      _buildPdfRow("Oxygen (SpO2)", "${record.oxygen}", "%", VitalValidator.evaluateSpO2(record.oxygen)),
-                      _buildPdfRow("Temperature", "${record.temperature}", "°C", VitalValidator.evaluateTemp(record.temperature)),
+                      _buildPdfRow(
+                          "Blood Pressure",
+                          "${record.systolicBP}/${record.diastolicBP}",
+                          "mmHg",
+                          VitalValidator.evaluateBP(
+                              record.systolicBP, record.diastolicBP)),
+                      _buildPdfRow("Heart Rate", "${record.heartRate}", "bpm",
+                          VitalValidator.evaluateHR(record.heartRate)),
+                      _buildPdfRow("Oxygen (SpO2)", "${record.oxygen}", "%",
+                          VitalValidator.evaluateSpO2(record.oxygen)),
+                      _buildPdfRow("Temperature", "${record.temperature}", "°C",
+                          VitalValidator.evaluateTemp(record.temperature)),
                       if (record.bmi != null)
-                        _buildPdfRow("BMI", record.bmi!.toStringAsFixed(1), "kg/m²", VitalValidator.evaluateBMI(record.bmi!)),
+                        _buildPdfRow("BMI", record.bmi!.toStringAsFixed(1),
+                            "kg/m²", VitalValidator.evaluateBMI(record.bmi!)),
                     ],
                   ),
-                  
+
                   pw.Spacer(),
                   pw.Divider(color: PdfColors.grey300),
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text("Generated via Isla Verde Digital Handover System", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
-                      pw.Text("Verification: ${record.id.substring(0, 8)}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+                      pw.Text(
+                          "Generated via Isla Verde Digital Handover System",
+                          style: const pw.TextStyle(
+                              fontSize: 8, color: PdfColors.grey500)),
+                      pw.Text("Verification: ${record.id.substring(0, 8)}",
+                          style: const pw.TextStyle(
+                              fontSize: 8, color: PdfColors.grey500)),
                     ],
                   ),
                 ],
@@ -150,7 +180,6 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         onLayout: (PdfPageFormat format) async => pdf.save(),
         name: 'Medical_Report_${record.id.substring(0, 8)}.pdf',
       );
-      
     } catch (e) {
       debugPrint("PDF Error: $e");
     } finally {
@@ -162,27 +191,35 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
     return pw.TableRow(
       children: [
         pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          color: PdfColors.grey100,
-          child: pw.Text("VITAL SIGN", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+            padding: const pw.EdgeInsets.all(8),
+            color: PdfColors.grey100,
+            child: pw.Text("VITAL SIGN",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
         pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          color: PdfColors.grey100,
-          child: pw.Text("VALUE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+            padding: const pw.EdgeInsets.all(8),
+            color: PdfColors.grey100,
+            child: pw.Text("VALUE",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
         pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          color: PdfColors.grey100,
-          child: pw.Text("STATUS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+            padding: const pw.EdgeInsets.all(8),
+            color: PdfColors.grey100,
+            child: pw.Text("STATUS",
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
       ],
     );
   }
 
-  pw.TableRow _buildPdfRow(String label, String value, String unit, VitalEvaluation eval) {
+  pw.TableRow _buildPdfRow(
+      String label, String value, String unit, VitalEvaluation eval) {
     return pw.TableRow(
       children: [
         pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label)),
-        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text("$value $unit")),
-        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(eval.label.toUpperCase())),
+        pw.Padding(
+            padding: const pw.EdgeInsets.all(8),
+            child: pw.Text("$value $unit")),
+        pw.Padding(
+            padding: const pw.EdgeInsets.all(8),
+            child: pw.Text(eval.label.toUpperCase())),
       ],
     );
   }
@@ -191,10 +228,10 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: _isLoading 
-          ? _buildLoading() 
-          : _error != null 
-              ? _buildError() 
+      body: _isLoading
+          ? _buildLoading()
+          : _error != null
+              ? _buildError()
               : _buildSuccess(),
     );
   }
@@ -206,8 +243,8 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         children: [
           const CircularProgressIndicator(color: AppColors.brandGreen),
           const SizedBox(height: 24),
-          Text("Retrieving your report...", 
-            style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+          Text("Retrieving your report...",
+              style: TextStyle(color: Colors.grey[600], fontSize: 16)),
         ],
       ),
     );
@@ -220,13 +257,19 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.sync_problem_rounded, color: Colors.orange, size: 64),
+            const Icon(Icons.sync_problem_rounded,
+                color: Colors.orange, size: 64),
             const SizedBox(height: 24),
-            const Text("Something went wrong", 
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark)),
+            const Text("Something went wrong",
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandDark)),
             const SizedBox(height: 12),
-            Text(_error!, textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 16, height: 1.5)),
+            Text(_error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.grey[600], fontSize: 16, height: 1.5)),
             const SizedBox(height: 48),
             SizedBox(
               width: 200,
@@ -236,7 +279,8 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                   backgroundColor: AppColors.brandGreen,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text("Try Again"),
               ),
@@ -249,7 +293,7 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
 
   Widget _buildSuccess() {
     final record = _record!;
-    
+
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -257,8 +301,11 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
           pinned: true,
           backgroundColor: AppColors.brandGreen,
           flexibleSpace: FlexibleSpaceBar(
-            title: const Text("Medical Summary", 
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+            title: const Text("Medical Summary",
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 16)),
             background: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -273,16 +320,20 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
             if (_isExporting)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2)),
               )
             else
               IconButton(
-                icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                icon: const Icon(Icons.picture_as_pdf_rounded,
+                    color: Colors.white),
                 onPressed: _exportPdf,
               ),
           ],
         ),
-
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -293,7 +344,8 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                   value: "${record.systolicBP}/${record.diastolicBP}",
                   unit: "mmHg",
                   icon: Icons.speed_rounded,
-                  eval: VitalValidator.evaluateBP(record.systolicBP, record.diastolicBP),
+                  eval: VitalValidator.evaluateBP(
+                      record.systolicBP, record.diastolicBP),
                 ),
                 const SizedBox(height: 16),
                 _buildMetricCard(
@@ -320,7 +372,6 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                   eval: VitalValidator.evaluateTemp(record.temperature),
                 ),
                 const SizedBox(height: 32),
-                
                 SizedBox(
                   width: double.infinity,
                   child: FlowAnimatedButton(
@@ -332,7 +383,8 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
                         backgroundColor: AppColors.brandGreen,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 20),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
                       ),
                     ),
                   ),
@@ -358,7 +410,8 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -370,11 +423,14 @@ class _PublicResultsScreenState extends State<PublicResultsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(color: Colors.grey)),
-                Text("$value $unit", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text("$value $unit",
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
-          Text(eval.label.toUpperCase(), style: TextStyle(color: eval.color, fontWeight: FontWeight.bold)),
+          Text(eval.label.toUpperCase(),
+              style: TextStyle(color: eval.color, fontWeight: FontWeight.bold)),
         ],
       ),
     );

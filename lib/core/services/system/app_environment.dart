@@ -13,22 +13,26 @@ class AppEnvironment {
   AppEnvironment._internal();
 
   AppMode _mode = AppMode.kiosk; // Default
-  bool _useSimulation = true; // Default to true so user can work without hardware
+  bool _useSimulation =
+      true; // Default to true so user can work without hardware
   String _pwaUrl = "https://islaverde.health"; // Default fallback
   String _deviceModel = "Unknown";
   String _adminExitPassword = "IslaVerde912"; // Default
 
   // Power Management & Battery Status (Added for Solar Eco-Mode)
   final ValueNotifier<bool> isEcoModeActive = ValueNotifier<bool>(false);
-  final ValueNotifier<double> currentBrightness = ValueNotifier<double>(1.0); // 0.0 to 1.0
-  final ValueNotifier<double> batteryLevel = ValueNotifier<double>(0.0); // 0.0 to 100.0
+  final ValueNotifier<double> currentBrightness =
+      ValueNotifier<double>(1.0); // 0.0 to 1.0
+  final ValueNotifier<double> batteryLevel =
+      ValueNotifier<double>(0.0); // 0.0 to 100.0
 
   Future<void> initialize() async {
     if (!kIsWeb && Platform.isLinux) {
       try {
         final file = File('/proc/device-tree/model');
         if (await file.exists()) {
-          _deviceModel = (await file.readAsString()).replaceAll('\u0000', '').trim();
+          _deviceModel =
+              (await file.readAsString()).replaceAll('\u0000', '').trim();
           debugPrint("📍 [AppEnvironment] Detected Device: $_deviceModel");
         }
       } catch (e) {
@@ -75,8 +79,7 @@ class AppEnvironment {
   bool get shouldShowVirtualKeyboard => _mode == AppMode.kiosk;
 
   // Logic for Hardware features:
-  // Only Kiosk has physical sensors to calibrate. 
+  // Only Kiosk has physical sensors to calibrate.
   // If useSimulation is true, we still show the UI but bypass real drivers.
   bool get hasHardwareAccess => _mode == AppMode.kiosk;
 }
-

@@ -26,9 +26,7 @@ class AppTheme {
             color: AppColors.brandDark),
         bodyLarge: TextStyle(fontSize: 18, color: Colors.black87),
         labelLarge: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.0),
+            fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1.0),
       )),
 
       // Global Button Styling

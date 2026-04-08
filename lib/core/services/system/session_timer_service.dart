@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'power_manager_service.dart';
 
 class SessionTimeoutManager extends StatefulWidget {
-
   final Widget? child;
   final Duration duration;
   final VoidCallback? onTimeout;
@@ -16,8 +15,6 @@ class SessionTimeoutManager extends StatefulWidget {
     this.onTimeout,
     this.isPaused = false,
   });
-
-
 
   @override
   State<SessionTimeoutManager> createState() => _SessionTimeoutManagerState();
@@ -36,7 +33,8 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
   void didUpdateWidget(covariant SessionTimeoutManager oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isPaused != widget.isPaused) {
-      debugPrint("🕒 Session Timer State Changed: isPaused = ${widget.isPaused}");
+      debugPrint(
+          "🕒 Session Timer State Changed: isPaused = ${widget.isPaused}");
       _startTimer();
     }
   }
@@ -65,9 +63,6 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
     widget.onTimeout?.call();
   }
 
-
-
-
   void _handleInteraction([dynamic _]) {
     debugPrint("🕒 Session Timer Reset");
     PowerManagerService().notifyActivity();
@@ -83,4 +78,3 @@ class _SessionTimeoutManagerState extends State<SessionTimeoutManager> {
     );
   }
 }
-

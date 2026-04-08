@@ -28,7 +28,9 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
   Widget build(BuildContext context) {
     final adminRepo = context.watch<AdminRepository>();
     // Filter based on the _showArchived toggle
-    final announcements = adminRepo.announcements.where((a) => a.isArchived == _showArchived).toList();
+    final announcements = adminRepo.announcements
+        .where((a) => a.isArchived == _showArchived)
+        .toList();
 
     return Row(
       children: [
@@ -272,7 +274,9 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                       final ann = announcements[index];
                       return Card(
                           elevation: ann.isActive ? 2 : 0,
-                          color: ann.isActive && !ann.isArchived ? Colors.white : Colors.grey[200],
+                          color: ann.isActive && !ann.isArchived
+                              ? Colors.white
+                              : Colors.grey[200],
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(color: Colors.grey[300]!)),
@@ -323,13 +327,15 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                             style: TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
-                                                color: ann.isActive && !ann.isArchived
+                                                color: ann.isActive &&
+                                                        !ann.isArchived
                                                     ? Colors.black
                                                     : Colors.grey)),
                                         const SizedBox(height: 8),
                                         Text(ann.content,
                                             style: TextStyle(
-                                                color: ann.isActive && !ann.isArchived
+                                                color: ann.isActive &&
+                                                        !ann.isArchived
                                                     ? Colors.black87
                                                     : Colors.grey)),
                                       ],
@@ -341,13 +347,25 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                           children: [
                                             // Archive/Unarchive Action
                                             IconButton(
-                                              tooltip: ann.isArchived ? "Unarchive" : "Archive",
-                                              icon: Icon(ann.isArchived ? Icons.unarchive : Icons.archive),
+                                              tooltip: ann.isArchived
+                                                  ? "Unarchive"
+                                                  : "Archive",
+                                              icon: Icon(ann.isArchived
+                                                  ? Icons.unarchive
+                                                  : Icons.archive),
                                               onPressed: () {
-                                                adminRepo.toggleAnnouncementArchive(ann, !ann.isArchived);
-                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                                  content: Text(ann.isArchived ? "Announcement Restored!" : "Announcement Archived!"),
-                                                  backgroundColor: ann.isArchived ? AppColors.brandGreen : Colors.orange,
+                                                adminRepo
+                                                    .toggleAnnouncementArchive(
+                                                        ann, !ann.isArchived);
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(SnackBar(
+                                                  content: Text(ann.isArchived
+                                                      ? "Announcement Restored!"
+                                                      : "Announcement Archived!"),
+                                                  backgroundColor:
+                                                      ann.isArchived
+                                                          ? AppColors.brandGreen
+                                                          : Colors.orange,
                                                 ));
                                               },
                                             ),
@@ -370,8 +388,8 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                                           onPressed: () =>
                                                               Navigator.pop(
                                                                   ctx, false),
-                                                          child:
-                                                              const Text("CANCEL")),
+                                                          child: const Text(
+                                                              "CANCEL")),
                                                       TextButton(
                                                           onPressed: () =>
                                                               Navigator.pop(
@@ -379,14 +397,14 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                                           child: const Text(
                                                               "DELETE",
                                                               style: TextStyle(
-                                                                  color:
-                                                                      Colors.red))),
+                                                                  color: Colors
+                                                                      .red))),
                                                     ],
                                                   ),
                                                 );
                                                 if (confirm == true) {
-                                                  adminRepo
-                                                      .deleteAnnouncement(ann.id);
+                                                  adminRepo.deleteAnnouncement(
+                                                      ann.id);
                                                 }
                                               },
                                             ),
@@ -432,10 +450,7 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                             }).toList(),
                                           ),
                                         ],
-                                        Text(
-                                            ann.isActive
-                                                ? "ACTIVE"
-                                                : "HIDDEN",
+                                        Text(ann.isActive ? "ACTIVE" : "HIDDEN",
                                             style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 10,

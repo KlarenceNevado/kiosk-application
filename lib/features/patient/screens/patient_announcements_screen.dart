@@ -29,10 +29,11 @@ class _PatientAnnouncementsScreenState
   Future<void> _refreshData() async {
     final authRepo = context.read<IAuthRepository>();
     final systemRepo = context.read<ISystemRepository>();
-    
+
     // 1. Load local data immediately for offline speed
     try {
-      final local = await systemRepo.fetchAnnouncements(currentUser: authRepo.currentUser);
+      final local = await systemRepo.fetchAnnouncements(
+          currentUser: authRepo.currentUser);
       if (mounted) {
         setState(() {
           _initialData = local;
@@ -57,71 +58,91 @@ class _PatientAnnouncementsScreenState
     return ListenableBuilder(
       listenable: connectionManager,
       builder: (context, _) {
-        final isOffline = connectionManager.currentStatus == ConnectionStatus.offline;
+        final isOffline =
+            connectionManager.currentStatus == ConnectionStatus.offline;
 
         return Scaffold(
           backgroundColor: const Color(0xFFF5F7FA),
           appBar: AppBar(
             title: const Text("Announcements",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
             backgroundColor: AppColors.brandGreen,
             elevation: 0,
             centerTitle: true,
           ),
-          body: isOffline 
-            ? _buildOfflineView()
-            : StreamBuilder<List<Map<String, dynamic>>>(
-                stream: systemRepo.announcementStream,
-                initialData: _initialData,
-                builder: (context, snapshot) {
-                  // Show spinner only on the very first local load
-                  if (_isInitialLoading && !snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator(color: AppColors.brandGreen));
-                  }
+          body: isOffline
+              ? _buildOfflineView()
+              : StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: systemRepo.announcementStream,
+                  initialData: _initialData,
+                  builder: (context, snapshot) {
+                    // Show spinner only on the very first local load
+                    if (_isInitialLoading && !snapshot.hasData) {
+                      return const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.brandGreen));
+                    }
 
-                  if (snapshot.hasError) {
-                    return _buildErrorView(snapshot.error.toString());
-                  }
+                    if (snapshot.hasError) {
+                      return _buildErrorView(snapshot.error.toString());
+                    }
 
-                  final rawData = snapshot.data ?? [];
-                  
-                  // Strict filtering for Active, Not Deleted, and Not Archived
-                  var announcements = rawData.where((a) {
-                    final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
-                    final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
-                    final isArchived = a['is_archived'] == 1 || a['is_archived'] == true || a['isArchived'] == 1 || a['isArchived'] == true;
-                    return isActive && !isDeleted && !isArchived;
-                  }).toList();
-                  
-                  // User-specific filtering (Seniors/Children/All)
-                  if (user != null) {
-                    final int age = user.age;
-                    announcements = announcements.where((a) {
-                      final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
-                      if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
-                      if (target == 'SENIORS' && age >= 60) return true;
-                      if (target == 'CHILDREN' && age <= 12) return true;
-                      return false;
+                    final rawData = snapshot.data ?? [];
+
+                    // Strict filtering for Active, Not Deleted, and Not Archived
+                    var announcements = rawData.where((a) {
+                      final isActive = a['is_active'] == 1 ||
+                          a['is_active'] == true ||
+                          a['isActive'] == 1 ||
+                          a['isActive'] == true;
+                      final isDeleted =
+                          a['is_deleted'] == 1 || a['is_deleted'] == true;
+                      final isArchived = a['is_archived'] == 1 ||
+                          a['is_archived'] == true ||
+                          a['isArchived'] == 1 ||
+                          a['isArchived'] == true;
+                      return isActive && !isDeleted && !isArchived;
                     }).toList();
-                  }
 
-                  if (announcements.isEmpty) {
-                    return _buildEmptyView(authRepo, systemRepo);
-                  }
+                    // User-specific filtering (Seniors/Children/All)
+                    if (user != null) {
+                      final int age = user.age;
+                      announcements = announcements.where((a) {
+                        final target = (a['target_group'] ?? a['targetGroup'])
+                                ?.toString()
+                                .toUpperCase() ??
+                            'ALL';
+                        if (target == 'ALL' || target == 'BROADCAST_ALL') {
+                          return true;
+                        }
+                        if (target == 'SENIORS' && age >= 60) {
+                          return true;
+                        }
+                        if (target == 'CHILDREN' && age <= 12) {
+                          return true;
+                        }
+                        return false;
+                      }).toList();
+                    }
 
-                  return RefreshIndicator(
-                    onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
-                    color: AppColors.brandGreen,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: announcements.length,
-                      itemBuilder: (context, index) {
-                        return _buildAnnouncementCard(announcements[index]);
-                      },
-                    ),
-                  );
-                },
-              ),
+                    if (announcements.isEmpty) {
+                      return _buildEmptyView(authRepo, systemRepo);
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
+                      color: AppColors.brandGreen,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: announcements.length,
+                        itemBuilder: (context, index) {
+                          return _buildAnnouncementCard(announcements[index]);
+                        },
+                      ),
+                    );
+                  },
+                ),
         );
       },
     );
@@ -154,8 +175,10 @@ class _PatientAnnouncementsScreenState
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandGreen,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -171,11 +194,12 @@ class _PatientAnnouncementsScreenState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.redAccent),
+            const Icon(Icons.cloud_off_rounded,
+                size: 64, color: Colors.redAccent),
             const SizedBox(height: 16),
             Text(
-              error.contains('RealtimeSubscribeException') 
-                  ? "Live Updates Unavailable" 
+              error.contains('RealtimeSubscribeException')
+                  ? "Live Updates Unavailable"
                   : "Something went wrong",
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -193,8 +217,10 @@ class _PatientAnnouncementsScreenState
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandGreen,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -203,7 +229,8 @@ class _PatientAnnouncementsScreenState
     );
   }
 
-  Widget _buildEmptyView(IAuthRepository authRepo, ISystemRepository systemRepo) {
+  Widget _buildEmptyView(
+      IAuthRepository authRepo, ISystemRepository systemRepo) {
     return RefreshIndicator(
       onRefresh: () => systemRepo.syncNow(authRepo: authRepo),
       child: Stack(
@@ -242,8 +269,10 @@ class _PatientAnnouncementsScreenState
     final content = item['content'] ?? '';
     final timestamp =
         DateTime.tryParse(item['timestamp'] ?? '') ?? DateTime.now();
-    final isUrgent =
-        (item['target_group'] ?? item['targetGroup'])?.toString().toUpperCase() == 'BROADCAST_ALL';
+    final isUrgent = (item['target_group'] ?? item['targetGroup'])
+            ?.toString()
+            .toUpperCase() ==
+        'BROADCAST_ALL';
     final formatter = DateFormat('MMMM d, yyyy • h:mm a');
 
     return Container(
@@ -450,5 +479,4 @@ class _PatientAnnouncementsScreenState
       systemRepo.reactToAnnouncement(id, emoji, user.id);
     }
   }
-
 }

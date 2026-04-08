@@ -10,7 +10,7 @@ void main() async {
       print('Not found: $iconName');
       continue;
     }
-    
+
     var image = img.decodeImage(file.readAsBytesSync());
     if (image == null) continue;
 
@@ -46,11 +46,12 @@ void main() async {
       }
 
       if (!inside) {
-        p.a = 0; 
+        p.a = 0;
       }
     }
-    
-    File('assets/icons/transparent_$iconName').writeAsBytesSync(img.encodePng(image));
+
+    File('assets/icons/transparent_$iconName')
+        .writeAsBytesSync(img.encodePng(image));
     print('Masked $iconName to transparent_$iconName');
   }
 }

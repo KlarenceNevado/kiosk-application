@@ -116,40 +116,38 @@ class HistoryItemTile extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // Vitals Summary Grid
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: _buildCompactVital(
-                            Icons.favorite_rounded,
-                            Colors.red,
-                            data.heartRate,
-                            "bpm",
-                          ),
+                LayoutBuilder(builder: (context, constraints) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: _buildCompactVital(
+                          Icons.favorite_rounded,
+                          Colors.red,
+                          data.heartRate,
+                          "bpm",
                         ),
-                        Expanded(
-                          child: _buildCompactVital(
-                            Icons.speed_rounded,
-                            Colors.blue,
-                            data.systolicBP,
-                            "mmHg",
-                            secondaryValue: data.diastolicBP,
-                          ),
+                      ),
+                      Expanded(
+                        child: _buildCompactVital(
+                          Icons.speed_rounded,
+                          Colors.blue,
+                          data.systolicBP,
+                          "mmHg",
+                          secondaryValue: data.diastolicBP,
                         ),
-                        Expanded(
-                          child: _buildCompactVital(
-                            Icons.air_rounded,
-                            Colors.cyan,
-                            data.oxygen,
-                            "%",
-                          ),
+                      ),
+                      Expanded(
+                        child: _buildCompactVital(
+                          Icons.air_rounded,
+                          Colors.cyan,
+                          data.oxygen,
+                          "%",
                         ),
-                      ],
-                    );
-                  }
-                ),
+                      ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),
@@ -191,9 +189,10 @@ class HistoryItemTile extends StatelessWidget {
             ),
           ),
         ),
-        Text(unit, 
+        Text(
+          unit,
           style: TextStyle(
-            fontSize: 9, 
+            fontSize: 9,
             color: Colors.grey[500],
             letterSpacing: -0.2,
           ),
@@ -206,14 +205,16 @@ class HistoryItemTile extends StatelessWidget {
 
   Widget _buildStatusBadge(String status) {
     final bool isVerified = status == 'verified' || status == 'verified_true';
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.1),
+        color: (isVerified ? AppColors.brandGreen : Colors.orange)
+            .withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.3),
+          color: (isVerified ? AppColors.brandGreen : Colors.orange)
+              .withValues(alpha: 0.3),
           width: 0.5,
         ),
       ),

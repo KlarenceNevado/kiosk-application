@@ -13,12 +13,12 @@ class EncryptionService {
 
   /// Primary encrypter (Shared key from .env)
   encrypt.Encrypter? _primaryEncrypter;
-  
+
   /// Legacy encrypter (Device-specific key from SecureStorage)
   encrypt.Encrypter? _legacyEncrypter;
-  
+
   encrypt.Key? _primaryKey;
-  
+
   final _storage = const FlutterSecureStorage();
   static const String _keyIdentifier = 'kiosk_secure_db_key_v1';
 
@@ -33,7 +33,8 @@ class EncryptionService {
       try {
         envKey = dotenv.env['DB_ENCRYPTION_KEY'];
       } catch (e) {
-        debugPrint("🔐 Encryption: dotenv not initialized during primary key load. $e");
+        debugPrint(
+            "🔐 Encryption: dotenv not initialized during primary key load. $e");
       }
 
       if (envKey != null && envKey.isNotEmpty && envKey.length >= 32) {

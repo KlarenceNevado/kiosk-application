@@ -17,7 +17,8 @@ class StepBpConnect extends StatefulWidget {
   State<StepBpConnect> createState() => _StepBpConnectState();
 }
 
-class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateMixin {
+class _StepBpConnectState extends State<StepBpConnect>
+    with TickerProviderStateMixin {
   int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
   Timer? _timeoutTimer;
@@ -39,7 +40,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     setState(() => _viewState = 1);
     final provider = context.read<HealthWizardProvider>();
     provider.startSensor(SensorType.bloodPressure);
-    
+
     context.read<IAuthRepository>().resetSessionTimer();
 
     // HARDENING: Safety Timeout
@@ -55,7 +56,10 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
 
     int ticks = 0;
     _simTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       ticks++;
       if (ticks >= 30) {
         timer.cancel();
@@ -72,7 +76,7 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     _timeoutTimer?.cancel();
     context.read<HealthWizardProvider>().captureVital(SensorType.bloodPressure);
     context.read<IAuthRepository>().resetSessionTimer();
-    
+
     setState(() {
       _viewState = 2;
       _lockedSys = sys;
@@ -94,16 +98,23 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
     final isSim = AppEnvironment().useSimulation;
 
     // HARDENING: Auto-lock when result arrives
-    if (_viewState == 1 && provider.currentSystolic > 30 && provider.currentDiastolic > 30) {
-       Future.delayed(Duration.zero, () => _finishTest(provider.currentSystolic.toString(), provider.currentDiastolic.toString()));
+    if (_viewState == 1 &&
+        provider.currentSystolic > 30 &&
+        provider.currentDiastolic > 30) {
+      Future.delayed(
+          Duration.zero,
+          () => _finishTest(provider.currentSystolic.toString(),
+              provider.currentDiastolic.toString()));
     }
 
     return Center(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
-        child: _viewState == 0 
-            ? _buildPrepView() 
-            : _viewState == 3 ? _buildErrorView(provider) : _buildMeasuringView(provider, isSim),
+        child: _viewState == 0
+            ? _buildPrepView()
+            : _viewState == 3
+                ? _buildErrorView(provider)
+                : _buildMeasuringView(provider, isSim),
       ),
     );
   }
@@ -119,32 +130,49 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
           decoration: BoxDecoration(
               color: AppColors.bpBlue.withValues(alpha: 0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.2), width: 3)),
-          child: const Icon(Icons.speed_rounded, size: 72, color: AppColors.bpBlue),
+              border: Border.all(
+                  color: AppColors.bpBlue.withValues(alpha: 0.2), width: 3)),
+          child: const Icon(Icons.speed_rounded,
+              size: 72, color: AppColors.bpBlue),
         ),
         const SizedBox(height: 32),
         const Text(
           "Step 6/7: Blood Pressure",
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppColors.brandDark, letterSpacing: -1.5),
+          style: TextStyle(
+              fontSize: 42,
+              fontWeight: FontWeight.w900,
+              color: AppColors.brandDark,
+              letterSpacing: -1.5),
         ),
         const SizedBox(height: 24),
-        _buildInstructionCard("Place the cuff on your left arm and sit straight.\nRemain completely still until inflation stops."),
+        _buildInstructionCard(
+            "Place the cuff on your left arm and sit straight.\nRemain completely still until inflation stops."),
         const SizedBox(height: 64),
         FlowAnimatedButton(
           child: Container(
             decoration: BoxDecoration(
-               borderRadius: BorderRadius.circular(50),
-               boxShadow: [BoxShadow(color: AppColors.bpBlue.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
-               gradient: const LinearGradient(colors: [AppColors.bpBlue, Color(0xFF1976D2)]),
+              borderRadius: BorderRadius.circular(50),
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.bpBlue.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10))
+              ],
+              gradient: const LinearGradient(
+                  colors: [AppColors.bpBlue, Color(0xFF1976D2)]),
             ),
             child: ElevatedButton(
               onPressed: _startMeasurement,
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
                   minimumSize: const Size(320, 72),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
-              child: const Text("Start BP Inflation", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(50))),
+              child: const Text("Start BP Inflation",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
             ),
           ),
         ),
@@ -154,8 +182,16 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
 
   Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
     bool isDone = _viewState == 2;
-    String sysVal = isDone ? _lockedSys : (provider.currentSystolic > 0 ? provider.currentSystolic.toString() : "0");
-    String diaVal = isDone ? _lockedDia : (provider.currentDiastolic > 0 ? provider.currentDiastolic.toString() : "0");
+    String sysVal = isDone
+        ? _lockedSys
+        : (provider.currentSystolic > 0
+            ? provider.currentSystolic.toString()
+            : "0");
+    String diaVal = isDone
+        ? _lockedDia
+        : (provider.currentDiastolic > 0
+            ? provider.currentDiastolic.toString()
+            : "0");
 
     return Column(
       key: const ValueKey(1),
@@ -165,56 +201,85 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
           alignment: Alignment.center,
           children: [
             AnimatedContainer(
-                 duration: const Duration(milliseconds: 500),
-                 width: isDone ? 340 : 300, 
-                 height: isDone ? 340 : 300,
-                 decoration: BoxDecoration(
-                   shape: BoxShape.circle,
-                   boxShadow: [
-                     BoxShadow(
-                        color: isDone ? AppColors.brandGreen.withValues(alpha: 0.2) : AppColors.bpBlue.withValues(alpha: 0.12), 
-                        blurRadius: isDone ? 100 : 80, spreadRadius: isDone ? 40 : 30
-                     )
-                   ],
-                 ),
-               ),
-
+              duration: const Duration(milliseconds: 500),
+              width: isDone ? 340 : 300,
+              height: isDone ? 340 : 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: isDone
+                          ? AppColors.brandGreen.withValues(alpha: 0.2)
+                          : AppColors.bpBlue.withValues(alpha: 0.12),
+                      blurRadius: isDone ? 100 : 80,
+                      spreadRadius: isDone ? 40 : 30)
+                ],
+              ),
+            ),
             if (!isDone)
-              ...List.generate(3, (index) => TweenAnimationBuilder(
-                duration: Duration(seconds: 1 + index),
-                tween: Tween<double>(begin: 1, end: 1.4),
-                builder: (context, val, child) => Container(
-                  width: 270 * val, height: 270 * val,
-                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.15 / val), width: 2)),
-                ),
-              )),
-            
+              ...List.generate(
+                  3,
+                  (index) => TweenAnimationBuilder(
+                        duration: Duration(seconds: 1 + index),
+                        tween: Tween<double>(begin: 1, end: 1.4),
+                        builder: (context, val, child) => Container(
+                          width: 270 * val,
+                          height: 270 * val,
+                          decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: AppColors.bpBlue
+                                      .withValues(alpha: 0.15 / val),
+                                  width: 2)),
+                        ),
+                      )),
             SizedBox(
-              width: 280, height: 280,
+              width: 280,
+              height: 280,
               child: CircularProgressIndicator(
                 value: isDone ? 1 : null,
-                strokeWidth: 14, strokeCap: StrokeCap.round,
+                strokeWidth: 14,
+                strokeCap: StrokeCap.round,
                 color: isDone ? AppColors.brandGreen : AppColors.bpBlue,
                 backgroundColor: AppColors.bpBlue.withValues(alpha: 0.05),
               ),
             ),
-
             Container(
-              width: 220, height: 220,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+              width: 220,
+              height: 220,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.white),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (isDone)
-                    const Icon(Icons.check_circle_rounded, color: AppColors.brandGreen, size: 60)
+                    const Icon(Icons.check_circle_rounded,
+                        color: AppColors.brandGreen, size: 60)
                   else
                     RotationTransition(
-                      turns: Tween(begin: 0.0, end: 0.05).animate(CurvedAnimation(parent: _iconController, curve: Curves.elasticIn)),
-                      child: const Icon(Icons.speed_rounded, color: AppColors.bpBlue, size: 48),
+                      turns: Tween(begin: 0.0, end: 0.05).animate(
+                          CurvedAnimation(
+                              parent: _iconController,
+                              curve: Curves.elasticIn)),
+                      child: const Icon(Icons.speed_rounded,
+                          color: AppColors.bpBlue, size: 48),
                     ),
                   const SizedBox(height: 8),
-                  Text("$sysVal/$diaVal", style: TextStyle(fontSize: 52, fontWeight: FontWeight.w900, color: isDone ? AppColors.brandGreen : AppColors.brandDark, height: 1.0, letterSpacing: -3)),
-                  const Text("BP (mmHg)", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.0)),
+                  Text("$sysVal/$diaVal",
+                      style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w900,
+                          color: isDone
+                              ? AppColors.brandGreen
+                              : AppColors.brandDark,
+                          height: 1.0,
+                          letterSpacing: -3)),
+                  const Text("BP (mmHg)",
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.grey,
+                          letterSpacing: 1.0)),
                 ],
               ),
             ),
@@ -224,44 +289,68 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
         if (isDone)
           FlowAnimatedButton(
             child: Container(
-               padding: const EdgeInsets.symmetric(horizontal: 16),
-               decoration: BoxDecoration(
-                 borderRadius: BorderRadius.circular(50),
-                 boxShadow: [BoxShadow(color: AppColors.brandGreen.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
-                 gradient: const LinearGradient(colors: [AppColors.brandGreen, AppColors.brandGreenDark]),
-               ),
-               child: ElevatedButton(
-                 onPressed: widget.onNext,
-                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent, foregroundColor: Colors.white, shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(50),
+                boxShadow: [
+                  BoxShadow(
+                      color: AppColors.brandGreen.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10))
+                ],
+                gradient: const LinearGradient(
+                    colors: [AppColors.brandGreen, AppColors.brandGreenDark]),
+              ),
+              child: ElevatedButton(
+                onPressed: widget.onNext,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
                     minimumSize: const Size(260, 72),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50))),
-                 child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text("Complete Checkup", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                      SizedBox(width: 12),
-                      Icon(Icons.verified_rounded, size: 28),
-                    ],
-                 ),
-               ),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50))),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("Complete Checkup",
+                        style: TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w900)),
+                    SizedBox(width: 12),
+                    Icon(Icons.verified_rounded, size: 28),
+                  ],
+                ),
+              ),
             ),
           )
         else
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-               color: Colors.white, borderRadius: BorderRadius.circular(50),
-               boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-               border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(50),
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 10)
+              ],
+              border: Border.all(
+                  color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
             ),
             child: const Row(
-               mainAxisSize: MainAxisSize.min,
-               children: [
-                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.bpBlue)),
-                 SizedBox(width: 16),
-                 Text("INFLATING CUFF...", style: TextStyle(color: AppColors.bpBlue, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
-               ],
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 3, color: AppColors.bpBlue)),
+                SizedBox(width: 16),
+                Text("INFLATING CUFF...",
+                    style: TextStyle(
+                        color: AppColors.bpBlue,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 1.2)),
+              ],
             ),
           ),
       ],
@@ -275,17 +364,29 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
       children: [
         const Icon(Icons.heart_broken_rounded, color: Colors.red, size: 80),
         const SizedBox(height: 24),
-        const Text("Cuff Error", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        const Text("Cuff Error",
+            style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: AppColors.brandDark)),
         const SizedBox(height: 16),
-        const Text("Ensure the cuff is tightened correctly and repeat.", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.grey)),
+        const Text("Ensure the cuff is tightened correctly and repeat.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: Colors.grey)),
         const SizedBox(height: 40),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             OutlinedButton(
               onPressed: () => setState(() => _viewState = 0),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 60), side: const BorderSide(color: AppColors.bpBlue)),
-              child: const Text("Retry BP", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.bpBlue)),
+              style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(180, 60),
+                  side: const BorderSide(color: AppColors.bpBlue)),
+              child: const Text("Retry BP",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.bpBlue)),
             ),
             const SizedBox(width: 20),
             ElevatedButton(
@@ -293,8 +394,12 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
                 provider.setBloodPressure(0, 0);
                 widget.onNext();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87, minimumSize: const Size(180, 60)),
-              child: const Text("Skip Step", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey[200],
+                  foregroundColor: Colors.black87,
+                  minimumSize: const Size(180, 60)),
+              child: const Text("Skip Step",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -307,15 +412,28 @@ class _StepBpConnectState extends State<StepBpConnect> with TickerProviderStateM
       margin: const EdgeInsets.symmetric(horizontal: 40),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 10))]),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+              color: AppColors.bpBlue.withValues(alpha: 0.1), width: 2),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 30,
+                offset: const Offset(0, 10))
+          ]),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.info_outline, color: AppColors.bpBlue, size: 36),
           const SizedBox(height: 16),
-          Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.brandDark, height: 1.4)),
+          Text(text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brandDark,
+                  height: 1.4)),
         ],
       ),
     );

@@ -9,6 +9,7 @@ import '../data/mobile_navigation_provider.dart';
 import '../../user_history/domain/i_history_repository.dart';
 import '../../../core/domain/i_system_repository.dart';
 import '../../../core/services/database/connection_manager.dart';
+import '../../../core/widgets/sync_status_indicator.dart';
 import 'dart:math' as math;
 
 class PatientDashboardScreen extends StatefulWidget {
@@ -55,7 +56,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
       // 1. Initial Local Fetch
       await historyRepo.loadUserHistory(user.id);
-      
+
       if (mounted) {
         setState(() {
           _vitals = historyRepo.records;
@@ -67,10 +68,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
       if (forceSync) {
         debugPrint("📱 Dashboard: Triggering background cloud sync...");
         // Non-blocking background sync
-        systemRepo.syncNow(
+        systemRepo
+            .syncNow(
           authRepo: authRepo,
           historyRepo: historyRepo,
-        ).then((_) {
+        )
+            .then((_) {
           if (mounted) {
             setState(() {
               _vitals = historyRepo.records;
@@ -108,7 +111,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     return ListenableBuilder(
       listenable: connectionManager,
       builder: (context, _) {
-        final isOffline = connectionManager.currentStatus == ConnectionStatus.offline;
+        final isOffline =
+            connectionManager.currentStatus == ConnectionStatus.offline;
 
         return Scaffold(
           backgroundColor: const Color(0xFFF5F7FA),
@@ -168,48 +172,55 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                     ),
                   ),
                   actions: [
+                    const SyncStatusIndicator(color: Colors.white),
+                    const SizedBox(width: 8),
                     if (isOffline)
                       const Tooltip(
                         message: "Offline Mode",
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Icon(Icons.wifi_off_rounded, color: Colors.white70, size: 20),
+                          child: Icon(Icons.wifi_off_rounded,
+                              color: Colors.white70, size: 20),
                         ),
                       ),
                     StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: systemRepo.announcementStream,
-                      builder: (context, snapshot) {
-                        final hasUpdates = snapshot.hasData && snapshot.data!.isNotEmpty;
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.notifications_none_rounded,
-                                  color: Colors.white, size: 28),
-                              onPressed: () {
-                                context
-                                    .read<MobileNavigationProvider>()
-                                    .goToAnnouncements();
-                              },
-                            ),
-                            if (hasUpdates)
-                              Positioned(
-                                right: 12,
-                                top: 12,
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFF5252), // Clinical Red
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 1.5),
+                        stream: systemRepo.announcementStream,
+                        builder: (context, snapshot) {
+                          final hasUpdates =
+                              snapshot.hasData && snapshot.data!.isNotEmpty;
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                    Icons.notifications_none_rounded,
+                                    color: Colors.white,
+                                    size: 28),
+                                onPressed: () {
+                                  context
+                                      .read<MobileNavigationProvider>()
+                                      .goToAnnouncements();
+                                },
+                              ),
+                              if (hasUpdates)
+                                Positioned(
+                                  right: 12,
+                                  top: 12,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                          0xFFFF5252), // Clinical Red
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 1.5),
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
-                        );
-                      }
-                    ),
+                            ],
+                          );
+                        }),
                     const SizedBox(width: 8),
                   ],
                 ),
@@ -218,21 +229,29 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                   SliverToBoxAdapter(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16),
                       color: Colors.orange.shade100,
                       child: Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          const Icon(Icons.info_outline,
+                              size: 16, color: Colors.orange),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
                               "You are currently offline. Showing cached data.",
-                              style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600),
                             ),
                           ),
                           TextButton(
-                            onPressed: () => connectionManager.retryConnection(),
-                            child: const Text("RETRY", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: () =>
+                                connectionManager.retryConnection(),
+                            child: const Text("RETRY",
+                                style: TextStyle(
+                                    fontSize: 11, fontWeight: FontWeight.bold)),
                           )
                         ],
                       ),
@@ -342,7 +361,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
     // 1. Find the ABSOLUTE LATEST record
     final latestRecord = _vitals.first;
-    
+
     // 2. Find the latest record that actually has remarks (for historical context)
     VitalSigns? recordWithRemarks;
     try {
@@ -355,9 +374,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
     // Determine what to show
     // If the latest record is NOT verified and HAS NO remarks, it's definitely "Under Review"
-    final bool latestIsPending = latestRecord.status != 'verified' && 
-                                latestRecord.status != 'verified_true' &&
-                                (latestRecord.remarks == null || latestRecord.remarks!.isEmpty);
+    final bool latestIsPending = latestRecord.status != 'verified' &&
+        latestRecord.status != 'verified_true' &&
+        (latestRecord.remarks == null || latestRecord.remarks!.isEmpty);
 
     // If we have nothing to show (no pending checkup AND no historical remarks), hide
     if (!latestIsPending && (recordWithRemarks == null)) {
@@ -388,7 +407,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: isVerified ? AppColors.brandGreen : Colors.orange,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
               children: [
@@ -423,7 +443,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                 if (latestIsPending) ...[
                   Row(
                     children: [
-                      const Icon(Icons.hourglass_empty_rounded, color: Colors.orange, size: 20),
+                      const Icon(Icons.hourglass_empty_rounded,
+                          color: Colors.orange, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -450,8 +471,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                       displayRecord.followUpAction != 'none') ...[
                     const SizedBox(height: 16),
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(10),
@@ -505,14 +526,16 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
 
   Widget _buildStatusBadge(String status) {
     final bool isVerified = status == 'verified' || status == 'verified_true';
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.1),
+        color: (isVerified ? AppColors.brandGreen : Colors.orange)
+            .withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: (isVerified ? AppColors.brandGreen : Colors.orange).withValues(alpha: 0.2),
+          color: (isVerified ? AppColors.brandGreen : Colors.orange)
+              .withValues(alpha: 0.2),
           width: 0.5,
         ),
       ),
@@ -626,26 +649,37 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             builder: (context, snapshot) {
               final list = snapshot.data ?? [];
               final user = context.read<IAuthRepository>().currentUser;
-              
+
               var filtered = list.where((a) {
-                final isActive = a['is_active'] == 1 || a['is_active'] == true || a['isActive'] == 1 || a['isActive'] == true;
-                final isDeleted = a['is_deleted'] == 1 || a['is_deleted'] == true;
-                final isArchived = a['is_archived'] == 1 || a['is_archived'] == true || a['isArchived'] == 1 || a['isArchived'] == true;
+                final isActive = a['is_active'] == 1 ||
+                    a['is_active'] == true ||
+                    a['isActive'] == 1 ||
+                    a['isActive'] == true;
+                final isDeleted =
+                    a['is_deleted'] == 1 || a['is_deleted'] == true;
+                final isArchived = a['is_archived'] == 1 ||
+                    a['is_archived'] == true ||
+                    a['isArchived'] == 1 ||
+                    a['isArchived'] == true;
                 return isActive && !isDeleted && !isArchived;
               }).toList();
 
               if (user != null) {
                 final int age = user.age;
                 filtered = filtered.where((a) {
-                  final target = (a['target_group'] ?? a['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+                  final target = (a['target_group'] ?? a['targetGroup'])
+                          ?.toString()
+                          .toUpperCase() ??
+                      'ALL';
                   if (target == 'ALL' || target == 'BROADCAST_ALL') return true;
                   if (target == 'SENIORS' && age >= 60) return true;
                   if (target == 'CHILDREN' && age <= 12) return true;
                   return false;
                 }).toList();
               }
-              
-              return _buildLatestAnnouncementCard(filtered.isEmpty ? null : filtered.first);
+
+              return _buildLatestAnnouncementCard(
+                  filtered.isEmpty ? null : filtered.first);
             },
           ),
           const SizedBox(height: 24),
@@ -661,7 +695,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                       Container(
                         padding: const EdgeInsets.all(28),
                         decoration: const BoxDecoration(
-                          color: Color(0xFFE8F5E9), // AppColors.brandGreenLight equivalent
+                          color: Color(
+                              0xFFE8F5E9), // AppColors.brandGreenLight equivalent
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.monitor_heart_rounded,
@@ -1142,8 +1177,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               indicatorWeight: 3,
               labelColor: AppColors.brandGreen,
               unselectedLabelColor: Colors.grey,
-              labelStyle:
-                  TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               tabs: [
                 Tab(text: "Blood Pressure"),
                 Tab(text: "Heart Rate"),
@@ -1182,7 +1216,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bar_chart_rounded, color: Colors.grey.shade300, size: 48),
+            Icon(Icons.bar_chart_rounded,
+                color: Colors.grey.shade300, size: 48),
             const SizedBox(height: 8),
             const Text("More data needed for trend.",
                 style: TextStyle(color: Colors.grey, fontSize: 13)),
@@ -1246,7 +1281,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                           return const SizedBox.shrink();
                         }
                         // Only show every few labels if data is dense
-                        if (chartData.length > 7 && index % (chartData.length ~/ 4) != 0 && index != chartData.length-1) {
+                        if (chartData.length > 7 &&
+                            index % (chartData.length ~/ 4) != 0 &&
+                            index != chartData.length - 1) {
                           return const SizedBox.shrink();
                         }
 
@@ -1291,11 +1328,20 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   }
 
   Widget _buildBpTrend(List<VitalSigns> cleanedVitals) {
-    final chartData = cleanedVitals.reversed.where((v) => v.systolicBP > 0).toList();
+    final chartData =
+        cleanedVitals.reversed.where((v) => v.systolicBP > 0).toList();
     if (chartData.isEmpty) return const SizedBox.shrink();
 
-    double minY = (chartData.map((e) => e.diastolicBP.toDouble()).reduce(math.min) / 10).floor() * 10 - 20;
-    double maxY = (chartData.map((e) => e.systolicBP.toDouble()).reduce(math.max) / 10).ceil() * 10 + 20;
+    double minY =
+        (chartData.map((e) => e.diastolicBP.toDouble()).reduce(math.min) / 10)
+                    .floor() *
+                10 -
+            20;
+    double maxY =
+        (chartData.map((e) => e.systolicBP.toDouble()).reduce(math.max) / 10)
+                    .ceil() *
+                10 +
+            20;
 
     return _buildTrendChart(
       chartData: chartData,
@@ -1327,7 +1373,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   }
 
   Widget _buildHeartRateTrend(List<VitalSigns> cleanedVitals) {
-    final chartData = cleanedVitals.reversed.where((v) => v.heartRate > 0).toList();
+    final chartData =
+        cleanedVitals.reversed.where((v) => v.heartRate > 0).toList();
     return _buildTrendChart(
       chartData: chartData,
       legend: [
@@ -1347,11 +1394,14 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   }
 
   Widget _buildSpo2Trend(List<VitalSigns> cleanedVitals) {
-    final chartData = cleanedVitals.reversed.where((v) => v.oxygen > 0).toList();
+    final chartData =
+        cleanedVitals.reversed.where((v) => v.oxygen > 0).toList();
     return _buildTrendChart(
       chartData: chartData,
       maxY: 105,
-      minY: (chartData.isEmpty) ? 80 : (chartData.map((e) => e.oxygen.toDouble()).reduce(math.min) - 5),
+      minY: (chartData.isEmpty)
+          ? 80
+          : (chartData.map((e) => e.oxygen.toDouble()).reduce(math.min) - 5),
       legend: [
         {'color': Colors.blue.shade400, 'label': '%'}
       ],
@@ -1368,7 +1418,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   }
 
   Widget _buildTempTrend(List<VitalSigns> cleanedVitals) {
-    final chartData = cleanedVitals.reversed.where((v) => v.temperature > 0).toList();
+    final chartData =
+        cleanedVitals.reversed.where((v) => v.temperature > 0).toList();
     if (chartData.isEmpty) return const SizedBox.shrink();
 
     return _buildTrendChart(
@@ -1412,7 +1463,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     );
   }
 
-  Widget _buildLatestAnnouncementCard(Map<String, dynamic>? latestAnnouncement) {
+  Widget _buildLatestAnnouncementCard(
+      Map<String, dynamic>? latestAnnouncement) {
     if (latestAnnouncement == null) {
       return Container(
         padding: const EdgeInsets.all(20),
@@ -1610,7 +1662,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               decoration: BoxDecoration(
                 color: isHypertensive
                     ? Colors.red.shade50
-                    : const Color(0xFFE8F5E9), // AppColors.brandGreenLight equivalent
+                    : const Color(
+                        0xFFE8F5E9), // AppColors.brandGreenLight equivalent
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -1639,7 +1692,8 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                 children: [
                   _buildChip("BP: ${vital.systolicBP}/${vital.diastolicBP}",
                       isHypertensive ? Colors.red : Colors.grey.shade600),
-                  _buildChip("HR: ${vital.heartRate} bpm", Colors.grey.shade600),
+                  _buildChip(
+                      "HR: ${vital.heartRate} bpm", Colors.grey.shade600),
                   _buildChip("BMI $bmiStr", Colors.grey.shade600),
                 ],
               ),

@@ -11,7 +11,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/i_history_repository.dart';
 
-class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepository {
+class LocalHistoryRepository extends ChangeNotifier
+    implements IHistoryRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   List<VitalSigns> _records = [];
   bool _isLoading = false;
@@ -23,7 +24,8 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
       // Debounce: Coalesce rapid sync events into a single reload
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(seconds: 1), () {
-        debugPrint("🔔 HistoryRepository: Sync event detected. Refreshing data...");
+        debugPrint(
+            "🔔 HistoryRepository: Sync event detected. Refreshing data...");
         if (_records.isNotEmpty) {
           loadAllHistory();
         }
@@ -57,8 +59,9 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
             .select()
             .eq('user_id', userId)
             .order('timestamp', ascending: false);
-        
-        _records = (response as List).map((data) => VitalSigns.fromMap(data)).toList();
+
+        _records =
+            (response as List).map((data) => VitalSigns.fromMap(data)).toList();
       } else {
         _records = await _dbHelper.getRecordsByUserId(userId);
       }
@@ -83,8 +86,9 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
             .from('vitals')
             .select()
             .order('timestamp', ascending: false);
-        
-        _records = (response as List).map((data) => VitalSigns.fromMap(data)).toList();
+
+        _records =
+            (response as List).map((data) => VitalSigns.fromMap(data)).toList();
       } else {
         _records = await _dbHelper.getAllRecords();
       }
@@ -162,7 +166,8 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
       _isLoading = true;
       Future.microtask(() => notifyListeners());
       try {
-        final file = await FileStorageService().getCachedFile(record.reportUrl!);
+        final file =
+            await FileStorageService().getCachedFile(record.reportUrl!);
         if (file != null) {
           // Update record with local path
           final updatedRecord = VitalSigns(
@@ -182,16 +187,16 @@ class LocalHistoryRepository extends ChangeNotifier implements IHistoryRepositor
             reportUrl: record.reportUrl,
             reportPath: file.path,
           );
-          
+
           await _dbHelper.updateRecordRaw(record.id, {
             'report_path': file.path,
           });
-          
+
           final index = _records.indexWhere((r) => r.id == record.id);
           if (index != -1) {
             _records[index] = updatedRecord;
           }
-          
+
           await OpenFile.open(file.path);
         }
       } catch (e) {

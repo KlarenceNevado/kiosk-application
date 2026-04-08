@@ -51,7 +51,7 @@ class AdminRepository extends ChangeNotifier {
       _alerts = results[2].map((m) => SystemAlert.fromMap(m)).toList();
 
       await _loadThresholds();
-      
+
       // Listen to reactive DAO streams instead of manual Supabase channels
       _announcementSub = _dbHelper.systemDao.announcementStream.listen((list) {
         _announcements = list.map((m) => Announcement.fromMap(m)).toList();
@@ -100,7 +100,6 @@ class AdminRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-
   // Dispose method to cancel stream subscriptions
   @override
   void dispose() {
@@ -147,7 +146,8 @@ class AdminRepository extends ChangeNotifier {
           isActive: announcement.isActive,
           isArchived: announcement.isArchived,
         );
-        debugPrint("✅ Admin: Announcement '${announcement.title}' queued for sync.");
+        debugPrint(
+            "✅ Admin: Announcement '${announcement.title}' queued for sync.");
       } catch (e) {
         debugPrint("❌ Admin: Failed to queue announcement: $e");
       }
@@ -377,7 +377,7 @@ class AdminRepository extends ChangeNotifier {
         debugPrint("❌ Admin: Failed to queue alert: $e");
       }
     }());
-    
+
     await fetchAlerts();
   }
 

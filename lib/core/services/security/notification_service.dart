@@ -22,11 +22,10 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-  
+
   final Completer<void> _initCompleter = Completer<void>();
 
   bool get _isSupported => kIsWeb || isNativeSupported;
-
 
   Future<void> init({bool showPermissionRequest = true}) async {
     // Only initialize on supported mobile platforms
@@ -52,9 +51,9 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    
+
     // Windows Specific Init
-    const LinuxInitializationSettings initializationSettingsLinux = 
+    const LinuxInitializationSettings initializationSettingsLinux =
         LinuxInitializationSettings(defaultActionName: 'Open Application');
 
     const InitializationSettings initializationSettings =
@@ -79,7 +78,8 @@ class NotificationService {
 
     // Skip permission and Firebase flow if in background or explicit skip
     if (!showPermissionRequest) {
-      debugPrint("📢 NotificationService: Skipping UI flows (Background Mode).");
+      debugPrint(
+          "📢 NotificationService: Skipping UI flows (Background Mode).");
       return;
     }
 
@@ -107,25 +107,27 @@ class NotificationService {
       criticalAlert: true,
     );
 
-    debugPrint("🔥 [Firebase] Permission status: ${settings.authorizationStatus}");
+    debugPrint(
+        "🔥 [Firebase] Permission status: ${settings.authorizationStatus}");
 
     // 2. Foreground Message Handling
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      debugPrint("🔥 [Firebase] Foreground Message: ${message.notification?.title}");
-      
+      debugPrint(
+          "🔥 [Firebase] Foreground Message: ${message.notification?.title}");
+
       if (message.notification != null) {
         final type = message.data['type'] ?? 'announcement';
-        
+
         // Decrypt the message if it appears to be encrypted
         String displayBody = message.notification!.body ?? "";
         if (displayBody.contains(':')) {
-           try {
-             final encryption = EncryptionService();
-             await encryption.init();
-             displayBody = encryption.decryptData(displayBody);
-           } catch (_) {}
+          try {
+            final encryption = EncryptionService();
+            await encryption.init();
+            displayBody = encryption.decryptData(displayBody);
+          } catch (_) {}
         }
-        
+
         switch (type) {
           case 'alert':
             showInstantNotification(
@@ -139,7 +141,7 @@ class NotificationService {
               title: message.notification!.title ?? "System Alert",
               body: displayBody,
             );
-             break;
+            break;
           default:
             if (type == 'chat') {
               showChatNotification(
@@ -158,9 +160,9 @@ class NotificationService {
 
     // 3. Handle Token Refresh
     messaging.onTokenRefresh.listen((newToken) async {
-       // Note: We'll need a way to get the current user ID here 
-       // if we want to update it automatically.
-       debugPrint("🔥 [Firebase] Token Refreshed: $newToken");
+      // Note: We'll need a way to get the current user ID here
+      // if we want to update it automatically.
+      debugPrint("🔥 [Firebase] Token Refreshed: $newToken");
     });
   }
 
@@ -223,7 +225,7 @@ class NotificationService {
       return prefs.getBool('notifications_enabled') ?? true;
     } catch (e) {
       // Background isolate might fail to get SharedPreferences in some environments
-      return true; 
+      return true;
     }
   }
 
@@ -237,17 +239,18 @@ class NotificationService {
 
   Future<void> requestPermissions() async {
     if (!_isSupported) return;
-    
+
     if (kIsWeb) {
       await requestWebPermission();
       return;
     }
-    
+
     if (isNativeAndroid) {
       await _requestAndroidPermissions();
     } else if (isNativeIOS) {
-       await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(
             alert: true,
             badge: true,
@@ -258,16 +261,16 @@ class NotificationService {
 
   Future<void> _requestAndroidPermissions() async {
     try {
-      final androidPlugin = flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
-      
+
       if (androidPlugin != null) {
         await androidPlugin.requestNotificationsPermission();
         await androidPlugin.requestExactAlarmsPermission();
       }
     } catch (e) {
-       debugPrint("⚠️ NotificationService: Android platform channel error: $e");
+      debugPrint("⚠️ NotificationService: Android platform channel error: $e");
     }
   }
 
@@ -302,8 +305,9 @@ class NotificationService {
       styleInformation: BigTextStyleInformation(''),
     );
 
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics, iOS: DarwinNotificationDetails());
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidPlatformChannelSpecifics,
+        iOS: DarwinNotificationDetails());
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
@@ -311,7 +315,7 @@ class NotificationService {
         showWebNotification(title, body, tag: 'alert');
         return;
       }
-      
+
       await flutterLocalNotificationsPlugin.show(
         id,
         title,
@@ -348,8 +352,9 @@ class NotificationService {
       category: AndroidNotificationCategory.reminder,
     );
 
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics, iOS: DarwinNotificationDetails());
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidPlatformChannelSpecifics,
+        iOS: DarwinNotificationDetails());
 
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
@@ -396,7 +401,7 @@ class NotificationService {
         showWebNotification(title, body, tag: 'announcement');
         return;
       }
-      
+
       await flutterLocalNotificationsPlugin.show(
         999, // Static ID for announcements to overwrite previous
         title,
@@ -438,7 +443,7 @@ class NotificationService {
         showWebNotification(title, body, tag: 'system_alert');
         return;
       }
-      
+
       await flutterLocalNotificationsPlugin.show(
         777, // Unique ID to keep alerts visible as a distinct stack
         title,
@@ -455,8 +460,9 @@ class NotificationService {
   }) async {
     if (!_initCompleter.isCompleted) await _initCompleter.future;
 
-    final isError = status.toLowerCase() == 'error' || status.toLowerCase() == 'disconnected';
-    
+    final isError = status.toLowerCase() == 'error' ||
+        status.toLowerCase() == 'disconnected';
+
     final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'system_alerts_channel',
@@ -473,7 +479,7 @@ class NotificationService {
         android: androidDetails, iOS: const DarwinNotificationDetails());
 
     if (!_isSupported) return;
-    
+
     final title = "Hardware Alert: $sensorName";
     final body = "Sensor is now $status. Please check connections.";
 
@@ -482,9 +488,9 @@ class NotificationService {
         showWebNotification(title, body, tag: 'hardware');
         return;
       }
-      
+
       await flutterLocalNotificationsPlugin.show(
-        sensorName.hashCode, 
+        sensorName.hashCode,
         title,
         body,
         platformDetails,
@@ -519,10 +525,11 @@ class NotificationService {
     if (!_isSupported) return;
     if (await isNotificationsEnabled()) {
       if (kIsWeb) {
-        showWebNotification("New Message from $senderName", message, tag: 'chat');
+        showWebNotification("New Message from $senderName", message,
+            tag: 'chat');
         return;
       }
-      
+
       await flutterLocalNotificationsPlugin.show(
         notificationId,
         "New Message from $senderName",
@@ -542,7 +549,7 @@ class NotificationService {
   Future<String?> getDeviceToken() async {
     if (kIsWeb) return null;
     if (!isNativeAndroid && !isNativeIOS) return null;
-    
+
     try {
       return await FirebaseMessaging.instance.getToken();
     } catch (e) {
@@ -552,7 +559,7 @@ class NotificationService {
   }
 
   /// REST & PUSH TOKEN MANAGEMENT
-  
+
   /// Updates the device token in Supabase for the current user.
   /// This ensures push notifications are routed to THIS device for THIS user.
   Future<void> updateDeviceToken(String userId, String token) async {
@@ -560,10 +567,10 @@ class NotificationService {
       final supabase = Supabase.instance.client;
       await supabase
           .from('patients')
-          .update({'device_token': token})
-          .eq('id', userId);
-      
-      debugPrint("📡 NotificationService: Device token updated in cloud for $userId");
+          .update({'device_token': token}).eq('id', userId);
+
+      debugPrint(
+          "📡 NotificationService: Device token updated in cloud for $userId");
     } catch (e) {
       debugPrint("⚠️ NotificationService: Failed to update device token: $e");
     }
@@ -576,10 +583,10 @@ class NotificationService {
       final supabase = Supabase.instance.client;
       await supabase
           .from('patients')
-          .update({'device_token': null})
-          .eq('id', userId);
-      
-      debugPrint("📡 NotificationService: Device token cleared in cloud for $userId");
+          .update({'device_token': null}).eq('id', userId);
+
+      debugPrint(
+          "📡 NotificationService: Device token cleared in cloud for $userId");
     } catch (e) {
       debugPrint("⚠️ NotificationService: Failed to clear device token: $e");
     }

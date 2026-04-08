@@ -6,7 +6,7 @@ import 'sensor_service_interface.dart';
 class MockSensorService implements ISensorService {
   @override
   final SensorType type;
-  
+
   final _dataController = StreamController<dynamic>.broadcast();
   final _statusController = StreamController<SensorStatus>.broadcast();
 
@@ -45,9 +45,9 @@ class MockSensorService implements ISensorService {
           value = baseWeight + (_random.nextDouble() * 0.5);
           break;
         case SensorType.oximeter:
-          value = { 
-            'spo2': 97 + _random.nextInt(3), 
-            'bpm': 72 + _random.nextInt(10) 
+          value = {
+            'spo2': 97 + _random.nextInt(3),
+            'bpm': 72 + _random.nextInt(10)
           };
           break;
         case SensorType.thermometer:
@@ -55,9 +55,9 @@ class MockSensorService implements ISensorService {
           break;
         case SensorType.bloodPressure:
           // Simulate the "pumping" feel or just fluctuating final values
-          value = { 
-            'sys': 115 + _random.nextInt(10), 
-            'dia': 75 + _random.nextInt(10) 
+          value = {
+            'sys': 115 + _random.nextInt(10),
+            'dia': 75 + _random.nextInt(10)
           };
           break;
         case SensorType.battery:

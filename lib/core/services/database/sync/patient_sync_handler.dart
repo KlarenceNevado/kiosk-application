@@ -11,7 +11,7 @@ import '../../system/sync_event_bus.dart';
 class PatientSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
   final _changeController = StreamController<void>.broadcast();
-  
+
   Stream<void> get stream => _changeController.stream;
 
   PatientSyncHandler(super.supabase, [super.db]);
@@ -37,10 +37,18 @@ class PatientSyncHandler extends SyncHandler {
             syncedIds.add(updatedUser.id);
             await dbHelper.clearSyncMetadata('patients', updatedUser.id);
           } else {
-            await dbHelper.updateSyncMetadata(tableName: 'patients', recordId: user.id, error: 'Push failed', incrementRetry: true);
+            await dbHelper.updateSyncMetadata(
+                tableName: 'patients',
+                recordId: user.id,
+                error: 'Push failed',
+                incrementRetry: true);
           }
         } catch (e) {
-          await dbHelper.updateSyncMetadata(tableName: 'patients', recordId: user.id, error: e.toString(), incrementRetry: true);
+          await dbHelper.updateSyncMetadata(
+              tableName: 'patients',
+              recordId: user.id,
+              error: e.toString(),
+              incrementRetry: true);
         }
       }
 
@@ -66,10 +74,12 @@ class PatientSyncHandler extends SyncHandler {
       final lastSync = await _getLastSync();
       var query = supabase.from('patients').select();
 
-      // Only use lastSync optimization if we actually have local data. 
+      // Only use lastSync optimization if we actually have local data.
       // If the SSD database is fresh and empty, we MUST force a full pull regardless of lastSync from shared prefs.
       if (lastSync != null && localCount > 0) {
-        final overlapTime = DateTime.parse(lastSync).toUtc().subtract(const Duration(minutes: 5));
+        final overlapTime = DateTime.parse(lastSync)
+            .toUtc()
+            .subtract(const Duration(minutes: 5));
         query = query.gt('updated_at', overlapTime.toUtc().toIso8601String());
       }
 
@@ -82,7 +92,8 @@ class PatientSyncHandler extends SyncHandler {
 
         for (var row in cloudPatients) {
           final preparedRow = _prepareRowForSqlite(row);
-          batch.insert('patients', preparedRow, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert('patients', preparedRow,
+              conflictAlgorithm: ConflictAlgorithm.replace);
           latestTimestamp = row['updated_at'];
         }
         await batch.commit(noResult: true);
@@ -102,14 +113,19 @@ class PatientSyncHandler extends SyncHandler {
     if (_channel != null) {
       return;
     }
-    _channel = supabase.channel('public:patients_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all, schema: 'public', table: 'patients',
-      callback: (payload) {
-        onData(payload);
-        _changeController.add(null);
-        SyncEventBus.instance.triggerPatientUpdate();
-      },
-    ).subscribe();
+    _channel = supabase
+        .channel('public:patients_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'patients',
+          callback: (payload) {
+            onData(payload);
+            _changeController.add(null);
+            SyncEventBus.instance.triggerPatientUpdate();
+          },
+        )
+        .subscribe();
   }
 
   void unsubscribe() {
@@ -121,7 +137,7 @@ class PatientSyncHandler extends SyncHandler {
 
   Future<User?> createPatient(User user) async {
     final String birthDate = user.dateOfBirth.toIso8601String().split('T')[0];
-    
+
     final Map<String, dynamic> supabaseData = {
       'id': user.id,
       'first_name': user.firstName,
@@ -137,10 +153,11 @@ class PatientSyncHandler extends SyncHandler {
       'updated_at': DateTime.now().toIso8601String(),
     };
 
-    // Validation: Supabase 'patients' table ID is a UUID. 
+    // Validation: Supabase 'patients' table ID is a UUID.
     // If the account has a 'local_' prefix (legacy/guest), it cannot be pushed to cloud.
     if (user.id.startsWith('local_')) {
-      SecurityLogger.info("Sync: Skipping Supabase push for legacy/local user ID: ${user.id}");
+      SecurityLogger.info(
+          "Sync: Skipping Supabase push for legacy/local user ID: ${user.id}");
       // Mark as synced so it doesn't re-appear in getUnsyncedPatients every cycle
       await dbHelper.insertPatient(user.copyWith(isSynced: true));
       return user.copyWith(isSynced: true);
@@ -148,19 +165,25 @@ class PatientSyncHandler extends SyncHandler {
 
     try {
       await supabase.from('patients').upsert(supabaseData);
-      
-      final syncedUser = user.copyWith(isSynced: true, updatedAt: DateTime.now());
+
+      final syncedUser =
+          user.copyWith(isSynced: true, updatedAt: DateTime.now());
       await dbHelper.insertPatient(syncedUser);
-      SecurityLogger.info("Sync: Successfully pushed patient ${user.id} to Supabase.");
+      SecurityLogger.info(
+          "Sync: Successfully pushed patient ${user.id} to Supabase.");
       return syncedUser;
     } catch (e) {
-      if (e.toString().contains('PGRST204') || e.toString().contains('pin_hash')) {
-        debugPrint("🚨 SECURITY SYNC BLOCKED: Supabase schema is missing 'pin_hash' or 'pin_salt'.");
-        debugPrint("👉 ACTION REQUIRED: Run the security hardening SQL script in Supabase Editor.");
+      if (e.toString().contains('PGRST204') ||
+          e.toString().contains('pin_hash')) {
+        debugPrint(
+            "🚨 SECURITY SYNC BLOCKED: Supabase schema is missing 'pin_hash' or 'pin_salt'.");
+        debugPrint(
+            "👉 ACTION REQUIRED: Run the security hardening SQL script in Supabase Editor.");
       } else {
-        SecurityLogger.error("Sync: Failed to push patient ${user.id} to Supabase: $e");
+        SecurityLogger.error(
+            "Sync: Failed to push patient ${user.id} to Supabase: $e");
       }
-      
+
       final offlineUser = user.copyWith(isSynced: false);
       await dbHelper.insertPatient(offlineUser);
       return offlineUser;
@@ -208,11 +231,20 @@ class PatientSyncHandler extends SyncHandler {
     }
     try {
       final db = await dbHelper.database;
-      final localData = await db.query('patients', where: 'first_name LIKE ? OR last_name LIKE ?', whereArgs: ['%$query%', '%$query%'], limit: 10);
-      final List<User> localUsers = localData.map((json) => User.fromMap(json)).toList();
+      final localData = await db.query('patients',
+          where: 'first_name LIKE ? OR last_name LIKE ?',
+          whereArgs: ['%$query%', '%$query%'],
+          limit: 10);
+      final List<User> localUsers =
+          localData.map((json) => User.fromMap(json)).toList();
 
-      final cloudData = await supabase.from('patients').select().or('first_name.ilike.%$query%,last_name.ilike.%$query%').limit(10);
-      final List<User> cloudUsers = cloudData.map((json) => User.fromMap(json)).toList();
+      final cloudData = await supabase
+          .from('patients')
+          .select()
+          .or('first_name.ilike.%$query%,last_name.ilike.%$query%')
+          .limit(10);
+      final List<User> cloudUsers =
+          cloudData.map((json) => User.fromMap(json)).toList();
 
       final Map<String, User> merged = {};
       for (final u in localUsers) {
@@ -245,7 +277,7 @@ class PatientSyncHandler extends SyncHandler {
             if (decPhone == phone.trim()) {
               final decryptedRow = Map<String, dynamic>.from(row);
               decryptedRow['phone_number'] = decPhone;
-              
+
               // We don't decrypt PIN anymore; hash/salt are verified in AuthRepo
               return User.fromMap(decryptedRow);
             }
@@ -261,17 +293,18 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-
   Future<List<User>> fetchDependents(String parentId) async {
     try {
-      final data = await supabase.from('patients').select().eq('parent_id', parentId);
+      final data =
+          await supabase.from('patients').select().eq('parent_id', parentId);
       return data.map((json) => User.fromMap(json)).toList();
     } catch (e) {
       return [];
     }
   }
 
-  Future<List<Map<String, dynamic>>> findPatient(String nameInput, String phoneNumber) async {
+  Future<List<Map<String, dynamic>>> findPatient(
+      String nameInput, String phoneNumber) async {
     try {
       // Strategy: Search by Name (Plain Text) then decrypt found phone numbers to match input
       final results = await supabase
@@ -289,7 +322,8 @@ class PatientSyncHandler extends SyncHandler {
           final decPhone = dbHelper.decrypt(dbEncPhone);
           if (decPhone == phoneNumber.trim()) {
             final preparedRow = Map<String, dynamic>.from(row);
-            preparedRow['phone_number'] = decPhone; // Use plain for AuthRepo logic
+            preparedRow['phone_number'] =
+                decPhone; // Use plain for AuthRepo logic
             matches.add(preparedRow);
           }
         } catch (_) {}
@@ -300,7 +334,6 @@ class PatientSyncHandler extends SyncHandler {
       return [];
     }
   }
-
 
   // --- PRIVATE HELPERS ---
 
@@ -320,10 +353,25 @@ class PatientSyncHandler extends SyncHandler {
   /// Known local SQLite columns for the 'patients' table.
   /// Any extra columns from Supabase are stripped to prevent INSERT crashes.
   static const _knownPatientColumns = {
-    'id', 'first_name', 'last_name', 'middle_initial', 'sitio',
-    'phone_number', 'pin_code', 'date_of_birth', 'gender', 'parent_id',
-    'avatar_url', 'relation', 'is_active', 'is_synced', 'is_deleted',
-    'created_at', 'updated_at', 'pin_hash', 'pin_salt',
+    'id',
+    'first_name',
+    'last_name',
+    'middle_initial',
+    'sitio',
+    'phone_number',
+    'pin_code',
+    'date_of_birth',
+    'gender',
+    'parent_id',
+    'avatar_url',
+    'relation',
+    'is_active',
+    'is_synced',
+    'is_deleted',
+    'created_at',
+    'updated_at',
+    'pin_hash',
+    'pin_salt',
   };
 
   Map<String, dynamic> _prepareRowForSqlite(Map<String, dynamic> row) {

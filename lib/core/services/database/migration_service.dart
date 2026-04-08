@@ -90,7 +90,7 @@ class MigrationService {
   /// Perform a deep sanity check for critical columns that might be missing across versions
   Future<void> performSanityCheck(Database db) async {
     debugPrint("📂 [MigrationService] Starting structural sanity check...");
-    
+
     await db.transaction((txn) async {
       final tables = [
         'patients',
@@ -126,7 +126,8 @@ class MigrationService {
 
       // Specific check for Patients 'created_at'
       final patientCols = await txn.rawQuery('PRAGMA table_info(patients)');
-      final patientColNames = patientCols.map((c) => c['name'].toString()).toList();
+      final patientColNames =
+          patientCols.map((c) => c['name'].toString()).toList();
       if (!patientColNames.contains('created_at')) {
         await txn.execute('ALTER TABLE patients ADD COLUMN created_at TEXT');
       }
@@ -136,10 +137,12 @@ class MigrationService {
 
       // Vitals missing columns
       final vitalsCols = await txn.rawQuery('PRAGMA table_info(vitals)');
-      final vitalsColNames = vitalsCols.map((c) => c['name'].toString()).toList();
+      final vitalsColNames =
+          vitalsCols.map((c) => c['name'].toString()).toList();
       if (!vitalsColNames.contains('created_at')) {
         await txn.execute('ALTER TABLE vitals ADD COLUMN created_at TEXT');
-        await txn.execute("UPDATE vitals SET created_at = datetime('now') WHERE created_at IS NULL");
+        await txn.execute(
+            "UPDATE vitals SET created_at = datetime('now') WHERE created_at IS NULL");
       }
       if (!vitalsColNames.contains('report_path')) {
         await txn.execute('ALTER TABLE vitals ADD COLUMN report_path TEXT');
@@ -152,14 +155,18 @@ class MigrationService {
       final annCols = await txn.rawQuery('PRAGMA table_info(announcements)');
       final annColNames = annCols.map((c) => c['name'].toString()).toList();
       if (!annColNames.contains('created_at')) {
-        await txn.execute('ALTER TABLE announcements ADD COLUMN created_at TEXT');
-        await txn.execute("UPDATE announcements SET created_at = datetime('now') WHERE created_at IS NULL");
+        await txn
+            .execute('ALTER TABLE announcements ADD COLUMN created_at TEXT');
+        await txn.execute(
+            "UPDATE announcements SET created_at = datetime('now') WHERE created_at IS NULL");
       }
       if (!annColNames.contains('media_url')) {
-        await txn.execute('ALTER TABLE announcements ADD COLUMN media_url TEXT');
+        await txn
+            .execute('ALTER TABLE announcements ADD COLUMN media_url TEXT');
       }
       if (!annColNames.contains('media_path')) {
-        await txn.execute('ALTER TABLE announcements ADD COLUMN media_path TEXT');
+        await txn
+            .execute('ALTER TABLE announcements ADD COLUMN media_path TEXT');
       }
 
       // Alerts missing columns
@@ -174,21 +181,26 @@ class MigrationService {
       final chatCols = await txn.rawQuery('PRAGMA table_info(chat_messages)');
       final chatColNames = chatCols.map((c) => c['name'].toString()).toList();
       if (!chatColNames.contains('created_at')) {
-        await txn.execute("ALTER TABLE chat_messages ADD COLUMN created_at TEXT");
+        await txn
+            .execute("ALTER TABLE chat_messages ADD COLUMN created_at TEXT");
         await txn.execute(
             "UPDATE chat_messages SET created_at = datetime('now') WHERE created_at IS NULL");
       }
       if (!chatColNames.contains('media_url')) {
-        await txn.execute('ALTER TABLE chat_messages ADD COLUMN media_url TEXT');
+        await txn
+            .execute('ALTER TABLE chat_messages ADD COLUMN media_url TEXT');
       }
       if (!chatColNames.contains('media_path')) {
-        await txn.execute('ALTER TABLE chat_messages ADD COLUMN media_path TEXT');
+        await txn
+            .execute('ALTER TABLE chat_messages ADD COLUMN media_path TEXT');
       }
       if (!chatColNames.contains('is_active')) {
-        await txn.execute('ALTER TABLE chat_messages ADD COLUMN is_active INTEGER DEFAULT 1');
+        await txn.execute(
+            'ALTER TABLE chat_messages ADD COLUMN is_active INTEGER DEFAULT 1');
       }
       if (!chatColNames.contains('patient_id')) {
-        await txn.execute('ALTER TABLE chat_messages ADD COLUMN patient_id TEXT');
+        await txn
+            .execute('ALTER TABLE chat_messages ADD COLUMN patient_id TEXT');
       }
       if (!chatColNames.contains('sender')) {
         await txn.execute('ALTER TABLE chat_messages ADD COLUMN sender TEXT');
@@ -201,7 +213,7 @@ class MigrationService {
     // --- RECONSTRUCTION FIX FOR NOT NULL & LEGACY COLUMNS ---
     await _reconstructPatientsTable(db);
     await _reconstructVitalsTable(db);
-    
+
     debugPrint("✅ [MigrationService] structural sanity check complete.");
   }
 
@@ -217,7 +229,8 @@ class MigrationService {
         colNames.contains('phoneNumber');
 
     if (pinCodeCol['notnull'] == 1 || hasLegacy) {
-      debugPrint("🛠 [Migration] Reconstructing patients table to relax constraints...");
+      debugPrint(
+          "🛠 [Migration] Reconstructing patients table to relax constraints...");
       await db.transaction((txn) async {
         await txn.execute('DROP TABLE IF EXISTS patients_new');
         await txn.execute('CREATE TABLE IF NOT EXISTS patients_new ('
@@ -244,7 +257,9 @@ class MigrationService {
           'id',
           colNames.contains('first_name') ? 'first_name' : 'firstName',
           colNames.contains('last_name') ? 'last_name' : 'lastName',
-          colNames.contains('middle_initial') ? 'middle_initial' : 'middleInitial',
+          colNames.contains('middle_initial')
+              ? 'middle_initial'
+              : 'middleInitial',
           'sitio',
           colNames.contains('phone_number') ? 'phone_number' : 'phoneNumber',
           colNames.contains('pin_code') ? 'pin_code' : 'pinCode',
@@ -274,7 +289,8 @@ class MigrationService {
 
     // Check if we need reconstruction (e.g. if legacy userId exists or if constraints are off)
     if (colNames.contains('userId')) {
-      debugPrint("🛠 [Migration] Reconstructing vitals table to remove legacy columns...");
+      debugPrint(
+          "🛠 [Migration] Reconstructing vitals table to remove legacy columns...");
       await db.transaction((txn) async {
         await txn.execute('DROP TABLE IF EXISTS vitals_new');
         await txn.execute('CREATE TABLE IF NOT EXISTS vitals_new ('
@@ -299,7 +315,7 @@ class MigrationService {
 
         // Select the correct user id content
         final uIdCol = colNames.contains('user_id') ? 'user_id' : 'userId';
-        
+
         await txn.execute(
             'INSERT INTO vitals_new (id, user_id, timestamp, heart_rate, systolic_bp, diastolic_bp, oxygen, temperature, bmi, bmi_category, status, remarks, follow_up_action, report_url, is_synced, created_at, updated_at) '
             'SELECT id, $uIdCol, timestamp, heart_rate, systolic_bp, diastolic_bp, oxygen, temperature, bmi, bmi_category, status, remarks, follow_up_action, report_url, is_synced, created_at, updated_at FROM vitals');

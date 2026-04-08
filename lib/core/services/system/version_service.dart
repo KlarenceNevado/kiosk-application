@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
 class VersionService {
-  static const String _versionUrl = 'https://klarencenevado.github.io/kiosk-application/version.json';
+  static const String _versionUrl =
+      'https://klarencenevado.github.io/kiosk-application/version.json';
 
   Future<bool> isUpdateAvailable() async {
     try {
@@ -23,17 +24,19 @@ class VersionService {
 
   bool _isVersionNewer(String local, String remote) {
     if (local == remote) return false;
-    
+
     // Simple semver snippet (major.minor.patch)
     try {
-      List<int> localParts = local.split('+')[0].split('.').map(int.parse).toList();
-      List<int> remoteParts = remote.split('+')[0].split('.').map(int.parse).toList();
-      
+      List<int> localParts =
+          local.split('+')[0].split('.').map(int.parse).toList();
+      List<int> remoteParts =
+          remote.split('+')[0].split('.').map(int.parse).toList();
+
       for (int i = 0; i < 3; i++) {
         if (remoteParts[i] > localParts[i]) return true;
         if (remoteParts[i] < localParts[i]) return false;
       }
-      
+
       // Check build number if versions are same
       if (remote.contains('+') && local.contains('+')) {
         int localBuild = int.parse(local.split('+')[1]);

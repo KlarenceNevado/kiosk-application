@@ -35,12 +35,15 @@ void main() async {
     MultiProvider(
       providers: [
         Provider(create: (_) => SensorManager()),
-        ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
-        ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
+        ChangeNotifierProvider<IAuthRepository>(
+            create: (_) => LocalAuthRepository(), lazy: false),
+        ChangeNotifierProvider<IHistoryRepository>(
+            create: (_) => LocalHistoryRepository()),
         ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-        ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+        ChangeNotifierProvider<IChatRepository>(
+            create: (_) => LocalChatRepository()),
         ChangeNotifierProvider(
           create: (context) => HealthWizardProvider(
             context.read<SensorManager>(),

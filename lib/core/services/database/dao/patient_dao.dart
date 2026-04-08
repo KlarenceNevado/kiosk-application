@@ -21,7 +21,8 @@ class PatientDao extends BaseDao {
       'parent_id': map['parent_id'] ?? map['parentId'],
       'created_at': map['created_at'] ?? DateTime.now().toIso8601String(),
       'updated_at': map['updated_at'] ?? DateTime.now().toIso8601String(),
-      'is_deleted': (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
+      'is_deleted':
+          (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
       'is_active': (map['is_active'] == true ||
               map['is_active'] == 1 ||
               map['isActive'] == true ||
@@ -42,7 +43,8 @@ class PatientDao extends BaseDao {
         where: 'is_deleted = ?', whereArgs: [0], orderBy: 'last_name ASC');
     return result.map((json) {
       final decrypted = Map<String, dynamic>.from(json);
-      decrypted['phoneNumber'] = decrypt(json['phone_number']?.toString() ?? '');
+      decrypted['phoneNumber'] =
+          decrypt(json['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = decrypt(json['pin_code']?.toString() ?? '');
       decrypted['pin_hash'] = json['pin_hash'];
       decrypted['pin_salt'] = json['pin_salt'];
@@ -54,7 +56,8 @@ class PatientDao extends BaseDao {
     final maps = await db.query('patients', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
       final decrypted = Map<String, dynamic>.from(maps.first);
-      decrypted['phoneNumber'] = decrypt(maps.first['phone_number']?.toString() ?? '');
+      decrypted['phoneNumber'] =
+          decrypt(maps.first['phone_number']?.toString() ?? '');
       decrypted['pinCode'] = decrypt(maps.first['pin_code']?.toString() ?? '');
       decrypted['pin_hash'] = maps.first['pin_hash'];
       decrypted['pin_salt'] = maps.first['pin_salt'];
@@ -78,7 +81,8 @@ class PatientDao extends BaseDao {
       'parent_id': map['parent_id'] ?? map['parentId'],
       'created_at': map['created_at'],
       'updated_at': DateTime.now().toIso8601String(),
-      'is_deleted': (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
+      'is_deleted':
+          (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
       'is_active': (map['is_active'] == true ||
               map['is_active'] == 1 ||
               map['isActive'] == true ||

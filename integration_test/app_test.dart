@@ -22,11 +22,14 @@ void main() {
       expect(find.text('New Patient Registration'), findsOneWidget);
 
       // 4. Fill registration form
-      await tester.enterText(find.byType(TextField).at(0), 'Alice'); // First Name
-      await tester.enterText(find.byType(TextField).at(1), 'Smith'); // Last Name
-      await tester.enterText(find.byType(TextField).at(2), 'A');     // M.I.
-      await tester.enterText(find.byType(TextField).at(3), '09223334444'); // Phone
-      
+      await tester.enterText(
+          find.byType(TextField).at(0), 'Alice'); // First Name
+      await tester.enterText(
+          find.byType(TextField).at(1), 'Smith'); // Last Name
+      await tester.enterText(find.byType(TextField).at(2), 'A'); // M.I.
+      await tester.enterText(
+          find.byType(TextField).at(3), '09223334444'); // Phone
+
       // 5. Submit registration
       final regBtn = find.text('Create Patient Record');
       await tester.tap(regBtn);

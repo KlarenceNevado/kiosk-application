@@ -54,3 +54,16 @@ assets/.env
 # Log files
 *.log
 *.txt
+/diagnostics/
+*.zip
+*.json
+!web/version.json
+!pubspec.lock
+!analysis_options.yaml
+!firebase.json
+!package.json
+!plugin.json
+!*.dart
+!*.md
+!*.yml
+!*.yaml

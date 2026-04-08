@@ -154,7 +154,9 @@ class _RegisterScreenState extends State<RegisterScreen>
               AppLocalizations.of(context)?.patientRegistration ??
                   "Patient Registration",
               style: const TextStyle(
-                  color: AppColors.brandDark, fontWeight: FontWeight.w700, fontSize: 18)),
+                  color: AppColors.brandDark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18)),
           centerTitle: true,
         ),
         body: LayoutBuilder(
@@ -181,14 +183,19 @@ class _RegisterScreenState extends State<RegisterScreen>
                           Text(
                               AppLocalizations.of(context)?.patientInfoForm ??
                                   "Patient Registration Form",
-                              style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 30),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .displayLarge
+                                  ?.copyWith(fontSize: 30),
                               textAlign: TextAlign.center),
                           const SizedBox(height: 6),
                           const Text("Fill in the details to join us",
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 15, color: Colors.grey, fontWeight: FontWeight.w500)),
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w500)),
                           const SizedBox(height: 20),
-                          
                           _buildSectionHeader(
                               AppLocalizations.of(context)?.demographics ??
                                   "Demographics"),
@@ -196,10 +203,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                             decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                                border: Border.all(
+                                    color:
+                                        Colors.black.withValues(alpha: 0.05)),
                                 boxShadow: [
                                   BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.01),
+                                      color:
+                                          Colors.black.withValues(alpha: 0.01),
                                       blurRadius: 15,
                                       offset: const Offset(0, 5))
                                 ]),
@@ -247,7 +257,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                               child: AbsorbPointer(
                                                   child: _buildTextField(
                                                       AppLocalizations.of(
-                                                                   context)
+                                                                  context)
                                                               ?.dateOfBirth ??
                                                           "Date of Birth",
                                                       _dobController,
@@ -265,7 +275,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         initialValue: _selectedGender,
                                         items: _genders
                                             .map((g) => DropdownMenuItem(
-                                                value: g, child: Text(g, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))))
+                                                value: g,
+                                                child: Text(g,
+                                                    style: const TextStyle(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.w700))))
                                             .toList(),
                                         onChanged: (val) => setState(
                                             () => _selectedGender = val),
@@ -276,7 +291,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                               ),
                             ),
                           ),
-                          
                           const SizedBox(height: 20),
                           _buildSectionHeader(
                               AppLocalizations.of(context)?.contact ??
@@ -285,10 +299,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                             decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                                border: Border.all(
+                                    color:
+                                        Colors.black.withValues(alpha: 0.05)),
                                 boxShadow: [
                                   BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.01),
+                                      color:
+                                          Colors.black.withValues(alpha: 0.01),
                                       blurRadius: 15,
                                       offset: const Offset(0, 5))
                                 ]),
@@ -304,7 +321,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                     initialValue: _selectedSitio,
                                     items: _sitios
                                         .map((sitio) => DropdownMenuItem(
-                                            value: sitio, child: Text(sitio, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))))
+                                            value: sitio,
+                                            child: Text(sitio,
+                                                style: const TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight:
+                                                        FontWeight.w700))))
                                         .toList(),
                                     onChanged: (val) =>
                                         setState(() => _selectedSitio = val),
@@ -331,7 +353,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                                             : AppLocalizations.of(context)
                                                     ?.phoneLengthError ??
                                                 "Phone must be 11 digits",
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1.5),
+                                    style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.5),
                                     decoration: _inputDecoration(
                                             AppLocalizations.of(context)
                                                     ?.phoneNumber ??
@@ -340,7 +365,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         .copyWith(
                                       counterText: "",
                                       suffixIcon: Padding(
-                                        padding: const EdgeInsets.only(right: 12),
+                                        padding:
+                                            const EdgeInsets.only(right: 12),
                                         child: IconButton(
                                           iconSize: 24,
                                           icon: Icon(_isPasswordVisible
@@ -357,34 +383,35 @@ class _RegisterScreenState extends State<RegisterScreen>
                               ),
                             ),
                           ),
-                          
                           const SizedBox(height: 32),
                           if (isLoading)
-                             const Center(
-                                 child: CircularProgressIndicator(
-                                     color: AppColors.brandGreen))
-                           else
-                             FlowAnimatedButton(
-                               child: ElevatedButton(
-                                 onPressed: _handleRegister,
-                                 style: ElevatedButton.styleFrom(
-                                     backgroundColor: AppColors.brandGreen,
-                                     foregroundColor: Colors.white,
-                                     minimumSize: const Size(double.infinity, 60),
-                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-                                     elevation: 6,
-                                     shadowColor: AppColors.brandGreen.withValues(alpha: 0.3),
-                                 ),
-                                 child: Text(
-                                     AppLocalizations.of(context)
-                                             ?.createPatientRecord ??
-                                         "CREATE PATIENT RECORD",
-                                     style: const TextStyle(
-                                         fontSize: 18,
-                                         fontWeight: FontWeight.w700,
-                                         letterSpacing: 1.0)),
-                               ),
-                             ),
+                            const Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.brandGreen))
+                          else
+                            FlowAnimatedButton(
+                              child: ElevatedButton(
+                                onPressed: _handleRegister,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brandGreen,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(double.infinity, 60),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(50)),
+                                  elevation: 6,
+                                  shadowColor: AppColors.brandGreen
+                                      .withValues(alpha: 0.3),
+                                ),
+                                child: Text(
+                                    AppLocalizations.of(context)
+                                            ?.createPatientRecord ??
+                                        "CREATE PATIENT RECORD",
+                                    style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.0)),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -403,7 +430,9 @@ class _RegisterScreenState extends State<RegisterScreen>
       padding: const EdgeInsets.only(bottom: 12, left: 12),
       child: Text(title,
           style: GoogleFonts.outfit(
-              fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.brandDark.withValues(alpha: 0.6))),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.brandDark.withValues(alpha: 0.6))),
     );
   }
 
@@ -435,14 +464,17 @@ class _RegisterScreenState extends State<RegisterScreen>
   InputDecoration _inputDecoration(String label, IconData? icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey),
+      labelStyle: GoogleFonts.outfit(
+          fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey),
       filled: true,
       fillColor: Colors.white,
       counterText: "",
-      prefixIcon: icon != null ? Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Icon(icon, color: AppColors.brandGreen, size: 24),
-      ) : null,
+      prefixIcon: icon != null
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Icon(icon, color: AppColors.brandGreen, size: 24),
+            )
+          : null,
       border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(50),
           borderSide: BorderSide(color: Colors.grey.shade200, width: 2)),
@@ -451,7 +483,8 @@ class _RegisterScreenState extends State<RegisterScreen>
           borderSide: BorderSide(color: Colors.grey.shade200, width: 2)),
       focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(50),
-          borderSide: const BorderSide(color: AppColors.brandGreen, width: 2.0)),
+          borderSide:
+              const BorderSide(color: AppColors.brandGreen, width: 2.0)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
     );
   }

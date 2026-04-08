@@ -34,10 +34,10 @@ import 'package:kiosk_application/core/repositories/local_system_repository.dart
 void main() {
   // Essential Binding
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Set the mode immediately (synchronous)
   AppEnvironment().setMode(AppMode.kiosk);
-  
+
   // Start the Zero-Latency Startup logic
   runApp(const KioskStartupApp());
 }
@@ -52,12 +52,15 @@ class KioskStartupApp extends StatelessWidget {
       builder: (context) => MultiProvider(
         providers: [
           Provider(create: (_) => SensorManager()),
-          ChangeNotifierProvider<IAuthRepository>(create: (_) => LocalAuthRepository(), lazy: false),
-          ChangeNotifierProvider<IHistoryRepository>(create: (_) => LocalHistoryRepository()),
+          ChangeNotifierProvider<IAuthRepository>(
+              create: (_) => LocalAuthRepository(), lazy: false),
+          ChangeNotifierProvider<IHistoryRepository>(
+              create: (_) => LocalHistoryRepository()),
           ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
           ChangeNotifierProvider(create: (_) => LanguageProvider()),
           ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-          ChangeNotifierProvider<IChatRepository>(create: (_) => LocalChatRepository()),
+          ChangeNotifierProvider<IChatRepository>(
+              create: (_) => LocalChatRepository()),
           Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
           ChangeNotifierProvider(
             create: (context) => HealthWizardProvider(
@@ -100,7 +103,8 @@ class KioskApp extends StatelessWidget {
           isPaused: context.watch<HealthWizardProvider>().isSessionActive,
           duration: const Duration(seconds: 45),
           onTimeout: () {
-            final String location = appRouter.routerDelegate.currentConfiguration.uri.toString();
+            final String location =
+                appRouter.routerDelegate.currentConfiguration.uri.toString();
             if (location == AppRoutes.login) return;
 
             context.read<IAuthRepository>().logout();

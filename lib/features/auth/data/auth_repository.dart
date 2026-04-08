@@ -24,8 +24,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   bool _isLoading = false;
   bool _isRefreshing = false; // NEW: Prevent concurrent refreshes
   StreamSubscription? _patientSyncSub;
-  Timer? _refreshDebounce; 
-  
+  Timer? _refreshDebounce;
+
   // NEW: SECURITY HARDENING
   final Map<String, int> _failedAttempts = {};
   DateTime? _lockoutUntil;
@@ -54,12 +54,12 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     _patientSyncSub = SyncEventBus.instance.patientStream.listen((_) {
       _refreshDebounce?.cancel();
       _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
-        debugPrint("☁️ AuthRepository: Sync event received, refreshing (debounced)...");
+        debugPrint(
+            "☁️ AuthRepository: Sync event received, refreshing (debounced)...");
         _loadUsers();
       });
     });
   }
-
 
   Future<void> _loadUsers() async {
     if (_isRefreshing) return;
@@ -83,19 +83,21 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
     try {
       _users = await DatabaseHelper.instance.getPatients();
-      
+
       // NEW: Trigger sync if we have a persisted session
       final encryptedLastUserId = prefs.getString('last_logged_in_user_id');
       if (encryptedLastUserId != null && _currentUser == null) {
         try {
-          final lastUserId = EncryptionService().decryptData(encryptedLastUserId);
+          final lastUserId =
+              EncryptionService().decryptData(encryptedLastUserId);
           _currentUser = _users.firstWhere((u) => u.id == lastUserId);
           if (_currentUser != null) {
             SyncService().restartSync(_currentUser!.id);
             SyncService().fullSyncForUser(_currentUser!.id);
           }
         } catch (_) {
-          debugPrint("⚠️ AuthRepository: Stale or unreadable session found. Clearing.");
+          debugPrint(
+              "⚠️ AuthRepository: Stale or unreadable session found. Clearing.");
           await prefs.remove('last_logged_in_user_id');
         }
       }
@@ -171,16 +173,16 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       // 2. Persist to SQLite immediately
       await DatabaseHelper.instance.insertPatient(autonomousUser);
-      
+
       // 3. Update memory state for instant login
       _users = await DatabaseHelper.instance.getPatients();
       _currentUser = autonomousUser;
 
-      SecurityLogger.info("New patient registered (Offline-First)", 
+      SecurityLogger.info("New patient registered (Offline-First)",
           pii: autonomousUser.fullName);
-      
+
       DatabaseHelper.instance.logSecurityEvent(
-          "REGISTER", "New patient registered autonomously", 
+          "REGISTER", "New patient registered autonomously",
           userId: autonomousUser.id);
 
       // 4. Background Cloud Handoff (Non-blocking)
@@ -235,10 +237,11 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
     _users = await DatabaseHelper.instance.getPatients();
 
-    SecurityLogger.info("Admin ${isActive ? 'restored' : 'archived'} user", pii: user.fullName);
+    SecurityLogger.info("Admin ${isActive ? 'restored' : 'archived'} user",
+        pii: user.fullName);
 
-    DatabaseHelper.instance.logSecurityEvent("USER_ARCHIVE",
-        "Admin ${isActive ? 'restored' : 'archived'} user",
+    DatabaseHelper.instance.logSecurityEvent(
+        "USER_ARCHIVE", "Admin ${isActive ? 'restored' : 'archived'} user",
         userId: "ADMIN");
 
     // Trigger Cloud Sync
@@ -257,11 +260,12 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       // Since local SQLite data is stored with deterministic re-encryption (or plain if using getPatients),
       // the comparison here might be tricky if the Repository list is stale.
       // But _loadUsers correctly decrypts when loading.
-      final localUser = _users.where((u) => 
-        (u.firstName.toLowerCase().contains(firstName.toLowerCase()) || 
-         u.fullName.toLowerCase().contains(firstName.toLowerCase())) &&
-        u.phoneNumber.trim() == phoneNumber.trim()
-      ).toList();
+      final localUser = _users
+          .where((u) =>
+              (u.firstName.toLowerCase().contains(firstName.toLowerCase()) ||
+                  u.fullName.toLowerCase().contains(firstName.toLowerCase())) &&
+              u.phoneNumber.trim() == phoneNumber.trim())
+          .toList();
 
       if (localUser.isNotEmpty) {
         _currentUser = localUser.first;
@@ -269,7 +273,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       }
 
       // 2. Cloud Fallback (Critical for new accounts not yet pulled)
-      final cloudMatches = await SyncService().findPatient(firstName, phoneNumber);
+      final cloudMatches =
+          await SyncService().findPatient(firstName, phoneNumber);
       if (cloudMatches.isNotEmpty) {
         final cloudUser = User.fromMap(cloudMatches.first);
         await DatabaseHelper.instance.insertPatient(cloudUser);
@@ -293,7 +298,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     if (_currentUser == null) return "Unknown Error";
 
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Fetch Dependents
     final dependents = await SyncService().fetchDependents(_currentUser!.id);
     for (final dependent in dependents) {
@@ -308,7 +313,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     // EAGER SYNC & SESSION RESTART
     SyncService().restartSync(_currentUser!.id);
     SyncService().fullSyncForUser(_currentUser!.id);
-    
+
     // Update cloud push token (REAL FCM TOKEN)
     try {
       final token = await NotificationService().getDeviceToken();
@@ -343,7 +348,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   void resetSessionTimer() {
     _sessionTimeout?.cancel();
     _sessionTimeout = Timer(const Duration(minutes: _sessionMinutes), () {
-      debugPrint("🕰️ Session Timeout ($_sessionMinutes minutes): Logging out...");
+      debugPrint(
+          "🕰️ Session Timeout ($_sessionMinutes minutes): Logging out...");
       logout();
     });
   }
@@ -363,15 +369,17 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   void _recordFailure(String phone) {
     _failedAttempts[phone] = (_failedAttempts[phone] ?? 0) + 1;
     if (_failedAttempts[phone]! >= _maxAttempts) {
-      _lockoutUntil = DateTime.now().add(const Duration(minutes: _lockoutMinutes));
-      debugPrint("🚨 BRUTE FORCE DETECTED: Locking out phone $phone for $_lockoutMinutes minutes.");
+      _lockoutUntil =
+          DateTime.now().add(const Duration(minutes: _lockoutMinutes));
+      debugPrint(
+          "🚨 BRUTE FORCE DETECTED: Locking out phone $phone for $_lockoutMinutes minutes.");
     }
   }
 
   /// Zero-Knowledge PIN Verification with Legacy Fallback
   Future<bool> _verifyUserPin(User user, String enteredPin) async {
     final security = EncryptionService();
-    
+
     // 1. If user already has a hash (Modern Security)
     if (user.pinHash != null && user.pinSalt != null) {
       final challengeHash = security.hashPin(enteredPin, user.pinSalt!);
@@ -381,11 +389,12 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     // 2. Legacy Fallback: Verify against encrypted pinCode
     if (user.pinCode == enteredPin) {
       // UPGRADE: Immediate auto-migration to Hash
-      debugPrint("🔐 AuthRepository: Migrating legacy user ${user.id} to SHA-256 Hash.");
+      debugPrint(
+          "🔐 AuthRepository: Migrating legacy user ${user.id} to SHA-256 Hash.");
       final newSalt = security.generateSalt();
       final newHash = security.hashPin(enteredPin, newSalt);
       final upgradedUser = user.copyWith(pinHash: newHash, pinSalt: newSalt);
-      
+
       // Persist the upgrade
       await DatabaseHelper.instance.updatePatient(upgradedUser);
       return true;
@@ -393,7 +402,6 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
     return false;
   }
-
 
   // --- KIOSK QR LOGIN ---
   @override
@@ -457,7 +465,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       // 1. Authenticate via Cloud (Supabase)
       // Standard auth (handles initial handshake)
       final cloudUser = await SyncService().authenticatePatient(phone, pin);
-      
+
       if (cloudUser != null) {
         // SECONDARY SECURITY: Zero-Knowledge Match Check
         // On cloudUser, we check if the PIN matches (and migrate if needed)
@@ -470,14 +478,14 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         }
 
         _failedAttempts.remove(phone); // Success: Reset failure count
-        
+
         // Ensure the cloud user has a hash locally
         var localUser = cloudUser;
         if (localUser.pinHash == null) {
-           final security = EncryptionService();
-           final salt = security.generateSalt();
-           final hash = security.hashPin(pin, salt);
-           localUser = localUser.copyWith(pinHash: hash, pinSalt: salt);
+          final security = EncryptionService();
+          final salt = security.generateSalt();
+          final hash = security.hashPin(pin, salt);
+          localUser = localUser.copyWith(pinHash: hash, pinSalt: salt);
         }
 
         // Fetch Dependents
@@ -492,16 +500,18 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
         _currentUser = localUser;
         _isLoading = false;
-        
+
         // Start Security Session
         ChatListenerService().startListening(_currentUser!.id);
         SystemLogService().startSession(_currentUser!.id);
-        SystemAlertListenerService().startListening(userRole: 'patient', sitio: _currentUser!.sitio);
-        SyncService().syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
-        
+        SystemAlertListenerService()
+            .startListening(userRole: 'patient', sitio: _currentUser!.sitio);
+        SyncService()
+            .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
+
         resetSessionTimer();
         notifyListeners();
-        return null; 
+        return null;
       } else {
         _recordFailure(phone);
         _isLoading = false;
@@ -519,7 +529,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   Future<void> logout() async {
     _sessionTimeout?.cancel();
     _sessionTimeout = null;
-    
+
     final mode = AppEnvironment().mode;
 
     if (_currentUser != null) {

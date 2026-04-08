@@ -7,11 +7,15 @@ import 'package:kiosk_application/core/services/database/sync/system_sync_handle
 import 'package:kiosk_application/core/services/database/sync/chat_sync_handler.dart';
 
 class MockPatientHandler extends Mock implements PatientSyncHandler {}
+
 class MockVitalsHandler extends Mock implements VitalsSyncHandler {}
+
 class MockSystemHandler extends Mock implements SystemSyncHandler {}
+
 class MockChatHandler extends Mock implements ChatSyncHandler {}
 
 class MockAuthRepo extends Mock {}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -35,7 +39,7 @@ void main() {
       s: mockSystem,
       c: mockChat,
     );
-    
+
     // Inject into singleton for tests that might use SyncService()
     SyncService.setMockInstance(syncService);
   });
@@ -57,7 +61,7 @@ void main() {
       verify(() => mockPatient.push()).called(1);
       verify(() => mockVitals.push()).called(1);
       verify(() => mockChat.push()).called(1);
-      
+
       verify(() => mockPatient.pull()).called(1);
       verify(() => mockVitals.pull()).called(1);
       verify(() => mockSystem.pull()).called(1);

@@ -43,8 +43,10 @@ class PatientAppTheme {
         backgroundColor: Colors.white,
         selectedItemColor: brandGreen,
         unselectedItemColor: Color(0xFF94A3B8),
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle:
+            TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle:
+            TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
         type: BottomNavigationBarType.fixed,
         elevation: 20,
       ),
@@ -68,7 +70,8 @@ class PatientAppTheme {
           foregroundColor: Colors.white,
           elevation: 2,
           shadowColor: brandGreen.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
         ),
@@ -78,7 +81,8 @@ class PatientAppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),

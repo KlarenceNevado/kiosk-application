@@ -19,27 +19,24 @@ class LogoGlow extends StatefulWidget {
 
 class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300), 
-    );
+      duration: const Duration(seconds: 2), 
+    )..repeat(reverse: true);
 
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeIn,
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
 
-    _controller.forward();
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
+    );
   }
 
   @override
@@ -50,66 +47,71 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Layer 1: Subtle outer aura
-            Container(
-              width: widget.size,
-              height: widget.size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.glowColor.withValues(alpha: 0.1),
-                    blurRadius: 50,
-                    spreadRadius: 10.0,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: const AlwaysStoppedAnimation(1.0), // Always visible after initial fade
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Layer 1: Subtle outer aura with pulsing spread
+                Container(
+                  width: widget.size * _pulseAnimation.value,
+                  height: widget.size * _pulseAnimation.value,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.glowColor.withValues(alpha: 0.08),
+                        blurRadius: 60,
+                        spreadRadius: 20 * _pulseAnimation.value,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            // Layer 2: Soft core glow
-            Container(
-              width: widget.size * 0.77,
-              height: widget.size * 0.77,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.glowColor.withValues(alpha: 0.15),
-                    blurRadius: 30,
-                    spreadRadius: 2.0,
+                ),
+                // Layer 2: Soft core glow
+                Container(
+                  width: widget.size * 0.77,
+                  height: widget.size * 0.77,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.glowColor.withValues(alpha: 0.12),
+                        blurRadius: 40,
+                        spreadRadius: 5.0 * _pulseAnimation.value,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                // Layer 3: Solid White container with subtle depth
+                Container(
+                  padding: EdgeInsets.all(widget.size * 0.15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      )
+                    ],
+                  ),
+                  child: widget.child ?? Image.asset(
+                    'assets/icons/patient_icon.png',
+                    width: widget.size * 0.4,
+                    height: widget.size * 0.4,
+                  ),
+                ),
+              ],
             ),
-            // Layer 3: Solid White container
-            Container(
-              padding: EdgeInsets.all(widget.size * 0.15),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 15,
-                    offset: Offset(0, 6),
-                  )
-                ],
-              ),
-              child: widget.child ?? Image.asset(
-                'assets/icons/patient_icon.png',
-                width: widget.size * 0.4,
-                height: widget.size * 0.4,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

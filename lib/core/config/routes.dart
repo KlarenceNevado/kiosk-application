@@ -15,7 +15,6 @@ import '../../features/health_check/screens/individual_tests/individual_tests_me
 import 'package:kiosk_application/features/health_check/screens/individual_tests/single_sensor_test_screen.dart';
 import '../../features/health_check/screens/individual_tests/bmi_test_screen.dart';
 
-
 // --- HISTORY & HELP ---
 import '../../features/user_history/screens/history_list_screen.dart';
 import '../../features/help/screens/help_info_screen.dart';
@@ -39,7 +38,6 @@ import '../../features/health_check/screens/public_results_screen.dart';
 import 'route_names.dart';
 export 'route_names.dart';
 
-
 // Shared Route List with Fluid Transitions
 List<GoRoute> _sharedRoutes = [
   _fluidRoute(AppRoutes.login, const LoginScreen()),
@@ -59,7 +57,6 @@ List<GoRoute> _sharedRoutes = [
       const SingleSensorTestScreen(type: TestSensorType.heartRate)),
   _fluidRoute(AppRoutes.testOxygen,
       const SingleSensorTestScreen(type: TestSensorType.oxygen)),
-
   _fluidRoute(AppRoutes.testBmi, const BmiTestScreen()),
   _fluidRoute(AppRoutes.history, const HistoryListScreen()),
   _fluidRoute(AppRoutes.help, const HelpInfoScreen()),

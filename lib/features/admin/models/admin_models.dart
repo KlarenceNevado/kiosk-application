@@ -72,8 +72,14 @@ class Announcement {
       content: map['content'],
       targetGroup: map['targetGroup'] ?? map['target_group'] ?? 'all',
       timestamp: DateTime.parse(map['timestamp']),
-      isActive: map['is_active'] == 1 || map['is_active'] == true || map['isActive'] == 1 || map['isActive'] == true,
-      isArchived: map['is_archived'] == 1 || map['is_archived'] == true || map['isArchived'] == 1 || map['isArchived'] == true,
+      isActive: map['is_active'] == 1 ||
+          map['is_active'] == true ||
+          map['isActive'] == 1 ||
+          map['isActive'] == true,
+      isArchived: map['is_archived'] == 1 ||
+          map['is_archived'] == true ||
+          map['isArchived'] == 1 ||
+          map['isArchived'] == true,
       reactions: parsedReactions,
       mediaUrl: map['media_url'],
       mediaPath: map['media_path'],
@@ -174,14 +180,16 @@ class SystemAlert {
       id: map['id'],
       message: map['message'],
       targetGroup: map['target_group'] ?? map['targetGroup'] ?? 'all',
-      isEmergency: map['is_emergency'] == 1 || map['is_emergency'] == true || map['isEmergency'] == 1 || map['isEmergency'] == true,
+      isEmergency: map['is_emergency'] == 1 ||
+          map['is_emergency'] == true ||
+          map['isEmergency'] == 1 ||
+          map['isEmergency'] == true,
       timestamp: DateTime.parse(map['timestamp']),
       isActive: map['is_active'] == 1 ||
           map['is_active'] == true ||
           map['isActive'] == 1 ||
           map['isActive'] == true ||
-          (map['isActive'] == null &&
-              map['is_active'] == null),
+          (map['isActive'] == null && map['is_active'] == null),
     );
   }
 }

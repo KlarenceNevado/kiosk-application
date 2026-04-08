@@ -49,10 +49,10 @@ void main() {
           .thenAnswer((_) async => []);
       when(() => mockDb.getUnsyncedPatients())
           .thenAnswer((_) async => [testUser]);
-      
+
       // Mocking Encrypt (BaseDao/DatabaseHelper helper)
       when(() => mockDb.encrypt(any())).thenReturn('encrypted_data');
-      
+
       // Mock Supabase chain: supabase.from('patients').upsert(...)
       final mockPostgrest = _MockSupabaseQueryBuilder();
       final mockFilter = _MockPostgrestFilterBuilder();
@@ -62,23 +62,27 @@ void main() {
         final callback = invocation.positionalArguments[0] as Function;
         return callback(null);
       });
-      
+
       // Mock DB mark as synced
       when(() => mockDb.insertPatient(any())).thenAnswer((_) async => 1);
-      when(() => mockDb.clearSyncMetadata('patients', any())).thenAnswer((_) async {});
-      when(() => mockDb.markBatchAsSynced('patients', any())).thenAnswer((_) async {});
+      when(() => mockDb.clearSyncMetadata('patients', any()))
+          .thenAnswer((_) async {});
+      when(() => mockDb.markBatchAsSynced('patients', any()))
+          .thenAnswer((_) async {});
 
       // Execute
       await handler.push();
 
       // Verify
       verify(() => mockPostgrest.upsert(any())).called(1);
-      verify(() => mockDb.markBatchAsSynced('patients', ['uuid-1234'])).called(1);
+      verify(() => mockDb.markBatchAsSynced('patients', ['uuid-1234']))
+          .called(1);
     });
 
-    test('createPatient() handles legacy local_ IDs by skipping cloud push', () async {
+    test('createPatient() handles legacy local_ IDs by skipping cloud push',
+        () async {
       final legacyUser = testUser.copyWith(id: 'local_123');
-      
+
       when(() => mockDb.insertPatient(any())).thenAnswer((_) async => 1);
 
       final result = await handler.createPatient(legacyUser);
@@ -91,4 +95,6 @@ void main() {
 
 // Helper mock for Supabase fluent API
 class _MockSupabaseQueryBuilder extends Mock implements SupabaseQueryBuilder {}
-class _MockPostgrestFilterBuilder extends Mock implements PostgrestFilterBuilder {}
+
+class _MockPostgrestFilterBuilder extends Mock
+    implements PostgrestFilterBuilder {}

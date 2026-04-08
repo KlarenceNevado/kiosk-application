@@ -18,7 +18,8 @@ class LocalSystemRepository implements ISystemRepository {
       DatabaseHelper.instance.systemDao.scheduleStream;
 
   @override
-  Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
+  Future<List<Map<String, dynamic>>> fetchAnnouncements(
+      {dynamic currentUser}) async {
     return await SyncService().fetchAnnouncements(currentUser: currentUser);
   }
 
@@ -28,14 +29,16 @@ class LocalSystemRepository implements ISystemRepository {
   }
 
   @override
-  Future<void> reactToAnnouncement(String announcementId, String emoji, String userId) async {
+  Future<void> reactToAnnouncement(
+      String announcementId, String emoji, String userId) async {
     await SyncService().reactToAnnouncement(announcementId, emoji, userId);
   }
 
   @override
   Future<void> syncNow({dynamic authRepo, dynamic historyRepo}) async {
     if (authRepo is IAuthRepository && historyRepo is IHistoryRepository) {
-      await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo, triggerStream: true);
+      await SyncService()
+          .forceDownSyncAndRefresh(authRepo, historyRepo, triggerStream: true);
     }
   }
 

@@ -34,7 +34,7 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<HealthWizardProvider>();
-      provider.startHealthCheck(); 
+      provider.startHealthCheck();
     });
   }
 
@@ -72,7 +72,8 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.close, color: AppColors.brandDark, size: 28),
+              icon:
+                  const Icon(Icons.close, color: AppColors.brandDark, size: 28),
               onPressed: _safeExit,
               tooltip: "Cancel Checkup",
             ),
@@ -113,16 +114,18 @@ class _HealthCheckWizardState extends State<HealthCheckWizard> {
                       child: LinearProgressIndicator(
                         value: (_currentStep + 1) / _totalSteps,
                         minHeight: 10,
-                        backgroundColor: AppColors.brandGreen.withValues(alpha: 0.1),
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.brandGreen),
+                        backgroundColor:
+                            AppColors.brandGreen.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppColors.brandGreen),
                       ),
                     ),
                   ),
-            
+
                   Expanded(
                     child: PageView(
                       controller: _pageController,
-                      physics: const NeverScrollableScrollPhysics(), 
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
                         Step1Consent(onNext: _nextStep, onCancel: _safeExit),
                         StepHeightInput(onNext: _nextStep),

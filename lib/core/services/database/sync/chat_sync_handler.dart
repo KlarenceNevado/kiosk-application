@@ -36,16 +36,19 @@ class ChatSyncHandler extends SyncHandler {
             reactions = Map<String, dynamic>.from(reactionsRaw);
           }
 
-          final ChatMessage message = ChatMessage.fromMap({...row, 'reactions': reactions});
-          
+          final ChatMessage message =
+              ChatMessage.fromMap({...row, 'reactions': reactions});
+
           // E2EE: Encrypt message content before pushing to Supabase
           final Map<String, dynamic> supabaseData = message.toSupabaseMap();
           supabaseData['content'] = dbHelper.encrypt(message.content);
-          supabaseData['message'] = supabaseData['content']; // Redundant column support
-          
+          supabaseData['message'] =
+              supabaseData['content']; // Redundant column support
+
           await supabase.from('chat_messages').upsert(supabaseData);
           syncedIds.add(row['id']?.toString() ?? '');
-          await dbHelper.systemDao.clearSyncMetadata('chat_messages', row['id']);
+          await dbHelper.systemDao
+              .clearSyncMetadata('chat_messages', row['id']);
         } catch (e) {
           await dbHelper.updateSyncMetadata(
             tableName: 'chat_messages',
@@ -74,12 +77,13 @@ class ChatSyncHandler extends SyncHandler {
 
     try {
       final lastSync = await _getLastSync();
-      
+
       // SECURITY: Enforce participant filter in the query itself (Defense in depth)
-      var query = supabase.from('chat_messages')
+      var query = supabase
+          .from('chat_messages')
           .select()
           .or('sender_id.eq.$currentUserId,receiver_id.eq.$currentUserId');
-          
+
       if (lastSync != null) {
         query = query.gt('updated_at', lastSync);
       }
@@ -91,11 +95,12 @@ class ChatSyncHandler extends SyncHandler {
         final exists = await dbHelper.systemDao.getChatMessageById(row['id']);
         if (exists == null) {
           final msg = ChatMessage.fromMap(row);
-          
+
           // Only notify if someone ELSE sent the message
           if (msg.senderId != currentUserId) {
             String senderName = "Health Worker";
-            final patient = await dbHelper.patientDao.getPatientById(msg.senderId);
+            final patient =
+                await dbHelper.patientDao.getPatientById(msg.senderId);
             if (patient != null) {
               senderName = "${patient.firstName} ${patient.lastName}";
             }
@@ -135,16 +140,17 @@ class ChatSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
   void subscribe([String? userId]) {
     if (_channel != null) return;
-    
+
     final currentUserId = userId ?? supabase.auth.currentUser?.id;
     if (currentUserId == null) {
       debugPrint("⚠️ ChatSyncHandler: No active session. Realtime disabled.");
       return;
     }
 
-    final String channelName = 'public:chat_sync_${currentUserId.replaceAll('-', '_')}';
+    final String channelName =
+        'public:chat_sync_${currentUserId.replaceAll('-', '_')}';
     _channel = supabase.channel(channelName);
-    
+
     _channel!
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -156,7 +162,7 @@ class ChatSyncHandler extends SyncHandler {
             value: currentUserId,
           ),
           callback: (payload) async {
-            if (payload.newRecord.isNotEmpty && 
+            if (payload.newRecord.isNotEmpty &&
                 payload.eventType == PostgresChangeEvent.insert) {
               final row = payload.newRecord;
               if (row['receiver_id'] == currentUserId) {
@@ -167,7 +173,7 @@ class ChatSyncHandler extends SyncHandler {
           },
         )
         .subscribe();
-    
+
     debugPrint("📡 ChatSyncHandler: Realtime Subscribed for $currentUserId");
   }
 

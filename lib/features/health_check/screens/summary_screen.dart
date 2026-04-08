@@ -81,7 +81,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final history = context.watch<IHistoryRepository>();
@@ -227,15 +226,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       Expanded(
                           child: FlowAnimatedButton(
                               child: _buildActionButton(
-                              Icons.qr_code_scanner_rounded,
-                              "Get Digital Copy",
+                                  Icons.qr_code_scanner_rounded,
+                                  "Get Digital Copy",
                                   () => _handlePdf(latestRecord),
                                   isPrimary: false))),
                       const SizedBox(width: 16),
                       Expanded(
                           child: FlowAnimatedButton(
-                              child: _buildActionButton(
-                                  Icons.home_rounded, "Finish Check-up", _goHome,
+                              child: _buildActionButton(Icons.home_rounded,
+                                  "Finish Check-up", _goHome,
                                   isPrimary: true))),
                     ],
                   ),
@@ -385,7 +384,8 @@ class DigitalHandoverDialog extends StatelessWidget {
       pwaBase = pwaBase.endsWith('/') ? '$pwaBase#' : '$pwaBase/#';
     }
     // Ensure no double slashes after the hash
-    final String resultUrl = "${pwaBase.replaceAll(RegExp(r'/$'), '')}/results/${data.id}";
+    final String resultUrl =
+        "${pwaBase.replaceAll(RegExp(r'/$'), '')}/results/${data.id}";
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -406,18 +406,21 @@ class DigitalHandoverDialog extends StatelessWidget {
                     color: AppColors.brandGreenLight,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.phonelink_ring_rounded, 
-                    color: AppColors.brandGreen, size: 28),
+                  child: const Icon(Icons.phonelink_ring_rounded,
+                      color: AppColors.brandGreen, size: 28),
                 ),
                 const SizedBox(width: 16),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Digital Health Report", 
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                      Text("Take your records with you", 
-                        style: TextStyle(fontSize: 14, color: Colors.grey)),
+                      Text("Digital Health Report",
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.brandDark)),
+                      Text("Take your records with you",
+                          style: TextStyle(fontSize: 14, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -434,7 +437,10 @@ class DigitalHandoverDialog extends StatelessWidget {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5))
                 ],
               ),
               child: QrImageView(
@@ -450,7 +456,8 @@ class DigitalHandoverDialog extends StatelessWidget {
                   dataModuleShape: QrDataModuleShape.square,
                   color: AppColors.brandGreen,
                 ),
-                embeddedImage: const AssetImage('assets/icons/patient_icon.png'),
+                embeddedImage:
+                    const AssetImage('assets/icons/patient_icon.png'),
                 embeddedImageStyle: const QrEmbeddedImageStyle(
                   size: Size(40, 40),
                 ),
@@ -472,7 +479,10 @@ class DigitalHandoverDialog extends StatelessWidget {
                   Expanded(
                     child: Text(
                       "Open your phone's CAMERA app and point it at the QR code to view your digital summary instantly.",
-                      style: TextStyle(fontSize: 14, color: AppColors.brandDark, height: 1.4),
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.brandDark,
+                          height: 1.4),
                     ),
                   ),
                 ],
@@ -489,11 +499,13 @@ class DigitalHandoverDialog extends StatelessWidget {
                   backgroundColor: AppColors.brandGreen,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 20),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                child: const Text("Got it, thanks!", 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text("Got it, thanks!",
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],

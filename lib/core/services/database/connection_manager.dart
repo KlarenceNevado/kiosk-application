@@ -15,7 +15,7 @@ class ConnectionManager extends ChangeNotifier {
 
   ConnectionStatus _currentStatus = ConnectionStatus.checking;
   ConnectionStatus get currentStatus => _currentStatus;
-  
+
   bool get isOnline => _currentStatus == ConnectionStatus.online;
 
   Timer? _checkTimer;
@@ -23,19 +23,20 @@ class ConnectionManager extends ChangeNotifier {
 
   void startMonitoring() {
     debugPrint("🌐 ConnectionManager: Starting monitoring...");
-    
+
     // Initial check
     checkStatus();
 
     // Listen for platform-level changes
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      debugPrint("🌐 Connectivity changed: $result");
+    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      debugPrint("🌐 Connectivity changed: $results");
       checkStatus();
     });
 
     // Heartbeat check for Windows/Restricted platforms
     _checkTimer?.cancel();
-    _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) => checkStatus());
+    _checkTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) => checkStatus());
   }
 
   /// Explicitly re-check connectivity (used by UI Retry buttons)
@@ -51,9 +52,9 @@ class ConnectionManager extends ChangeNotifier {
     ConnectionStatus newStatus = ConnectionStatus.offline;
 
     try {
-      final result = await Connectivity().checkConnectivity();
-      
-      if (result == ConnectivityResult.none) {
+      final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
+
+      if (results.contains(ConnectivityResult.none) || results.isEmpty) {
         newStatus = ConnectionStatus.offline;
       } else if (kIsWeb) {
         // Browsers block cross-domain pings (CORS). Trust the navigator.onLine reporting.
@@ -64,7 +65,7 @@ class ConnectionManager extends ChangeNotifier {
           final response = await http
               .head(Uri.parse('https://www.google.com'))
               .timeout(const Duration(seconds: 3));
-          
+
           if (response.statusCode >= 200 && response.statusCode < 400) {
             newStatus = ConnectionStatus.online;
           } else {
@@ -85,7 +86,7 @@ class ConnectionManager extends ChangeNotifier {
       _statusController.add(newStatus);
       notifyListeners(); // Alert the UI
     }
-    
+
     _isChecking = false;
   }
 

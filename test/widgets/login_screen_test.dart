@@ -20,7 +20,7 @@ void main() {
     when(() => mockAuthRepository.isLoading).thenReturn(false);
     when(() => mockAuthRepository.addListener(any())).thenAnswer((_) {});
     when(() => mockAuthRepository.removeListener(any())).thenAnswer((_) {});
-    
+
     // Ensure we are in a predictable environment mode
     AppEnvironment().setMode(AppMode.kiosk);
   });
@@ -28,7 +28,8 @@ void main() {
   Widget createLoginScreen() {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<IAuthRepository>.value(value: mockAuthRepository),
+        ChangeNotifierProvider<IAuthRepository>.value(
+            value: mockAuthRepository),
       ],
       child: const MaterialApp(
         localizationsDelegates: [
@@ -63,7 +64,7 @@ void main() {
         gender: 'Male',
         dateOfBirth: DateTime(1990, 1, 1),
       );
-      
+
       when(() => mockAuthRepository.users).thenReturn([testUser]);
 
       await tester.pumpWidget(createLoginScreen());
@@ -85,7 +86,7 @@ void main() {
         gender: 'Male',
         dateOfBirth: DateTime(1990, 1, 1),
       );
-      
+
       when(() => mockAuthRepository.users).thenReturn([testUser]);
 
       await tester.pumpWidget(createLoginScreen());
@@ -96,7 +97,8 @@ void main() {
       await tester.pump();
 
       // Should show suggestion in the overlay
-      expect(find.text('John Doe'), findsWidgets); // One in field, one in suggestion
+      expect(find.text('John Doe'),
+          findsWidgets); // One in field, one in suggestion
     });
   });
 }

@@ -72,8 +72,8 @@ class _Step4ResultsState extends State<Step4Results>
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
       }
     }
   }
@@ -81,7 +81,7 @@ class _Step4ResultsState extends State<Step4Results>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
-    
+
     // KEEP SESSION ALIVE WHILE READING RESULTS
     context.read<IAuthRepository>().resetSessionTimer();
 
@@ -100,11 +100,16 @@ class _Step4ResultsState extends State<Step4Results>
     final bmiEval = VitalValidator.evaluateBMI(bmi);
 
     final results = [
-      _ResultData(Icons.favorite_rounded, "Heart Rate", "$heartRate", "bpm", hrEval, Colors.red),
-      _ResultData(Icons.speed_rounded, "Blood Pressure", "$sys/$dia", "mmHg", bpEval, Colors.blue),
-      _ResultData(Icons.water_drop_rounded, "Oxygen Levels", "$spo2", "%", oxyEval, Colors.cyan),
-      _ResultData(Icons.thermostat_rounded, "Body Temperature", temp.toStringAsFixed(1), "°C", tempEval, Colors.orange),
-      _ResultData(Icons.scale_rounded, "Body Mass Index", bmi.toStringAsFixed(1), "kg/m²", bmiEval, Colors.purple),
+      _ResultData(Icons.favorite_rounded, "Heart Rate", "$heartRate", "bpm",
+          hrEval, Colors.red),
+      _ResultData(Icons.speed_rounded, "Blood Pressure", "$sys/$dia", "mmHg",
+          bpEval, Colors.blue),
+      _ResultData(Icons.water_drop_rounded, "Oxygen Levels", "$spo2", "%",
+          oxyEval, Colors.cyan),
+      _ResultData(Icons.thermostat_rounded, "Body Temperature",
+          temp.toStringAsFixed(1), "°C", tempEval, Colors.orange),
+      _ResultData(Icons.scale_rounded, "Body Mass Index",
+          bmi.toStringAsFixed(1), "kg/m²", bmiEval, Colors.purple),
     ];
 
     return Container(
@@ -129,7 +134,8 @@ class _Step4ResultsState extends State<Step4Results>
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     decoration: BoxDecoration(
                       color: AppColors.brandGreen.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(50),
@@ -173,13 +179,15 @@ class _Step4ResultsState extends State<Step4Results>
                 child: ListView.separated(
                   padding: const EdgeInsets.only(bottom: 20),
                   itemCount: results.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 16),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final data = results[index];
                     return AnimatedBuilder(
                       animation: _cardAnimations[index],
                       builder: (context, child) {
-                        final animValue = _cardAnimations[index].value.clamp(0.0, 1.0);
+                        final animValue =
+                            _cardAnimations[index].value.clamp(0.0, 1.0);
                         return Transform.translate(
                           offset: Offset(0, 30 * (1 - animValue)),
                           child: Opacity(
@@ -200,8 +208,8 @@ class _Step4ResultsState extends State<Step4Results>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   _buildActionButton(
-                    label: "Discard Checkup", 
+                  _buildActionButton(
+                    label: "Discard Checkup",
                     icon: Icons.delete_outline_rounded,
                     color: Colors.red,
                     isOutline: true,
@@ -212,7 +220,7 @@ class _Step4ResultsState extends State<Step4Results>
                     const CircularProgressIndicator(color: AppColors.brandGreen)
                   else
                     _buildActionButton(
-                      label: "Finalize & Save Report", 
+                      label: "Finalize & Save Report",
                       icon: Icons.check_circle_rounded,
                       color: AppColors.brandGreen,
                       onTap: _handleSave,
@@ -227,15 +235,19 @@ class _Step4ResultsState extends State<Step4Results>
   }
 
   Widget _buildMedicalReportCard(_ResultData data) {
-    final statusColor = data.evaluation.status == HealthStatus.normal ? AppColors.brandGreen : Colors.orange;
-    final statusText = data.evaluation.status == HealthStatus.normal ? "NORMAL" : "ATTENTION";
+    final statusColor = data.evaluation.status == HealthStatus.normal
+        ? AppColors.brandGreen
+        : Colors.orange;
+    final statusText =
+        data.evaluation.status == HealthStatus.normal ? "NORMAL" : "ATTENTION";
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1), width: 1.5),
+        border:
+            Border.all(color: Colors.grey.withValues(alpha: 0.1), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -316,9 +328,9 @@ class _Step4ResultsState extends State<Step4Results>
   }
 
   Widget _buildActionButton({
-    required String label, 
-    required IconData icon, 
-    required Color color, 
+    required String label,
+    required IconData icon,
+    required Color color,
     required VoidCallback onTap,
     bool isOutline = false,
   }) {
@@ -326,15 +338,19 @@ class _Step4ResultsState extends State<Step4Results>
       child: ElevatedButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 24),
-        label: Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        label: Text(label,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         style: ElevatedButton.styleFrom(
           backgroundColor: isOutline ? Colors.white : color,
           foregroundColor: isOutline ? color : Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           elevation: isOutline ? 0 : 8,
           shadowColor: color.withValues(alpha: 0.4),
-          side: isOutline ? BorderSide(color: color.withValues(alpha: 0.3), width: 2) : null,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          side: isOutline
+              ? BorderSide(color: color.withValues(alpha: 0.3), width: 2)
+              : null,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
       ),
     );
@@ -349,5 +365,6 @@ class _ResultData {
   final VitalEvaluation evaluation;
   final Color themeColor;
 
-  _ResultData(this.icon, this.label, this.value, this.unit, this.evaluation, this.themeColor);
+  _ResultData(this.icon, this.label, this.value, this.unit, this.evaluation,
+      this.themeColor);
 }

@@ -61,15 +61,18 @@ class SystemLog {
 
   String toJson() => json.encode(toMap());
 
-  factory SystemLog.fromJson(String source) => SystemLog.fromMap(json.decode(source) as Map<String, dynamic>);
+  factory SystemLog.fromJson(String source) =>
+      SystemLog.fromMap(json.decode(source) as Map<String, dynamic>);
 
   /// Returns a formatted CSV row matching the user's "Unified Log" requirement:
   /// LogID | UserID | SessionID | Date | Time | Action | Duration | Result | Failed Sensor | Remarks
   String toCsvRow() {
     final dt = DateTime.parse(timestamp);
-    final dateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
-    final timeStr = "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
-    
+    final dateStr =
+        "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+    final timeStr =
+        "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
+
     // Header: LogID | UserID | SessionID | Date | Time | Action | Duration | Result | Failed Sensor | Remarks
     return [
       id.substring(0, 8), // LogID (Shortened for readability in Excel)

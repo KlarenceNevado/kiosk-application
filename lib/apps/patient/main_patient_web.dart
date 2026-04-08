@@ -38,11 +38,14 @@ void main() {
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<IAuthRepository>(create: (_) => WebAuthRepository()),
-          ChangeNotifierProvider<IHistoryRepository>(create: (_) => WebHistoryRepository()),
+          ChangeNotifierProvider<IAuthRepository>(
+              create: (_) => WebAuthRepository()),
+          ChangeNotifierProvider<IHistoryRepository>(
+              create: (_) => WebHistoryRepository()),
           ChangeNotifierProvider(create: (_) => LanguageProvider()),
           ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-          ChangeNotifierProvider<IChatRepository>(create: (_) => WebChatRepository()),
+          ChangeNotifierProvider<IChatRepository>(
+              create: (_) => WebChatRepository()),
           Provider<ISystemRepository>(create: (_) => WebSystemRepository()),
         ],
         child: const PatientWebApp(),

@@ -30,9 +30,9 @@ class Step1Consent extends StatelessWidget {
               child: const Icon(Icons.security_rounded,
                   size: 80, color: AppColors.brandGreen),
             ),
-  
+
             const SizedBox(height: 32),
-  
+
             // 2. HEADLINE
             const Text(
               "Data Privacy Consent",
@@ -42,9 +42,9 @@ class Step1Consent extends StatelessWidget {
                   color: AppColors.brandDark),
               textAlign: TextAlign.center,
             ),
-  
+
             const SizedBox(height: 24),
-  
+
             // 3. DETAILED EXPLANATION (Bullet Points for readability)
             Container(
               padding: const EdgeInsets.all(24),
@@ -78,9 +78,9 @@ class Step1Consent extends StatelessWidget {
                 ],
               ),
             ),
-  
+
             const SizedBox(height: 32),
-  
+
             // 4. ACTION BUTTONS
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -103,8 +103,8 @@ class Step1Consent extends StatelessWidget {
                         splashColor: Colors.red.withValues(alpha: 0.1),
                         // PADDING INSIDE INKWELL = BIGGER HIT TARGET
                         child: const Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 48, vertical: 20),
                           child: Text("Decline",
                               style: TextStyle(
                                   fontSize: 22,
@@ -115,9 +115,9 @@ class Step1Consent extends StatelessWidget {
                     ),
                   ),
                 ),
-  
+
                 const SizedBox(width: 32),
-  
+
                 // AGREE BUTTON
                 FlowAnimatedButton(
                   child: Container(
@@ -140,8 +140,8 @@ class Step1Consent extends StatelessWidget {
                         borderRadius: BorderRadius.circular(50),
                         splashColor: Colors.white.withValues(alpha: 0.3),
                         child: const Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 60, vertical: 20),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 60, vertical: 20),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

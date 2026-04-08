@@ -9,12 +9,14 @@ import '../../system/sync_event_bus.dart';
 
 class VitalsSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
-  
+
   final _changeController = StreamController<void>.broadcast();
   Stream<void> get stream => _changeController.stream;
 
-  final _newRecordController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get newRecordStream => _newRecordController.stream;
+  final _newRecordController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get newRecordStream =>
+      _newRecordController.stream;
 
   VitalsSyncHandler(super.supabase, [super.db]);
 
@@ -37,12 +39,20 @@ class VitalsSyncHandler extends SyncHandler {
             await dbHelper.clearSyncMetadata('vitals', vital.id);
             return vital.id;
           } else {
-            await dbHelper.updateSyncMetadata(tableName: 'vitals', recordId: vital.id, error: 'Push failed', incrementRetry: true);
+            await dbHelper.updateSyncMetadata(
+                tableName: 'vitals',
+                recordId: vital.id,
+                error: 'Push failed',
+                incrementRetry: true);
             return null;
           }
         } catch (e) {
-           await dbHelper.updateSyncMetadata(tableName: 'vitals', recordId: vital.id, error: e.toString(), incrementRetry: true);
-           return null;
+          await dbHelper.updateSyncMetadata(
+              tableName: 'vitals',
+              recordId: vital.id,
+              error: e.toString(),
+              incrementRetry: true);
+          return null;
         }
       }));
 
@@ -88,7 +98,8 @@ class VitalsSyncHandler extends SyncHandler {
             latestNew = row;
           }
           final prepared = _prepareRowForSqlite(row);
-          batch.insert('vitals', prepared, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert('vitals', prepared,
+              conflictAlgorithm: ConflictAlgorithm.replace);
           latestTimestamp = row['updated_at'];
         }
         await batch.commit(noResult: true);
@@ -111,14 +122,19 @@ class VitalsSyncHandler extends SyncHandler {
     if (_channel != null) {
       return;
     }
-    _channel = supabase.channel('public:vitals_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all, schema: 'public', table: 'vitals',
-      callback: (payload) {
-        onData(payload);
-        _changeController.add(null);
-        SyncEventBus.instance.triggerVitalsUpdate();
-      },
-    ).subscribe();
+    _channel = supabase
+        .channel('public:vitals_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'vitals',
+          callback: (payload) {
+            onData(payload);
+            _changeController.add(null);
+            SyncEventBus.instance.triggerVitalsUpdate();
+          },
+        )
+        .subscribe();
   }
 
   void unsubscribe() {
@@ -198,7 +214,11 @@ class VitalsSyncHandler extends SyncHandler {
 
   Future<List<VitalSigns>> fetchPatientVitals(String userId) async {
     try {
-      final data = await supabase.from('vitals').select().eq('user_id', userId).order('timestamp', ascending: false);
+      final data = await supabase
+          .from('vitals')
+          .select()
+          .eq('user_id', userId)
+          .order('timestamp', ascending: false);
       return data.map((json) => VitalSigns.fromMap(json)).toList();
     } catch (e) {
       return [];
@@ -227,14 +247,19 @@ class VitalsSyncHandler extends SyncHandler {
       return;
     }
     try {
-      final data = await supabase.from('vitals').select().filter('user_id', 'in', familyIds).order('updated_at', ascending: true);
+      final data = await supabase
+          .from('vitals')
+          .select()
+          .filter('user_id', 'in', familyIds)
+          .order('updated_at', ascending: true);
       if (data.isNotEmpty) {
         final db = await dbHelper.database;
         final batch = db.batch();
         for (var row in data) {
           final prepared = _prepareRowForSqlite(row);
           prepared['is_synced'] = 1;
-          batch.insert('vitals', prepared, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert('vitals', prepared,
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
         await batch.commit(noResult: true);
         _changeController.add(null);
@@ -269,7 +294,13 @@ class VitalsSyncHandler extends SyncHandler {
 
     // Decrypt fields if they are strings (it means they were pulled from cloud as ciphertext)
     // The BaseDao.encrypt handles the check to avoid double-processing.
-    final fieldsToDecrypt = ['heart_rate', 'systolic_bp', 'diastolic_bp', 'oxygen', 'temperature'];
+    final fieldsToDecrypt = [
+      'heart_rate',
+      'systolic_bp',
+      'diastolic_bp',
+      'oxygen',
+      'temperature'
+    ];
     for (final field in fieldsToDecrypt) {
       if (prepared[field] != null && prepared[field] is String) {
         // We set it back to the map; the DAO's _parseVitalSigns will handle further conversion to int/double

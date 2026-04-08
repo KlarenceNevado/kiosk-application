@@ -1,9 +1,0 @@
-Analyzing kiosk_application...
-
-   info - lib\features\admin\models\admin_models.dart:67:27 - 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion. Try replacing the use of the deprecated member with the replacement. - deprecated_member_use
-   info - lib\features\admin\screens\tabs\admin_alerts_tab.dart:146:60 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
-   info - lib\features\admin\screens\tabs\admin_announcements_tab.dart:26:10 - The member 'build' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
-   info - lib\features\admin\screens\tabs\admin_announcements_tab.dart:127:42 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
-   info - lib\features\admin\screens\tabs\admin_scheduling_tab.dart:308:52 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
-
-5 issues found.

@@ -14,14 +14,16 @@ class ContecBpParser {
     for (int i = 0; i <= buffer.length - 7; i++) {
       // CONTEC Sync: Real-time packets often start with 0x02 (Length 7)
       // Result packets often start with 0x01 (Length 9+)
-      
+
       // REAL-TIME PRESSURE (7 Bytes)
       if (buffer[i] == 0x02 && (buffer.length - i) >= 7) {
         // [0] Header, [1] Type, [2] Pressure High, [3] Pressure Low, ...
         // Note: Contec uses 7-bit values for bits 0-6. Bit 7 might be status.
-        final int pressure = ((buffer[i+2] & 0x7F) << 7) | (buffer[i+3] & 0x7F);
-        
-        if (pressure < 300) { // Sanity check
+        final int pressure =
+            ((buffer[i + 2] & 0x7F) << 7) | (buffer[i + 3] & 0x7F);
+
+        if (pressure < 300) {
+          // Sanity check
           return ContecBpResult(
             {'type': 'realtime', 'pressure': pressure},
             i + 7,
@@ -33,11 +35,11 @@ class ContecBpParser {
       if (buffer[i] == 0x01 && (buffer.length - i) >= 9) {
         // [0] Header, [1] ResultType, [2] Sys, [3] Dia, [4] Pulse, ...
         // Check for error codes (CONTEC often encodes these in the result bytes when measurement fails)
-        final int sys = buffer[i+2];
-        final int dia = buffer[i+3];
+        final int sys = buffer[i + 2];
+        final int dia = buffer[i + 3];
 
         if (sys == 0 || sys > 250) {
-           return ContecBpResult(
+          return ContecBpResult(
             {
               'type': 'error',
               'error_code': sys,
@@ -52,7 +54,7 @@ class ContecBpParser {
             'type': 'result',
             'sys': sys,
             'dia': dia,
-            'pulse': buffer[i+4],
+            'pulse': buffer[i + 4],
           },
           i + 9,
         );
@@ -64,12 +66,18 @@ class ContecBpParser {
 
   static String _translateBpError(int code) {
     switch (code) {
-      case 0x0E: return "Cuff too loose";
-      case 0x0F: return "Movement detected";
-      case 0x10: return "Signal too weak";
-      case 0x11: return "Measurement timeout";
-      case 0x12: return "Overpressure detected";
-      default: return "Measurement failed (E$code)";
+      case 0x0E:
+        return "Cuff too loose";
+      case 0x0F:
+        return "Movement detected";
+      case 0x10:
+        return "Signal too weak";
+      case 0x11:
+        return "Measurement timeout";
+      case 0x12:
+        return "Overpressure detected";
+      default:
+        return "Measurement failed (E$code)";
     }
   }
 }

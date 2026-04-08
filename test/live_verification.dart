@@ -18,10 +18,12 @@ void main() {
 
   debugPrint('📉 ACTION: Battery reports 11.1V (Critical Threshold)');
   powerManager.updateBatteryStatus(11.1);
-  
-  debugPrint('🛡️ RESULT: Power Mode is now ${powerManager.currentMode.toString().toUpperCase()}');
+
+  debugPrint(
+      '🛡️ RESULT: Power Mode is now ${powerManager.currentMode.toString().toUpperCase()}');
   if (powerManager.currentMode == PowerMode.deepSleep) {
-    debugPrint('✅ SUCCESS: Emergency Deep Sleep triggered to protect solar battery.');
+    debugPrint(
+        '✅ SUCCESS: Emergency Deep Sleep triggered to protect solar battery.');
   }
 
   // LOGIC TEST 2: VITAL SIGN LOCKING
@@ -33,7 +35,7 @@ void main() {
 
   debugPrint('🔒 ACTION: User captures reading (Locking Value)');
   wizard.captureVital(SensorType.weight);
-  
+
   debugPrint('🧪 ACTION: Sensor tries to fluctuate to 75.0kg');
   // Manual check of the locking flag I implemented
   if (wizard.isVitalLocked(SensorType.weight)) {
@@ -43,10 +45,12 @@ void main() {
 
   // LOGIC TEST 3: BATTERY DISPLAY
   debugPrint('\n[TEST 3: BATTERY HEALTH DISPLAY]');
-  debugPrint('Voltage: 13.2V -> ${powerManager.batteryPercentage.toInt()}% Capacity');
+  debugPrint(
+      'Voltage: 13.2V -> ${powerManager.batteryPercentage.toInt()}% Capacity');
   debugPrint('Voltage: 12.8V -> (Simulating discharge)');
   powerManager.updateBatteryStatus(12.8);
-  debugPrint('Result Display: ${powerManager.batteryPercentage.toInt()}% Capacity');
+  debugPrint(
+      'Result Display: ${powerManager.batteryPercentage.toInt()}% Capacity');
 
   debugPrint('\n--- ✅ ALL SYSTEM LOGIC VERIFIED FOR ANTIGRAVITY RUN ---');
 }

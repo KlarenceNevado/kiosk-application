@@ -29,22 +29,34 @@ class HardwareConfig {
 
   static Future<HardwareConfig> load() async {
     try {
-      final String response = await rootBundle.loadString('assets/config/hardware_config.json');
+      final String response =
+          await rootBundle.loadString('assets/config/hardware_config.json');
       final data = await json.decode(response);
-      _instance = HardwareConfig.fromJson(data);
-      debugPrint("⚙️ [HardwareConfig] Successfully loaded config from assets.");
+      final config = HardwareConfig.fromJson(data);
+      config.validate();
+      _instance = config;
+      debugPrint("⚙️ [HardwareConfig] Successfully loaded and validated config from assets.");
       return _instance!;
     } catch (e) {
-      debugPrint("⚠️ [HardwareConfig] Failed to load config, using hardcoded defaults: $e");
+      debugPrint(
+          "⚠️ [HardwareConfig] Failed to load config, using hardcoded defaults: $e");
       _instance = HardwareConfig.defaultConfig();
       return _instance!;
     }
   }
 
+  void validate() {
+    system.validate();
+    hub.validate();
+    oximeter.validate();
+    bloodPressure.validate();
+  }
+
   static HardwareConfig defaultConfig() {
     return HardwareConfig(
       system: SystemSettings(),
-      hub: DeviceSettings(name: "Default Hub", baudRate: 115200, portOverride: "/dev/ttyAMA0"),
+      hub: DeviceSettings(
+          name: "Default Hub", baudRate: 115200, portOverride: "/dev/ttyAMA0"),
       oximeter: DeviceSettings(name: "Default Oximeter", baudRate: 19200),
       bloodPressure: DeviceSettings(name: "Default BP", baudRate: 9600),
     );
@@ -61,6 +73,15 @@ class SystemSettings {
     this.probeDelayMs = 500,
     this.debugLogs = true,
   });
+
+  void validate() {
+    if (discoveryTimeoutMs < 100) {
+      throw Exception("Invalid system.discovery_timeout_ms: Must be >= 100ms");
+    }
+    if (probeDelayMs < 50) {
+      throw Exception("Invalid system.probe_delay_ms: Must be >= 50ms");
+    }
+  }
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) {
     return SystemSettings(
@@ -87,6 +108,16 @@ class DeviceSettings {
     this.handshakeSignature,
     this.handshakeSignatureHex,
   });
+
+  void validate() {
+    final validBauds = [4800, 9600, 19200, 38400, 57600, 115200];
+    if (!validBauds.contains(baudRate)) {
+      throw Exception("Invalid baud_rate for $name: $baudRate");
+    }
+    if (watchdogTimeoutMs < 2000) {
+      throw Exception("Watchdog timeout too low for $name: $watchdogTimeoutMs");
+    }
+  }
 
   factory DeviceSettings.fromJson(Map<String, dynamic> json) {
     return DeviceSettings(

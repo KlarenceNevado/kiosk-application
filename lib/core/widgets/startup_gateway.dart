@@ -32,7 +32,7 @@ class _StartupGatewayState extends State<StartupGateway> {
       // 1. Tier 1: Critical Local Setup (Fast)
       // This happens while the user sees the LogoGlow.
       await InitializationService().initializeCritical();
-      
+
       if (mounted) {
         setState(() {
           _isCriticalReady = true;
@@ -43,7 +43,6 @@ class _StartupGatewayState extends State<StartupGateway> {
       // 2. Tier 2: Deferred Setup (Network/Hardware)
       // We don't await this to keep the "Flip" to the Login screen instant.
       InitializationService().initializeDeferred();
-      
     } catch (e) {
       if (mounted) {
         setState(() => _status = "System Error: $e");

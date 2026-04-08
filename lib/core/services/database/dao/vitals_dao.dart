@@ -50,7 +50,8 @@ class VitalsDao extends BaseDao {
       'remarks': map['remarks'],
       'follow_up_action': map['follow_up_action'] ?? map['followUpAction'],
       'updated_at': map['updated_at'] ?? DateTime.now().toIso8601String(),
-      'is_deleted': (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
+      'is_deleted':
+          (map['is_deleted'] == true || map['is_deleted'] == 1) ? 1 : 0,
       'is_synced': (map['is_synced'] == true || map['is_synced'] == 1) ? 1 : 0,
       'report_url': map['report_url'],
       'report_path': map['report_path']

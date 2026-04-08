@@ -47,13 +47,14 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   void _onChatChanged() {
     // With reverse: true, position 0 = bottom. Auto-scroll if near bottom.
     if (!mounted || !_scrollController.hasClients) return;
-    
+
     final bool isNearBottom = _scrollController.position.pixels <= 200;
     if (isNearBottom) {
       // Auto-scroll to latest message
       Future.delayed(const Duration(milliseconds: 50), () {
         if (mounted && _scrollController.hasClients) {
-          _scrollController.animateTo(0,
+          _scrollController.animateTo(
+            0,
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
           );
@@ -152,11 +153,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
               children: [
                 CircleAvatar(
                     radius: 3,
-                    backgroundColor:
-                        context.watch<IChatRepository>().onlineStatus['admin'] ==
-                                true
-                            ? Colors.lightGreenAccent
-                            : Colors.white54),
+                    backgroundColor: context
+                                .watch<IChatRepository>()
+                                .onlineStatus['admin'] ==
+                            true
+                        ? Colors.lightGreenAccent
+                        : Colors.white54),
                 const SizedBox(width: 4),
                 Text(
                     context.watch<IChatRepository>().onlineStatus['admin'] ==
@@ -193,17 +195,20 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
                         itemBuilder: (context, index) {
                           final msg = chatRepo.messages[index];
                           final isMe = msg.senderId == user?.id;
-                          
+
                           // In a reversed list, "previous" in time is index + 1
-                          final prevInTimeMsg = index < chatRepo.messages.length - 1 
-                              ? chatRepo.messages[index + 1] 
-                              : null;
-                          
-                          // Show date if it's the first message ever (last index in reversed) 
+                          final prevInTimeMsg =
+                              index < chatRepo.messages.length - 1
+                                  ? chatRepo.messages[index + 1]
+                                  : null;
+
+                          // Show date if it's the first message ever (last index in reversed)
                           // or different from the message above it in the timeline (index + 1)
                           final showDate = prevInTimeMsg == null ||
-                              DateFormat('yyyy-MM-dd').format(msg.phtTimestamp) !=
-                              DateFormat('yyyy-MM-dd').format(prevInTimeMsg.phtTimestamp);
+                              DateFormat('yyyy-MM-dd')
+                                      .format(msg.phtTimestamp) !=
+                                  DateFormat('yyyy-MM-dd')
+                                      .format(prevInTimeMsg.phtTimestamp);
 
                           return Column(
                             children: [
@@ -307,7 +312,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
             GestureDetector(
               onLongPress: () => _showOptions(msg),
               onDoubleTap: () => context.read<IChatRepository>().toggleReaction(
-                  msg.id, context.read<IAuthRepository>().currentUser!.id, "❤️"),
+                  msg.id,
+                  context.read<IAuthRepository>().currentUser!.id,
+                  "❤️"),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

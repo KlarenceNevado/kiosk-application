@@ -10,15 +10,15 @@ class User {
   final String pinCode; // LEGACY: For migration only
   final String? pinHash; // NEW: One-way security
   final String? pinSalt; // NEW: Unique user salt
-  final DateTime dateOfBirth; 
-  final String gender; 
-  final String? parentId; 
+  final DateTime dateOfBirth;
+  final String gender;
+  final String? parentId;
   final bool isSynced;
   final DateTime? updatedAt;
   final bool isDeleted;
-  final bool isActive; 
-  final String? relation; 
-  final String role; 
+  final bool isActive;
+  final String? relation;
+  final String role;
   final String? deviceToken;
 
   User({
@@ -74,10 +74,10 @@ class User {
       'dateOfBirth': dateOfBirth.toIso8601String(),
       'gender': gender,
       'parentId': parentId,
-      'is_synced': isSynced ? 1 : 0, 
+      'is_synced': isSynced ? 1 : 0,
       'updated_at': updatedAt?.toIso8601String(),
-      'is_deleted': isDeleted ? 1 : 0, 
-      'isActive': isActive ? 1 : 0, 
+      'is_deleted': isDeleted ? 1 : 0,
+      'isActive': isActive ? 1 : 0,
       'relation': relation,
       'role': role,
       'device_token': deviceToken,

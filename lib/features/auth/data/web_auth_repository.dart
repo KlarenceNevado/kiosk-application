@@ -8,7 +8,6 @@ import '../../../core/services/security/encryption_service.dart';
 import '../../../core/services/security/notification_service.dart';
 import '../../../core/services/database/sync_service.dart';
 
-
 /// Web-safe AuthRepository that uses Supabase directly.
 /// Persists session to SharedPreferences so browser reloads don't lose the user.
 class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
@@ -52,7 +51,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
           .maybeSingle();
 
       if (response == null) {
-        debugPrint("⚠️ Session restore: User not found in database. Clearing session.");
+        debugPrint(
+            "⚠️ Session restore: User not found in database. Clearing session.");
         await prefs.remove(_sessionKey);
         return;
       }
@@ -65,9 +65,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
           .select()
           .eq('parent_id', restoredUser.id);
 
-      final dependents = (depsResponse as List)
-          .map((row) => User.fromMap(row))
-          .toList();
+      final dependents =
+          (depsResponse as List).map((row) => User.fromMap(row)).toList();
 
       _users = [restoredUser, ...dependents];
       _currentUser = restoredUser;
@@ -101,7 +100,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   @override
   Future<List<User>> searchPatients(String query) async {
     if (query.isEmpty) return [];
-    
+
     try {
       // Corrected: Uses .or() for first/last name search on Supabase
       // Removed role and is_deleted as they are not in the consolidated schema
@@ -110,13 +109,12 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
           .select()
           .or('first_name.ilike.%$query%,last_name.ilike.%$query%')
           .limit(10);
-      
+
       return (response as List).map((json) => User.fromMap(json)).toList();
     } catch (_) {
       return [];
     }
   }
-
 
   /// Mobile Companion Login (Phone + PIN) — Cloud only
   @override
@@ -125,8 +123,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
-      // NOTE: Because Phone/PIN are encrypted with random IVs, 
-      // we can't query them directly with .eq(). 
+      // NOTE: Because Phone/PIN are encrypted with random IVs,
+      // we can't query them directly with .eq().
       // This is a trade-off for security.
       // On the Web PWA, we usually expect the user to have found themselves by name first.
       // If they are logging in via Phone+PIN, we have to fetch and decrypt.
@@ -162,9 +160,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
             .select()
             .eq('parent_id', cloudUser.id);
 
-        final dependents = (depsResponse as List)
-            .map((row) => User.fromMap(row))
-            .toList();
+        final dependents =
+            (depsResponse as List).map((row) => User.fromMap(row)).toList();
 
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
@@ -174,7 +171,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
         SyncService().restartSync();
         // Assuming push token is available from a native service (stub for now)
         if (cloudUser.deviceToken != null) {
-          await NotificationService().updateDeviceToken(cloudUser.id, cloudUser.deviceToken!);
+          await NotificationService()
+              .updateDeviceToken(cloudUser.id, cloudUser.deviceToken!);
         }
 
         _isLoading = false;
@@ -192,8 +190,6 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     }
   }
 
-
-
   /// Login by Name + Phone (for Kiosk-style login on web)
   @override
   Future<String?> login(String firstName, String phoneNumber) async {
@@ -210,7 +206,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
           .limit(20);
 
       final List<dynamic> data = response as List;
-      
+
       // 2. Local Decryption Check
       // We cannot use .eq() on phone_number because of random IVs.
       // We must fetch by name and check the decrypted phone number locally.
@@ -235,9 +231,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
             .select()
             .eq('parent_id', cloudUser.id);
 
-        final dependents = (depsResponse as List)
-            .map((row) => User.fromMap(row))
-            .toList();
+        final dependents =
+            (depsResponse as List).map((row) => User.fromMap(row)).toList();
 
         _users = [cloudUser, ...dependents];
         _currentUser = cloudUser;
@@ -261,8 +256,6 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     }
   }
 
-
-
   @override
   Future<void> logout() async {
     final oldUser = _currentUser;
@@ -274,7 +267,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     if (oldUser != null) {
       await NotificationService().clearDeviceToken(oldUser.id);
     }
-    
+
     // 2. STOP ALL REAL-TIME DATA FLOW - Stability Requirement
     SyncService().reset();
 
@@ -313,7 +306,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   @override
   Future<void> refreshUsers() async {}
   @override
-  Future<String?> registerUser(User newUser) async => "Registration is only available at the Kiosk.";
+  Future<String?> registerUser(User newUser) async =>
+      "Registration is only available at the Kiosk.";
   @override
   Future<void> updateUser(User updatedUser) async {}
   @override
@@ -321,7 +315,8 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   @override
   Future<void> toggleUserStatus(User user, bool isActive) async {}
   @override
-  Future<String?> loginWithId(String userId) async => "QR Login is only available at the Kiosk.";
+  Future<String?> loginWithId(String userId) async =>
+      "QR Login is only available at the Kiosk.";
   List<User> getUnsyncedUsers() => [];
   Future<void> markUserAsSynced(String userId) async {}
 

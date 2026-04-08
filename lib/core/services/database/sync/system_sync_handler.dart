@@ -10,20 +10,27 @@ import '../database_helper.dart';
 
 class SystemSyncHandler extends SyncHandler {
   final bool isBackground;
-  
+
   RealtimeChannel? _announcementsChannel;
   RealtimeChannel? _alertsChannel;
   RealtimeChannel? _schedulesChannel;
 
-  Stream<List<Map<String, dynamic>>> get announcementStream => dbHelper.systemDao.announcementStream;
-  Stream<Map<String, dynamic>> get newAnnouncementStream => SyncEventBus.instance.newAnnouncementStream;
+  Stream<List<Map<String, dynamic>>> get announcementStream =>
+      dbHelper.systemDao.announcementStream;
+  Stream<Map<String, dynamic>> get newAnnouncementStream =>
+      SyncEventBus.instance.newAnnouncementStream;
 
-  Stream<List<Map<String, dynamic>>> get alertStream => dbHelper.systemDao.alertStream;
-  Stream<Map<String, dynamic>> get newAlertStream => SyncEventBus.instance.newAlertStream;
+  Stream<List<Map<String, dynamic>>> get alertStream =>
+      dbHelper.systemDao.alertStream;
+  Stream<Map<String, dynamic>> get newAlertStream =>
+      SyncEventBus.instance.newAlertStream;
 
-  Stream<List<Map<String, dynamic>>> get scheduleStream => dbHelper.systemDao.scheduleStream;
+  Stream<List<Map<String, dynamic>>> get scheduleStream =>
+      dbHelper.systemDao.scheduleStream;
 
-  SystemSyncHandler(SupabaseClient supabase, {this.isBackground = false, DatabaseHelper? db}) : super(supabase, db);
+  SystemSyncHandler(SupabaseClient supabase,
+      {this.isBackground = false, DatabaseHelper? db})
+      : super(supabase, db);
 
   @override
   Future<void> push() async {
@@ -43,7 +50,8 @@ class SystemSyncHandler extends SyncHandler {
   Future<void> pullAnnouncements() async {
     // REASON FOR CHANGE: Full Parity Sync ensures 100% parity by fetching the full active set.
     // Announcements are low-volume data, and differential sync (updated_at) was causing staleness.
-    final cloudData = await supabase.from('announcements')
+    final cloudData = await supabase
+        .from('announcements')
         .select()
         .filter('is_deleted', 'eq', false)
         .order('updated_at', ascending: true);
@@ -57,20 +65,27 @@ class SystemSyncHandler extends SyncHandler {
       // OS-LEVEL NOTIFICATION LOGIC:
       // If the announcement is new or was previously hidden but is now active:
       final existing = await dbHelper.systemDao.getAnnouncementById(id);
-      final wasActive = existing != null && (existing['is_active'] == 1 || existing['is_active'] == true);
+      final wasActive = existing != null &&
+          (existing['is_active'] == 1 || existing['is_active'] == true);
       final isNowActive = (row['is_active'] == 1 || row['is_active'] == true);
-      final isArchived = (row['is_archived'] == 1 || row['is_archived'] == true);
+      final isArchived =
+          (row['is_archived'] == 1 || row['is_archived'] == true);
 
       if (isNowActive && !isArchived) {
         if (existing == null || !wasActive) {
-          final target = (row['target_group'] ?? row['targetGroup'])?.toString().toUpperCase() ?? 'ALL';
+          final target = (row['target_group'] ?? row['targetGroup'])
+                  ?.toString()
+                  .toUpperCase() ??
+              'ALL';
           final title = row['title'] ?? "New Announcement";
           final body = row['content'] ?? "Tap to view details";
 
           if (target == 'BROADCAST_ALL') {
-            NotificationService().showSystemAlertNotification(title: "🚨 URGENT: $title", body: body);
+            NotificationService().showSystemAlertNotification(
+                title: "🚨 URGENT: $title", body: body);
           } else {
-            NotificationService().showAnnouncementNotification(title: title, body: body);
+            NotificationService()
+                .showAnnouncementNotification(title: title, body: body);
           }
         }
       }
@@ -81,7 +96,7 @@ class SystemSyncHandler extends SyncHandler {
       });
     }
 
-    // PURGE LOGIC: Any local announcement NOT in the current cloud pull 
+    // PURGE LOGIC: Any local announcement NOT in the current cloud pull
     // must be removed locally to ensure parity with the Cloud.
     final localAnnouncements = await dbHelper.systemDao.getAnnouncements();
     for (var ann in localAnnouncements) {
@@ -92,7 +107,8 @@ class SystemSyncHandler extends SyncHandler {
       }
     }
 
-    await _updateLastSync('announcements', DateTime.now().toUtc().toIso8601String());
+    await _updateLastSync(
+        'announcements', DateTime.now().toUtc().toIso8601String());
     dbHelper.systemDao.refreshAnnouncements();
     SyncEventBus.instance.triggerAnnouncementUpdate();
   }
@@ -148,7 +164,9 @@ class SystemSyncHandler extends SyncHandler {
     } catch (_) {}
 
     final lastSync = await _getLastSync('schedules');
-    var query = supabase.from('schedules').select(); // Removed patient_id filter as it doesn't exist in Supabase/Local schema
+    var query = supabase
+        .from('schedules')
+        .select(); // Removed patient_id filter as it doesn't exist in Supabase/Local schema
     if (lastSync != null && localCount > 0) {
       query = query.gt('updated_at', lastSync);
     }
@@ -171,7 +189,14 @@ class SystemSyncHandler extends SyncHandler {
 
   // --- PUBLIC CRUDS (For Admin & Interactive Reactions) ---
 
-  Future<void> pushAnnouncement({required String id, required String title, required String content, required String targetGroup, required DateTime timestamp, required bool isActive, bool isArchived = false}) async {
+  Future<void> pushAnnouncement(
+      {required String id,
+      required String title,
+      required String content,
+      required String targetGroup,
+      required DateTime timestamp,
+      required bool isActive,
+      bool isArchived = false}) async {
     final data = {
       'id': id,
       'title': title,
@@ -187,23 +212,37 @@ class SystemSyncHandler extends SyncHandler {
 
   Future<void> deleteAnnouncement(String id) async {
     // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullAnnouncements.
-    await supabase.from('announcements')
-        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await supabase.from('announcements').update({
+      'is_deleted': true,
+      'updated_at': DateTime.now().toUtc().toIso8601String()
+    }).eq('id', id);
   }
 
-  Future<void> pushSchedule({required String id, required String type, required DateTime date, required String location, required String assigned, required int colorValue}) async {
-     // Admin Logic
+  Future<void> pushSchedule(
+      {required String id,
+      required String type,
+      required DateTime date,
+      required String location,
+      required String assigned,
+      required int colorValue}) async {
+    // Admin Logic
   }
 
   Future<void> deleteScheduleCloud(String id) async {
     // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullSchedules.
-    await supabase.from('schedules')
-        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await supabase.from('schedules').update({
+      'is_deleted': true,
+      'updated_at': DateTime.now().toUtc().toIso8601String()
+    }).eq('id', id);
   }
 
-  Future<void> pushAlert({required String id, required String message, required String targetGroup, required bool isEmergency, required DateTime timestamp, required bool isActive}) async {
+  Future<void> pushAlert(
+      {required String id,
+      required String message,
+      required String targetGroup,
+      required bool isEmergency,
+      required DateTime timestamp,
+      required bool isActive}) async {
     final data = {
       'id': id,
       'message': message,
@@ -218,31 +257,43 @@ class SystemSyncHandler extends SyncHandler {
 
   Future<void> deleteAlert(String id) async {
     // SECURITY & SYNC: Use Soft Delete so other devices fetch the removal via pullAlerts.
-    await supabase.from('alerts')
-        .update({'is_deleted': true, 'updated_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await supabase.from('alerts').update({
+      'is_deleted': true,
+      'updated_at': DateTime.now().toUtc().toIso8601String()
+    }).eq('id', id);
   }
 
-  Future<void> reactToAnnouncement(String id, String emoji, String userId) async {
+  Future<void> reactToAnnouncement(
+      String id, String emoji, String userId) async {
     try {
-      final data = await supabase.from('announcements').select('reactions').eq('id', id).single();
-      Map<String, dynamic> reactions = data['reactions'] != null ? Map<String, dynamic>.from(data['reactions']) : {};
-      
-      List<dynamic> users = reactions[emoji] != null ? List<dynamic>.from(reactions[emoji]) : [];
+      final data = await supabase
+          .from('announcements')
+          .select('reactions')
+          .eq('id', id)
+          .single();
+      Map<String, dynamic> reactions = data['reactions'] != null
+          ? Map<String, dynamic>.from(data['reactions'])
+          : {};
+
+      List<dynamic> users =
+          reactions[emoji] != null ? List<dynamic>.from(reactions[emoji]) : [];
       if (users.contains(userId)) {
         users.remove(userId);
       } else {
         users.add(userId);
       }
       reactions[emoji] = users;
-      
-      await supabase.from('announcements').update({'reactions': reactions}).eq('id', id);
+
+      await supabase
+          .from('announcements')
+          .update({'reactions': reactions}).eq('id', id);
     } catch (e) {
       debugPrint("❌ reactToAnnouncement Error: $e");
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchAnnouncements({dynamic currentUser}) async {
+  Future<List<Map<String, dynamic>>> fetchAnnouncements(
+      {dynamic currentUser}) async {
     return await dbHelper.systemDao.getAnnouncements();
   }
 
@@ -260,38 +311,48 @@ class SystemSyncHandler extends SyncHandler {
 
   void subscribeAnnouncements() {
     if (_announcementsChannel != null) return;
-    _announcementsChannel = supabase.channel('public:announcements_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all, schema: 'public', table: 'announcements',
-      callback: (payload) {
-        if (payload.eventType == PostgresChangeEvent.delete) {
-          final id = payload.oldRecord['id']?.toString();
-          if (id != null) {
-            unawaited(dbHelper.systemDao.hardDeleteAnnouncement(id));
-          }
-        } else {
-          unawaited(pullAnnouncements());
-        }
-        SyncEventBus.instance.triggerAnnouncementUpdate();
-      },
-    ).subscribe();
+    _announcementsChannel = supabase
+        .channel('public:announcements_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'announcements',
+          callback: (payload) {
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              final id = payload.oldRecord['id']?.toString();
+              if (id != null) {
+                unawaited(dbHelper.systemDao.hardDeleteAnnouncement(id));
+              }
+            } else {
+              unawaited(pullAnnouncements());
+            }
+            SyncEventBus.instance.triggerAnnouncementUpdate();
+          },
+        )
+        .subscribe();
   }
 
   void subscribeAlerts() {
     if (_alertsChannel != null) return;
-    _alertsChannel = supabase.channel('public:alerts_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all, schema: 'public', table: 'alerts',
-      callback: (payload) {
-        if (payload.eventType == PostgresChangeEvent.delete) {
-          final id = payload.oldRecord['id']?.toString();
-          if (id != null) {
-            unawaited(dbHelper.systemDao.hardDeleteAlert(id));
-          }
-        } else {
-          unawaited(pullAlerts());
-        }
-        SyncEventBus.instance.triggerAlertUpdate();
-      },
-    ).subscribe();
+    _alertsChannel = supabase
+        .channel('public:alerts_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'alerts',
+          callback: (payload) {
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              final id = payload.oldRecord['id']?.toString();
+              if (id != null) {
+                unawaited(dbHelper.systemDao.hardDeleteAlert(id));
+              }
+            } else {
+              unawaited(pullAlerts());
+            }
+            SyncEventBus.instance.triggerAlertUpdate();
+          },
+        )
+        .subscribe();
   }
 
   void subscribeSchedules([String? userId]) {
@@ -299,24 +360,27 @@ class SystemSyncHandler extends SyncHandler {
     final currentUserId = userId ?? supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
 
-    _schedulesChannel = supabase.channel('public:schedules_realtime').onPostgresChanges(
-      event: PostgresChangeEvent.all, schema: 'public', table: 'schedules',
-      // filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: currentUserId), // Removed as patient_id column is missing
-      callback: (payload) {
-        if (payload.eventType == PostgresChangeEvent.delete) {
-          final id = payload.oldRecord['id']?.toString();
-          if (id != null) {
-            unawaited(dbHelper.systemDao.hardDeleteSchedule(id));
-          }
-        } else {
-          try {
-            unawaited(pullSchedules(currentUserId));
-          } catch (e) {
-            debugPrint("❌ pullSchedules Error: $e");
-          }
-        }
-      },
-    ).subscribe();
+    _schedulesChannel = supabase
+        .channel('public:schedules_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all, schema: 'public', table: 'schedules',
+          // filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: currentUserId), // Removed as patient_id column is missing
+          callback: (payload) {
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              final id = payload.oldRecord['id']?.toString();
+              if (id != null) {
+                unawaited(dbHelper.systemDao.hardDeleteSchedule(id));
+              }
+            } else {
+              try {
+                unawaited(pullSchedules(currentUserId));
+              } catch (e) {
+                debugPrint("❌ pullSchedules Error: $e");
+              }
+            }
+          },
+        )
+        .subscribe();
   }
 
   void unsubscribeAll() {
@@ -341,7 +405,8 @@ class SystemSyncHandler extends SyncHandler {
     await prefs.setString('last_sync_$table', timestamp);
   }
 
-  Future<void> _withRetry(Future<void> Function() action, {int maxAttempts = 3}) async {
+  Future<void> _withRetry(Future<void> Function() action,
+      {int maxAttempts = 3}) async {
     int attempts = 0;
     while (attempts < maxAttempts) {
       try {

@@ -8,7 +8,8 @@ import '../sensor_service_interface.dart';
 /// It reads JSON data and emits events for multiple sensor types.
 class SensorHubService implements ISensorService {
   @override
-  final SensorType type; // Principal type (e.g., weight) for ISensorService compatibility
+  final SensorType
+      type; // Principal type (e.g., weight) for ISensorService compatibility
   final String portName;
   final int baudRate;
 
@@ -29,7 +30,7 @@ class SensorHubService implements ISensorService {
 
   @override
   Stream<dynamic> get dataStream => _dataController.stream;
-  
+
   Stream<dynamic> get secondaryDataStream => _secondaryDataController.stream;
 
   Stream<double> get batteryStream => _batteryDataController.stream;
@@ -42,7 +43,9 @@ class SensorHubService implements ISensorService {
 
   @override
   void startReading() async {
-    if (_status == SensorStatus.reading || _status == SensorStatus.connecting) return;
+    if (_status == SensorStatus.reading || _status == SensorStatus.connecting) {
+      return;
+    }
     _updateStatus(SensorStatus.connecting);
 
     try {
@@ -96,7 +99,7 @@ class SensorHubService implements ISensorService {
       if (endIndex == -1) break; // Incomplete JSON
 
       final jsonString = _stringBuffer.substring(startIndex, endIndex + 1);
-      
+
       try {
         final json = jsonDecode(jsonString);
         final String dataType = json['type'] ?? '';
@@ -129,7 +132,8 @@ class SensorHubService implements ISensorService {
   @override
   Future<void> sendCommand(Uint8List command) async {
     if (_port == null || _status != SensorStatus.reading) {
-      debugPrint("⚠️ [SensorHubService] Cannot send command to Hub: Port not open.");
+      debugPrint(
+          "⚠️ [SensorHubService] Cannot send command to Hub: Port not open.");
       return;
     }
     try {

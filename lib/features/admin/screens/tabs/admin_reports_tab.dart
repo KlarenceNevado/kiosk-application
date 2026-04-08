@@ -117,7 +117,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
 
       String csv = const ListToCsvConverter().convert(rows);
       final encryptedCsv = EncryptionService().encryptData(csv);
-      
+
       final directory = await getApplicationDocumentsDirectory();
       final String filePath =
           '${directory.path}/kiosk_report_${DateTime.now().millisecondsSinceEpoch}.csv.aes';

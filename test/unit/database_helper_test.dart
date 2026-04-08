@@ -20,7 +20,7 @@ void main() {
     test('Database initialization and basic connectivity', () async {
       final db = await dbHelper.database;
       expect(db.isOpen, isTrue);
-      
+
       final result = await db.rawQuery('PRAGMA user_version');
       expect(result.first['user_version'], greaterThanOrEqualTo(10));
     });
@@ -40,12 +40,13 @@ void main() {
 
       // Insert
       await dbHelper.insertPatient(testUser);
-      
+
       // Fetch
       final retrieved = await dbHelper.getPatientById('test-uuid-1');
       expect(retrieved, isNotNull);
       expect(retrieved!.firstName, 'Test');
-      expect(retrieved.phoneNumber, '09001112222'); // Should be decrypted automatically
+      expect(retrieved.phoneNumber,
+          '09001112222'); // Should be decrypted automatically
 
       // Update
       final updatedUser = testUser.copyWith(firstName: 'Updated');

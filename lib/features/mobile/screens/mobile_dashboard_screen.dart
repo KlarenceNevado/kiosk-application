@@ -66,7 +66,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       final historyRepo = context.read<IHistoryRepository>();
       await historyRepo.loadUserHistory(widget.userId);
       final records = historyRepo.records;
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;

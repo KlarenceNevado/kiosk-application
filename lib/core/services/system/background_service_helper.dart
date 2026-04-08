@@ -94,7 +94,8 @@ class BackgroundServiceHelper {
 
     // 2. Initialize Database and Supabase in Background Isolate
     final dbHelper = DatabaseHelper.instance;
-    dbHelper.setIsBackground(true); // Isolate-safety: Skip migrations in background
+    dbHelper
+        .setIsBackground(true); // Isolate-safety: Skip migrations in background
     await dbHelper
         .database; // Ensure local DB is ready (Now safe because dotenv is loaded)
 
@@ -142,10 +143,12 @@ class BackgroundServiceHelper {
                 });
               }
 
-              final isArchived = (row['is_archived'] == true || row['isArchived'] == true);
+              final isArchived =
+                  (row['is_archived'] == true || row['isArchived'] == true);
               if (isArchived) {
-                 debugPrint("🔇 Background: Skipping notification for archived announcement");
-                 return;
+                debugPrint(
+                    "🔇 Background: Skipping notification for archived announcement");
+                return;
               }
 
               if (payload.eventType == PostgresChangeEvent.insert) {
@@ -226,13 +229,13 @@ class BackgroundServiceHelper {
           schema: 'public',
           table: 'chat_messages',
           callback: (payload) async {
-             // We use a broader Sync-then-Notify approach in ChatSyncHandler.pull()
-             // for security and decryption safety
-             final userId = supabase.auth.currentUser?.id;
-             if (userId != null && payload.newRecord['receiver_id'] == userId) {
-                final chatHandler = ChatSyncHandler(supabase);
-                await chatHandler.pull(userId);
-             }
+            // We use a broader Sync-then-Notify approach in ChatSyncHandler.pull()
+            // for security and decryption safety
+            final userId = supabase.auth.currentUser?.id;
+            if (userId != null && payload.newRecord['receiver_id'] == userId) {
+              final chatHandler = ChatSyncHandler(supabase);
+              await chatHandler.pull(userId);
+            }
           },
         )
         .subscribe();
@@ -266,18 +269,20 @@ class BackgroundServiceHelper {
     // Runs every 5 minutes (more aggressive for chats) to catch missed events
     Timer.periodic(const Duration(minutes: 5), (timer) async {
       if (uiActive) return; // Skip parity pull if UI app is doing it
-      
-      debugPrint("🔄 Background: Heartbeat Sync Starting (Offline Catch-up)...");
+
+      debugPrint(
+          "🔄 Background: Heartbeat Sync Starting (Offline Catch-up)...");
       try {
         final userId = supabase.auth.currentUser?.id;
         if (userId != null) {
-           // 1. Pull missed chats (notifies automatically in ChatSyncHandler)
-           final chatHandlerInside = ChatSyncHandler(supabase);
-           await chatHandlerInside.pull(userId);
+          // 1. Pull missed chats (notifies automatically in ChatSyncHandler)
+          final chatHandlerInside = ChatSyncHandler(supabase);
+          await chatHandlerInside.pull(userId);
         }
-        
+
         // 2. Pull missed system updates (notifies automatically in SystemSyncHandler)
-        final systemHandlerInside = SystemSyncHandler(supabase, isBackground: true);
+        final systemHandlerInside =
+            SystemSyncHandler(supabase, isBackground: true);
         await systemHandlerInside.pullAnnouncements();
         await systemHandlerInside.pullAlerts();
       } catch (e) {
