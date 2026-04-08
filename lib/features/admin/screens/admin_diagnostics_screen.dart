@@ -54,7 +54,7 @@ class _AdminDiagnosticsScreenState extends State<AdminDiagnosticsScreen> {
     setState(() => _isLoading = true);
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final exportPath = '${directory.path}/EXP_${_selectedFile}';
+      final exportPath = '${directory.path}/EXP_$_selectedFile';
       final file = File(exportPath);
       await file.writeAsString(_logContent);
 
