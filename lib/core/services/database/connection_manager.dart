@@ -27,9 +27,21 @@ class ConnectionManager extends ChangeNotifier {
     // Initial check
     checkStatus();
 
-    // Listen for platform-level changes
-    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
-      debugPrint("🌐 Connectivity changed: $results");
+    // Listen for platform-level changes (5.x API returns single ConnectivityResult)
+    Connectivity().onConnectivityChanged.listen((dynamic event) {
+      ConnectivityResult result;
+      if (event is List) {
+        // Handle 6.x-like artifacts if they occur
+        result = event.isNotEmpty ? event.first : ConnectivityResult.none;
+      } else if (event is ConnectivityResult) {
+        result = event;
+      } else {
+        // Fallback or log unexpected type
+        result = ConnectivityResult.none;
+        debugPrint("⚠️ ConnectionManager: Unexpected connectivity event type: ${event.runtimeType}");
+      }
+      
+      debugPrint("🌐 Connectivity changed: $result");
       checkStatus();
     });
 
@@ -52,9 +64,19 @@ class ConnectionManager extends ChangeNotifier {
     ConnectionStatus newStatus = ConnectionStatus.offline;
 
     try {
-      final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
+      // 5.x API returns single ConnectivityResult
+      final dynamic rawResult = await Connectivity().checkConnectivity();
+      ConnectivityResult result;
 
-      if (results.contains(ConnectivityResult.none) || results.isEmpty) {
+      if (rawResult is List) {
+         result = rawResult.isNotEmpty ? rawResult.first : ConnectivityResult.none;
+      } else if (rawResult is ConnectivityResult) {
+         result = rawResult;
+      } else {
+         result = ConnectivityResult.none;
+      }
+
+      if (result == ConnectivityResult.none) {
         newStatus = ConnectionStatus.offline;
       } else if (kIsWeb) {
         // Browsers block cross-domain pings (CORS). Trust the navigator.onLine reporting.

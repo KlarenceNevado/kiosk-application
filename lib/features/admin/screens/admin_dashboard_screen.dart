@@ -147,10 +147,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _checkSystemHealth() async {
-    final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
+    final connectivityResult = await Connectivity().checkConnectivity();
     if (mounted) {
       setState(() {
-        if (results.contains(ConnectivityResult.none) || results.isEmpty) {
+        if (connectivityResult == ConnectivityResult.none) {
           _networkStatus = "Offline";
           _networkColor = Colors.orange;
         } else {
