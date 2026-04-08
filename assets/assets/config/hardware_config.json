@@ -1,0 +1,29 @@
+{
+  "system": {
+    "discovery_timeout_ms": 500,
+    "probe_delay_ms": 500,
+    "debug_logs": true
+  },
+  "hub": {
+    "name": "ESP32 Sensor Hub",
+    "port_override": "/dev/ttyAMA0",
+    "baud_rate": 115200,
+    "watchdog_timeout_ms": 10000,
+    "handshake_signature": "{",
+    "data_keys": ["weight", "temp", "battery"]
+  },
+  "oximeter": {
+    "name": "CONTEC CMS50D-BT",
+    "baud_rate": 19200,
+    "watchdog_timeout_ms": 8000,
+    "handshake_signature_hex": "81",
+    "port_override": null
+  },
+  "blood_pressure": {
+    "name": "CONTEC 08A",
+    "baud_rate": 9600,
+    "watchdog_timeout_ms": 15000,
+    "handshake_signature": "MSTR",
+    "port_override": null
+  }
+}

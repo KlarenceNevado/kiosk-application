@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+  -->
+  <base href="/kiosk-application/">
+
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:;">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Isla Verde Health Kiosk — Patient Companion App. View your vitals, medical history, and health tips.">
+  <!-- iOS PWA meta tags -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Patient Health">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Theme Color (Brand Green) -->
+  <meta name="theme-color" content="#2E7D32">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Isla Verde Patient Companion</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Prevent overscroll bounce on iOS Safari -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
