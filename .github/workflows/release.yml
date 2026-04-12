@@ -13,11 +13,12 @@ jobs:
 
       - name: Extract version
         id: get_version
-        run: echo "VERSION=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')" >> $GITHUB_ENV
+        run: |
+          echo "version=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')" >> $GITHUB_OUTPUT
 
       - name: Update version.json
         run: |
-          VERSION="${{ env.VERSION }}"
+          VERSION="${{ steps.get_version.outputs.version }}"
           # Use jq to update the version and set the URLs
           jq --arg ver "$VERSION" '.version = $ver | .kiosk_linux_url = "https://github.com/${{ github.repository }}/releases/download/v\($ver)/App1_HealthKiosk_Linux.zip"' web/version.json > web/version.json.tmp && mv web/version.json.tmp web/version.json
 
@@ -26,7 +27,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add web/version.json
-          git commit -m "chore: update registry to ${{ env.VERSION }}"
+          git commit -m "chore: update registry to ${{ steps.get_version.outputs.version }}"
           git push origin master
 
   create-release:
