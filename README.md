@@ -36,7 +36,7 @@ graph TD
     
     subgraph "Tier 2: Cloud Layer (Data Hub)"
         C -->|Resilient Sync Service| E[Supabase Cloud]
-        D -.-.->|Data Parity Check| E
+        D -.->|Data Parity Check| E
     end
     
     subgraph "Tier 3: End-User Ecosystem"
