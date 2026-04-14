@@ -103,48 +103,33 @@ class SensorManager {
         .toList();
 
     for (var portName in portsToScan) {
-      final port = SerialPort(portName);
+      if (foundHubPort != null && foundOxiPort != null && foundBpPort != null) break;
+      
+      debugPrint("📡 Probing $portName...");
+
       try {
-        if (port.openReadWrite()) {
-          port.config.baudRate = 9600;
+        // 1. Probe for ESP32 Hub at 115200 baud
+        if (foundHubPort == null && await _probePort(portName, config.hub.baudRate, config.hub.handshakeSignature, null, null)) {
+          foundHubPort = portName;
+          debugPrint("✅ Found ESP32 Hub on $portName");
+          continue;
+        }
 
-          final reader = SerialPortReader(port);
-          final Completer<String?> signatureCompleter = Completer();
+        // 2. Probe for Oximeter at 19200 baud
+        if (foundOxiPort == null && await _probePort(portName, config.oximeter.baudRate, null, config.oximeter.handshakeSignatureHex, null)) {
+          foundOxiPort = portName;
+          debugPrint("✅ Found Oximeter on $portName");
+          continue;
+        }
 
-          final subscription = reader.stream.listen((data) {
-            final str = String.fromCharCodes(data);
-
-            if (config.hub.handshakeSignature != null &&
-                str.contains(config.hub.handshakeSignature!)) {
-              if (!signatureCompleter.isCompleted) {
-                signatureCompleter.complete("hub");
-              }
-            } else if (config.oximeter.handshakeSignatureHex != null) {
-              final sig = int.tryParse(config.oximeter.handshakeSignatureHex!,
-                  radix: 16);
-              if (data.isNotEmpty && sig != null && data[0] == sig) {
-                if (!signatureCompleter.isCompleted) {
-                  signatureCompleter.complete("oximeter");
-                }
-              }
-            }
-          });
-
-          if (config.bloodPressure.handshakeSignature != null) {
-            final query = Uint8List.fromList(
-                config.bloodPressure.handshakeSignature!.codeUnits);
-            port.write(query);
+        // 3. Probe for Blood Pressure at 9600 baud
+        if (foundBpPort == null && config.bloodPressure.handshakeSignature != null) {
+          final query = Uint8List.fromList(config.bloodPressure.handshakeSignature!.codeUnits);
+          if (await _probePort(portName, config.bloodPressure.baudRate, null, null, query)) {
+            foundBpPort = portName;
+            debugPrint("✅ Found Blood Pressure on $portName");
+            continue;
           }
-
-          final result = await signatureCompleter.future.timeout(
-              Duration(milliseconds: 2000), // Extended to 2 seconds for medical sensors handshake delays
-              onTimeout: () => null);
-
-          subscription.cancel();
-          port.close();
-
-          if (result == "hub") foundHubPort = portName;
-          if (result == "oximeter") foundOxiPort = portName;
         }
       } catch (e) {
         debugPrint("⚠️ [SensorManager] Error probing $portName: $e");
@@ -180,6 +165,50 @@ class SensorManager {
 
     // Explicitly map battery to the Hub service which provides the telemetry
     _sensors[SensorType.battery] = _sensors[SensorType.weight]!;
+  }
+
+  Future<bool> _probePort(String portName, int baudRate, String? asciiSig, String? hexSig, Uint8List? initCmd) async {
+    final port = SerialPort(portName);
+    bool matched = false;
+    try {
+      if (port.openReadWrite()) {
+        port.config.baudRate = baudRate;
+        final reader = SerialPortReader(port);
+        final Completer<bool> comp = Completer();
+
+        final sub = reader.stream.listen((data) {
+          if (asciiSig != null && asciiSig.isNotEmpty) {
+            if (String.fromCharCodes(data).contains(asciiSig)) {
+              if (!comp.isCompleted) comp.complete(true);
+            }
+          } else if (hexSig != null && hexSig.isNotEmpty) {
+            final sig = int.tryParse(hexSig, radix: 16);
+            if (data.isNotEmpty && sig != null && data[0] == sig) {
+              if (!comp.isCompleted) comp.complete(true);
+            }
+          } else if (initCmd != null) {
+            // For devices that just reply to a command with anything
+            if (data.isNotEmpty) {
+               if (!comp.isCompleted) comp.complete(true);
+            }
+          }
+        });
+
+        if (initCmd != null) {
+          port.write(initCmd);
+        }
+
+        matched = await comp.future.timeout(
+          const Duration(milliseconds: 800), 
+          onTimeout: () => false
+        );
+        
+        sub.cancel();
+      }
+    } catch (_) {} finally {
+      port.close();
+    }
+    return matched;
   }
 
   ISensorService getSensor(SensorType type) => 
