@@ -137,7 +137,7 @@ class SensorManager {
           }
 
           final result = await signatureCompleter.future.timeout(
-              Duration(milliseconds: config.system.discoveryTimeoutMs),
+              Duration(milliseconds: 2000), // Extended to 2 seconds for medical sensors handshake delays
               onTimeout: () => null);
 
           subscription.cancel();
@@ -152,11 +152,11 @@ class SensorManager {
     }
 
     final String finalHub =
-        foundHubPort ?? (Platform.isWindows ? 'COM1' : '/dev/ttyAMA0');
+        foundHubPort ?? (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0'); // ESP32 is usually USB0
     final String finalOxi =
-        foundOxiPort ?? (Platform.isWindows ? 'COM2' : '/dev/ttyUSB0');
+        foundOxiPort ?? (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1'); // Medical sensors follow
     final String finalBp =
-        foundBpPort ?? (Platform.isWindows ? 'COM4' : '/dev/ttyUSB1');
+        foundBpPort ?? (Platform.isWindows ? 'COM4' : '/dev/ttyUSB2');
 
     debugPrint(
         "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");

@@ -50,6 +50,8 @@ fi
 
 # 3. Launch App
 echo "🎬 Launching Kiosk..."
+# Explicitly grant serial read/write access to avoid dialout group permission errors
+sudo chmod a+rw /dev/ttyUSB* /dev/ttyACM* 2>/dev/null || true
 chmod +x $APP_NAME
 # Run with necessary flags if any, and wait for process
 ./$APP_NAME
