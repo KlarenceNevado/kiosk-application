@@ -26,6 +26,11 @@ sudo systemctl enable ssh
 sudo systemctl start ssh
 echo "✅ SSH enabled"
 
+echo "🔐 Setting up serial port permissions..."
+sudo usermod -a -G dialout pi
+sudo usermod -a -G tty pi
+echo "✅ Serial access granted to 'pi' user"
+
 # Wait for network
 sleep 3
 echo "🔍 Testing connectivity..."
