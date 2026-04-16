@@ -80,11 +80,6 @@ class SensorManager {
                 type: SensorType.thermometer,
                 data: value,
                 status: hub.currentStatus));
-          } else if (type == 'height') {
-            _allDataController.add(SensorEvent(
-                type: SensorType.height,
-                data: value,
-                status: hub.currentStatus));
           }
         }
       });

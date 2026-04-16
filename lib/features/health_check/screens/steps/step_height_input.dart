@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../../../core/widgets/virtual_keyboard.dart';
+import '../../../../core/services/hardware/sensor_service_interface.dart';
 import '../../logic/health_wizard_provider.dart';
 
 class StepHeightInput extends StatefulWidget {
