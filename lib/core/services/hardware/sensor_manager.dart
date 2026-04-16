@@ -136,12 +136,23 @@ class SensorManager {
       }
     }
 
-    final String finalHub =
-        foundHubPort ?? (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0'); // ESP32 is usually USB0
-    final String finalOxi =
-        foundOxiPort ?? (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1'); // Medical sensors follow
-    final String finalBp =
-        foundBpPort ?? (Platform.isWindows ? 'COM4' : '/dev/ttyUSB2');
+    final String? rpiDefault =
+        (!Platform.isWindows && availablePorts.contains('/dev/ttyUSB0'))
+            ? '/dev/ttyUSB0'
+            : null;
+
+    final String finalHub = foundHubPort ??
+        config.hub.port_override ??
+        rpiDefault ??
+        (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
+
+    final String finalOxi = foundOxiPort ??
+        config.oximeter.port_override ??
+        (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1');
+
+    final String finalBp = foundBpPort ??
+        config.bloodPressure.port_override ??
+        (Platform.isWindows ? 'COM4' : '/dev/ttyUSB2');
 
     debugPrint(
         "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");

@@ -1,12 +1,12 @@
 {
   "system": {
-    "discovery_timeout_ms": 500,
-    "probe_delay_ms": 500,
+    "discovery_timeout_ms": 3000,
+    "probe_delay_ms": 800,
     "debug_logs": true
   },
   "hub": {
     "name": "ESP32 Sensor Hub",
-    "port_override": "/dev/ttyAMA0",
+    "port_override": null,
     "baud_rate": 115200,
     "watchdog_timeout_ms": 10000,
     "handshake_signature": "{",
