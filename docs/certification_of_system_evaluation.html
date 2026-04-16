@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certification of System Evaluation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Libre Baskerville', 'Georgia', serif;
+            background: #e8e8e8;
+            display: flex;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            background: #ffffff;
+            padding: 0;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── Decorative Top Border ── */
+        .page::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, #1a3a5c, #2d6a9f, #1a3a5c);
+        }
+
+        /* ── Decorative Side Accent ── */
+        .page::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, #2d6a9f 0%, transparent 60%);
+        }
+
+        /* ── Header / Letterhead ── */
+        .header {
+            text-align: center;
+            padding: 50px 60px 25px;
+            border-bottom: 2px solid #1a3a5c;
+            margin: 0 50px;
+        }
+
+        .hospital-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a3a5c;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .hospital-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+            font-weight: 400;
+            color: #5a7a9a;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── Document Title ── */
+        .title-section {
+            text-align: center;
+            padding: 60px 60px 30px;
+        }
+
+        .title {
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a3a5c;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        /* ── Body Content ── */
+        .content {
+            padding: 0 70px;
+            line-height: 1.9;
+            font-size: 12.5px;
+            color: #2c2c2c;
+            text-align: justify;
+        }
+
+        .content p {
+            margin-bottom: 18px;
+            text-indent: 40px;
+        }
+
+        .content p:first-child {
+            text-indent: 0;
+        }
+
+        .project-title {
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .researcher-name {
+            font-weight: 700;
+        }
+
+        .degree-program {
+            font-weight: 700;
+        }
+
+        /* ── Issued Date ── */
+        .issued-date {
+            padding: 30px 70px 0;
+            font-size: 12.5px;
+            color: #2c2c2c;
+            line-height: 1.9;
+        }
+
+        /* ── Signature Block ── */
+        .signature-block {
+            text-align: center;
+            padding: 60px 70px 40px;
+        }
+
+        .signature-line {
+            width: 300px;
+            border-bottom: 1.5px solid #1a3a5c;
+            margin: 0 auto 8px;
+            padding-top: 50px;
+        }
+
+        .signatory-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: #1a3a5c;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .signatory-credentials {
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+            color: #5a7a9a;
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+        }
+
+        .signatory-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 10.5px;
+            color: #3a3a3a;
+            margin-top: 4px;
+        }
+
+        .signatory-institution {
+            font-family: 'Inter', sans-serif;
+            font-size: 10.5px;
+            color: #3a3a3a;
+            font-style: italic;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #1a3a5c, #2d6a9f, #1a3a5c);
+        }
+
+        /* ── Print Styles ── */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .page {
+                box-shadow: none;
+                width: 100%;
+                min-height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+
+
+        <!-- Title -->
+        <div class="title-section">
+            <div class="title">Certification of System Evaluation</div>
+        </div>
+
+        <!-- Body -->
+        <div class="content">
+            <p>This is to certify that the research project entitled <span class="project-title">"Development of a Community-Based Smart Healthcare Kiosk System with Real-Time Health Monitoring and IoT Integration,"</span> prepared and submitted by <span class="researcher-name">Shane Andrei G. Dela Cruz, Krisha Cozzette D. Magnaye, Klarence Dave C. Nevado, and Jan Vincent A. Sanico</span>, in partial fulfillment of the requirements for the degree of <span class="degree-program">Bachelor of Science in Computer Engineering</span>, has been evaluated and reviewed from a healthcare operations and clinical reliability perspective.</p>
+
+            <p>Upon careful assessment, I certify that the developed Healthcare Kiosk Station is functional, well-designed, and aligned with the objectives of the study. The kiosk demonstrates appropriate integration of medical-grade peripheral devices, including blood pressure monitors, pulse oximeters, infrared thermometers, and weight scales, and produces health data outputs that are consistent and suitable for preliminary community-based health screening.</p>
+
+            <p>The architecture of the system, which employs a resilient edge-to-cloud synchronization framework, ensures data availability and integrity—qualities that are critical in healthcare information management. Furthermore, the implementation of data encryption and access control mechanisms reflects adherence to responsible data handling practices consistent with healthcare data privacy standards.</p>
+
+            <p>The researchers have demonstrated competence in the development of a health-oriented technology solution, including system planning, hardware-software integration, clinical workflow design, and field testing. The overall system performance meets acceptable standards in terms of usability, reliability, and suitability for deployment in community health settings.</p>
+
+            <p>This certification is issued to affirm that the system has undergone proper evaluation from a healthcare administration standpoint and is deemed appropriate for its intended purpose of delivering accessible, technology-driven health monitoring services to underserved communities.</p>
+        </div>
+
+        <!-- Issued Date -->
+        <div class="issued-date">
+            Issued this _____ day of _____________, 2026.
+        </div>
+
+        <!-- Signature -->
+        <div class="signature-block">
+            <div class="signature-line"></div>
+            <div class="signatory-name">Rachel Dazo Reyes-Dominguez, MD, MHA, CHA, FPCHA</div>
+            <div class="signatory-credentials">Doctor of Medicine · Master in Health Administration</div>
+            <div class="signatory-title">Hospital Administrator</div>
+            <div class="signatory-institution">Jesus of Nazareth Hospital</div>
+        </div>
+
+        <div class="footer"></div>
+    </div>
+</body>
+</html>

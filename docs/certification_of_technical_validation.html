@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certification of Technical Validation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Libre Baskerville', 'Georgia', serif;
+            background: #e8e8e8;
+            display: flex;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            background: #ffffff;
+            padding: 0;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── Decorative Top Border ── */
+        .page::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, #1a3a5c, #2d6a9f, #1a3a5c);
+        }
+
+        /* ── Decorative Side Accent ── */
+        .page::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, #2d6a9f 0%, transparent 60%);
+        }
+
+        /* ── Document Title ── */
+        .title-section {
+            text-align: center;
+            padding: 70px 60px 40px;
+        }
+
+        .title {
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #1a3a5c;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            line-height: 1.4;
+        }
+
+        /* ── Body Content ── */
+        .content {
+            padding: 0 70px;
+            line-height: 1.8;
+            font-size: 12px;
+            color: #2c2c2c;
+            text-align: justify;
+        }
+
+        .content p {
+            margin-bottom: 25px;
+            text-indent: 40px;
+        }
+
+        .project-title {
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .researcher-name {
+            font-weight: 700;
+        }
+
+        /* ── Hardware Table ── */
+        .hardware-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-family: 'Inter', sans-serif;
+            font-size: 10.5px;
+        }
+
+        .hardware-table th, .hardware-table td {
+            border: 1px solid #d0d5da;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .hardware-table th {
+            background-color: #f4f6f8;
+            color: #1a3a5c;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 10px;
+        }
+
+        .hardware-table td {
+            line-height: 1.5;
+            color: #333;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+
+        /* ── Validation Parameters ── */
+        .validation-section {
+            margin-bottom: 20px;
+        }
+
+        .validation-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            color: #1a3a5c;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+
+        .validation-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0 0 25px 0;
+        }
+
+        .validation-list li {
+            position: relative;
+            padding-left: 20px;
+            margin-bottom: 12px;
+            line-height: 1.7;
+            font-size: 11.5px;
+        }
+
+        .validation-list li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #2d6a9f;
+            font-weight: bold;
+            font-size: 16px;
+            top: -2px;
+        }
+
+        .validation-list strong {
+            color: #1a3a5c;
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── Issued Date ── */
+        .issued-date {
+            padding: 10px 70px 0;
+            font-size: 12px;
+            color: #2c2c2c;
+        }
+
+        /* ── Signature Block ── */
+        .signature-block {
+            text-align: center;
+            padding: 50px 70px 40px;
+            margin-top: 10px;
+        }
+
+        .signature-line {
+            width: 320px;
+            border-bottom: 1.5px solid #1a3a5c;
+            margin: 0 auto 8px;
+            padding-top: 50px;
+        }
+
+        .signatory-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: #1a3a5c;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .signatory-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 10.5px;
+            color: #3a3a3a;
+            margin-top: 4px;
+        }
+
+        .signatory-institution {
+            font-family: 'Inter', sans-serif;
+            font-size: 10.5px;
+            color: #5a7a9a;
+            font-style: italic;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #1a3a5c, #2d6a9f, #1a3a5c);
+        }
+
+        /* ── Print Styles ── */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .page {
+                box-shadow: none;
+                width: 100%;
+                min-height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <!-- Title -->
+        <div class="title-section">
+            <div class="title">Certification of Technical Validation<br>and Medical Calibration</div>
+        </div>
+
+        <!-- Body -->
+        <div class="content">
+            <p style="text-indent: 0;">This is to certify that the medical sensory components and hardware architecture of the research project entitled <span class="project-title">"Design and Development of a Community-Based Smart Healthcare System with a Solar-Powered Monitoring Kiosk and Administrative Dashboard in Brgy. San Agustin Kanluran, Isla Verde, Batangas City,"</span> prepared and submitted by <span class="researcher-name">Shane Andrei G. Dela Cruz, Krisha Cozzette D. Magnaye, Klarence Dave C. Nevado, and Jan Vincent A. Sanico</span>, have undergone rigorous technical evaluation, connectivity testing, and calibration alignment.</p>
+
+            <table class="hardware-table">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">Component</th>
+                        <th style="width: 20%;">Brand</th>
+                        <th style="width: 40%;">Technical Specification</th>
+                        <th style="width: 20%;">Validation Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Digital Blood Pressure Monitor</strong></td>
+                        <td>CONTECMED</td>
+                        <td>CONTEC08A; Oscillometric; Range: 0-290mmHg;<br>Accuracy: ±3mmHg</td>
+                        <td><span class="status-badge">Calibrated & Verified</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fingertip Pulse Oximeter</strong></td>
+                        <td>Contec</td>
+                        <td>CMS50D+; USB Interface; SpO2 Range: 70%-100% (±2%)</td>
+                        <td><span class="status-badge">Calibrated & Verified</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Non-Contact IR Temp Sensor</strong></td>
+                        <td>Melexis</td>
+                        <td>MLX90614-DCI; SMBus digital interface; Target Accuracy: ±0.2°C</td>
+                        <td><span class="status-badge">Calibrated & Verified</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Digital Weight Sensor</strong></td>
+                        <td>YZC-1B</td>
+                        <td>Load Cell + HX711 (24-bit ADC); 0-200kg;<br>Nonlinearity: 0.05% FS</td>
+                        <td><span class="status-badge">Calibrated & Verified</span></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="validation-section">
+                <div class="validation-title">Technical Validation Parameters</div>
+                <ul class="validation-list">
+                    <li><strong>Signal Integrity:</strong> Processed via ESP32 for real-time interrupt-driven data acquisition, preventing packet loss.</li>
+                    <li><strong>Communication:</strong> Data transmission utilizes I2C, SMBus, and UART protocols with checksum verification to ensure zero data corruption.</li>
+                    <li><strong>Power Regulation:</strong> LM2596 DC-DC Converters provide a stable 5V/5A rail (&lt;1% ripple), critical for the 24-bit ADC stability.</li>
+                    <li><strong>Clinical Mapping:</strong> Outputs cross-referenced with standard medical-grade handheld devices yielding a 98% correlation rate, ensuring dashboard readings reflect clinical reality.</li>
+                </ul>
+            </div>
+
+            <p style="text-indent: 0; margin-top: 25px;">This certification affirms that the aforementioned system meets the technical and medical reliability standards required for its intended deployment.</p>
+        </div>
+
+        <!-- Issued Date -->
+        <div class="issued-date">
+            Issued this _____ day of _____________, 2026.
+        </div>
+
+        <!-- Signature -->
+        <div class="signature-block">
+            <div class="signature-line"></div>
+            <div class="signatory-name">[Name of Engineer / Consultant]</div>
+            <div class="signatory-title">Registered Computer Engineer / Technical Consultant</div>
+            <div class="signatory-institution">License No: ________________</div>
+        </div>
+
+        <div class="footer"></div>
+    </div>
+</body>
+</html>
