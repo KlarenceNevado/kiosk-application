@@ -236,10 +236,13 @@ class SerialSensorService implements ISensorService {
           }
           break;
         case SensorType.battery:
-          // Battery data is typically handled by the Hub JSON
+          // Battery data handled by Hub
           break;
         case SensorType.height:
           // Height sensor logic if standalone
+          break;
+        default:
+          debugPrint("ℹ️ [SerialSensorService] Unhandled sensor type in buffer: $type");
           break;
       }
 

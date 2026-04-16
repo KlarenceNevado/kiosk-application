@@ -1,44 +1,63 @@
 import paramiko
+import os
 import sys
 
-# Using the LAN IP which is more stable
-ip = '192.168.137.200'
+# Pi connection details
+ip = '192.168.254.165'
 username = 'kiosk'
 password = '12345678'
+remote_path = '/home/kiosk/kiosk_update'
 
-print(f"Connecting to {username}@{ip}...")
+def upload_directory(sftp, local_dir, remote_dir):
+    try:
+        sftp.mkdir(remote_dir)
+    except IOError:
+        pass
+    
+    for item in os.listdir(local_dir):
+        # Skip large/sensitive folders
+        if item in ['.git', 'build', '.dart_tool', 'venv', '__pycache__', '.agent', '.gemini']:
+            continue
+            
+        local_path = os.path.join(local_dir, item)
+        remote_item_path = remote_dir + '/' + item
+        
+        if os.path.isfile(local_path):
+            print(f"Uploading {item}...")
+            sftp.put(local_path, remote_item_path)
+        elif os.path.isdir(local_path):
+            upload_directory(sftp, local_path, remote_item_path)
+
+print(f"Connecting to {ip}...")
+transport = paramiko.Transport((ip, 22))
+transport.connect(username=username, password=password)
+sftp = paramiko.SFTPClient.from_transport(transport)
+
+print("Starting direct LAN transfer (bypassing GitHub)...")
+local_root = os.getcwd()
+upload_directory(sftp, local_root, remote_path)
+
+print("Transfer complete! Now triggering build...")
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(ip, username=username, password=password)
 
-try:
-    client.connect(ip, username=username, password=password, timeout=10)
-    print("Connected successfully!")
-except Exception as e:
-    print(f"Connection failed: {e}")
-    sys.exit(1)
+build_cmd = f"""
+export PATH="$HOME/flutter/bin:$PATH"
+cd {remote_path}
+flutter pub get
+flutter build linux --release
+sudo usermod -a -G dialout $USER
+mkdir -p ~/Desktop
+cp scripts/rpi/isla-kiosk.desktop ~/Desktop/
+chmod +x ~/Desktop/isla-kiosk.desktop
+echo "KIOSK_READY_REBOOT"
+"""
 
-# Command to fix everything
-cmd = "rm -rf ~/kiosk_update && git clone https://github.com/KlarenceNevado/kiosk-application.git ~/kiosk_update && cd ~/kiosk_update/scripts/rpi && chmod +x setup_and_run.sh && echo '12345678' | sudo -S ./setup_and_run.sh"
-
-print(f"Executing: {cmd}")
-stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
-
-# Read output loop
+stdin, stdout, stderr = client.exec_command(f"bash -c '{build_cmd}'", get_pty=True)
 while not stdout.channel.exit_status_ready():
     if stdout.channel.recv_ready():
-        output = stdout.channel.recv(4096).decode('utf-8', errors='ignore')
-        # Print without emojis to avoid encoding issues on this terminal
-        sys.stdout.buffer.write(output.encode('utf-8'))
-        sys.stdout.buffer.flush()
-        if "[sudo] password" in output.lower():
-            stdin.write(password + '\n')
-            stdin.flush()
+        print(stdout.channel.recv(4096).decode('utf-8', errors='ignore'), end="")
 
-# Read remaining output
-while stdout.channel.recv_ready():
-    output = stdout.channel.recv(8192).decode('utf-8', errors='ignore')
-    sys.stdout.buffer.write(output.encode('utf-8'))
-    sys.stdout.buffer.flush()
-
-print("\nExit status:", stdout.channel.recv_exit_status())
+transport.close()
 client.close()
