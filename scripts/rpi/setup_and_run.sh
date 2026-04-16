@@ -11,10 +11,11 @@ sudo systemctl start ssh
 echo "✅ SSH enabled"
 
 echo "🔐 Setting up serial port permissions..."
-# Use $USER to dynamically get 'kiosk' or whoever is logged in, rather than 'pi'
-sudo usermod -a -G dialout $USER
-sudo usermod -a -G tty $USER
-echo "✅ Serial access granted to '$USER' user"
+sudo usermod -a -G dialout pi 2>/dev/null || true
+sudo usermod -a -G tty pi 2>/dev/null || true
+sudo usermod -a -G dialout kiosk 2>/dev/null || true
+sudo usermod -a -G tty kiosk 2>/dev/null || true
+echo "✅ Serial access granted"
 
 # Wait for network
 sleep 3
