@@ -63,6 +63,10 @@ class MockSensorService implements ISensorService {
         case SensorType.battery:
           value = 12.0 + (_random.nextDouble() * 2.0);
           break;
+        case SensorType.height:
+          // Simulate height around 160-170cm
+          value = 160.0 + _random.nextInt(15);
+          break;
       }
 
       _dataController.add(value);

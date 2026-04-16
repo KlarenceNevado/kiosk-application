@@ -67,6 +67,7 @@ class HealthWizardProvider extends ChangeNotifier {
       case SensorType.bloodPressure:
         return _isBpLocked;
       case SensorType.battery:
+      case SensorType.height:
         return false;
     }
   }
@@ -242,6 +243,7 @@ class HealthWizardProvider extends ChangeNotifier {
         _isBpLocked = true;
         break;
       case SensorType.battery:
+      case SensorType.height:
         break;
     }
 
