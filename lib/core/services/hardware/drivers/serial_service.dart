@@ -236,7 +236,10 @@ class SerialSensorService implements ISensorService {
           }
           break;
         case SensorType.battery:
-          // Battery data is typically handled by the Hub JSON, but added for exhaustiveness
+          // Battery data is typically handled by the Hub JSON
+          break;
+        case SensorType.height:
+          // Height sensor logic if standalone
           break;
       }
 

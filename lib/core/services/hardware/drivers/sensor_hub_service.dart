@@ -111,45 +111,60 @@ class SensorHubService implements ISensorService {
   }
 
   void _parseLine(String line) {
-    if (line.isEmpty) return;
+    if (line.trim().isEmpty) return;
     
     debugPrint("📡 [SensorHubService] Raw Line: $line");
 
+    // 1. Attempt JSON Parsing (Current Firmware & Robust Fallback)
     try {
-      // Pattern: T:{temp},W:{weight}
-      // Example: T:36.5,W:65.2
+      final decoded = jsonDecode(line);
+      if (decoded is Map<String, dynamic>) {
+        final type = decoded['type'];
+        final value = decoded['value'];
+
+        if (type == 'weight') {
+          _dataController.add(double.tryParse(value.toString()) ?? 0.0);
+        } else if (type == 'temp' || type == 'thermometer') {
+          _secondaryDataController.add({'type': 'temp', 'value': double.tryParse(value.toString())});
+        } else if (type == 'height') {
+          _secondaryDataController.add({'type': 'height', 'value': double.tryParse(value.toString())});
+        } else if (type == 'battery') {
+          _batteryDataController.add(double.tryParse(value.toString()) ?? 0.0);
+        }
+        return; // Early exit on successful JSON parse
+      }
+    } catch (_) {
+      // Not JSON, fall back to comma-separated parsing
+    }
+
+    // 2. Comma-Separated String Parsing (Alternate Protocol: T:36.5,W:0.0,H:160)
+    try {
       final segments = line.split(',');
       for (final segment in segments) {
-        if (segment.startsWith('T:')) {
-          final tempStr = segment.substring(2);
-          final temp = double.tryParse(tempStr);
-          if (temp != null) {
-            _secondaryDataController.add({'type': 'temp', 'value': temp});
-          }
-        } else if (segment.startsWith('W:')) {
-          final weightStr = segment.substring(2);
-          final weight = double.tryParse(weightStr);
-          if (weight != null) {
-            _dataController.add(weight);
-          }
-        } else if (segment.startsWith('H:')) {
-          final heightStr = segment.substring(2);
-          final height = double.tryParse(heightStr);
-          if (height != null) {
-            _secondaryDataController.add({'type': 'height', 'value': height});
-          }
-        } else if (segment.startsWith('B:')) {
-          // Assuming B: for battery if provided
-          final batStr = segment.substring(2);
-          final bat = double.tryParse(batStr);
-          if (bat != null) {
-            _batteryDataController.add(bat);
-          }
+        final clean = segment.trim();
+        if (clean.startsWith('T:')) {
+          final val = double.tryParse(clean.substring(2));
+          if (val != null) _secondaryDataController.add({'type': 'temp', 'value': val});
+        } else if (clean.startsWith('W:')) {
+          final val = double.tryParse(clean.substring(2));
+          if (val != null) _dataController.add(val);
+        } else if (clean.startsWith('H:')) {
+          final val = double.tryParse(clean.substring(2));
+          if (val != null) _secondaryDataController.add({'type': 'height', 'value': val});
+        } else if (clean.startsWith('B:')) {
+          final val = double.tryParse(clean.substring(2));
+          if (val != null) _batteryDataController.add(val);
         }
       }
     } catch (e) {
       debugPrint("⚠️ [SensorHubService] Parse Error on line '$line': $e");
     }
+  }
+
+  /// Sends a handshake/status query to the hub
+  Future<void> handshake() async {
+    await writeString(jsonEncode({'cmd': 'handshake'}));
+    await writeString('HANDSHAKE\n'); // Send both formats
   }
 
   @override
