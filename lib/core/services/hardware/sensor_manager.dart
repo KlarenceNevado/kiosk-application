@@ -92,40 +92,56 @@ class SensorManager {
     final List<String> availablePorts = SerialPort.availablePorts;
     debugPrint(
         "🔍 [SensorManager] Scanning ${availablePorts.length} ports using dynamic config...");
+    debugPrint("📂 Available Ports: $availablePorts");
 
     String? foundHubPort = config.hub.portOverride;
     String? foundOxiPort = config.oximeter.portOverride;
     String? foundBpPort = config.bloodPressure.portOverride;
 
+    // Filter and prioritise based on common Linux patterns shared by user
+    // User specifically stated: /dev/ttyUSB0 -> ESP32, /dev/ttyUSB1 -> Contec
     List<String> portsToScan = availablePorts
         .where(
             (p) => p != foundHubPort && p != foundOxiPort && p != foundBpPort)
         .toList();
 
+    // Sort to ensure /dev/ttyUSB0 is checked early
+    portsToScan.sort((a, b) => a.compareTo(b));
+
     for (var portName in portsToScan) {
-      if (foundHubPort != null && foundOxiPort != null && foundBpPort != null) break;
-      
+      if (foundHubPort != null && foundOxiPort != null && foundBpPort != null) {
+        break;
+      }
+
       debugPrint("📡 Probing $portName...");
 
       try {
         // 1. Probe for ESP32 Hub at 115200 baud
-        if (foundHubPort == null && await _probePort(portName, config.hub.baudRate, config.hub.handshakeSignature, null, null)) {
+        // The ESP32 is usually the first device and uses 115200.
+        if (foundHubPort == null &&
+            await _probePort(portName, config.hub.baudRate,
+                config.hub.handshakeSignature, null, null)) {
           foundHubPort = portName;
           debugPrint("✅ Found ESP32 Hub on $portName");
           continue;
         }
 
         // 2. Probe for Oximeter at 19200 baud
-        if (foundOxiPort == null && await _probePort(portName, config.oximeter.baudRate, null, config.oximeter.handshakeSignatureHex, null)) {
+        if (foundOxiPort == null &&
+            await _probePort(portName, config.oximeter.baudRate, null,
+                config.oximeter.handshakeSignatureHex, null)) {
           foundOxiPort = portName;
           debugPrint("✅ Found Oximeter on $portName");
           continue;
         }
 
         // 3. Probe for Blood Pressure at 9600 baud
-        if (foundBpPort == null && config.bloodPressure.handshakeSignature != null) {
-          final query = Uint8List.fromList(config.bloodPressure.handshakeSignature!.codeUnits);
-          if (await _probePort(portName, config.bloodPressure.baudRate, null, null, query)) {
+        if (foundBpPort == null &&
+            config.bloodPressure.handshakeSignature != null) {
+          final query = Uint8List.fromList(
+              config.bloodPressure.handshakeSignature!.codeUnits);
+          if (await _probePort(portName, config.bloodPressure.baudRate, null,
+              null, query)) {
             foundBpPort = portName;
             debugPrint("✅ Found Blood Pressure on $portName");
             continue;
@@ -136,23 +152,26 @@ class SensorManager {
       }
     }
 
-    final String? rpiDefault =
-        (!Platform.isWindows && availablePorts.contains('/dev/ttyUSB0'))
-            ? '/dev/ttyUSB0'
-            : null;
-
+    // fallback mapping if discovery didn't find specific devices
     final String finalHub = foundHubPort ??
-        config.hub.port_override ??
-        rpiDefault ??
-        (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
+        config.hub.portOverride ??
+        (Platform.isWindows
+            ? 'COM1'
+            : (availablePorts.contains('/dev/ttyUSB0')
+                ? '/dev/ttyUSB0'
+                : '/dev/ttyACM0'));
 
     final String finalOxi = foundOxiPort ??
-        config.oximeter.port_override ??
-        (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1');
+        config.oximeter.portOverride ??
+        (Platform.isWindows
+            ? 'COM2'
+            : (availablePorts.contains('/dev/ttyUSB1')
+                ? '/dev/ttyUSB1'
+                : '/dev/ttyUSB0'));
 
     final String finalBp = foundBpPort ??
-        config.bloodPressure.port_override ??
-        (Platform.isWindows ? 'COM4' : '/dev/ttyUSB2');
+        config.bloodPressure.portOverride ??
+        (Platform.isWindows ? 'COM4' : finalOxi);
 
     debugPrint(
         "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");
@@ -251,9 +270,16 @@ class SensorManager {
     final bp = _sensors[SensorType.bloodPressure];
     if (bp != null) {
       debugPrint(
-          "📡 [SensorManager] Sending MSTR query to CONTEC BP monitor...");
-      final query = Uint8List.fromList([0x4D, 0x53, 0x54, 0x52]);
-      await bp.sendCommand(query);
+          "📡 [SensorManager] Sending query handshake to CONTEC BP monitor...");
+      
+      // Contec08A standard binary query packet
+      final binaryQuery = Uint8List.fromList([0x40, 0x46, 0x01, 0x00, 0x00, 0x00, 0x00, 0xA1]);
+      await bp.sendCommand(binaryQuery);
+      
+      // Fallback or secondary query for different firmware versions (ASCII MSTR)
+      await Future.delayed(const Duration(milliseconds: 200));
+      final asciiQuery = Uint8List.fromList([0x4D, 0x53, 0x54, 0x52]);
+      await bp.sendCommand(asciiQuery);
     }
   }
 

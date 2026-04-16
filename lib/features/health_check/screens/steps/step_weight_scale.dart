@@ -383,7 +383,8 @@ class _StepWeightScaleState extends State<StepWeightScale>
                 fontWeight: FontWeight.w900,
                 color: AppColors.brandDark)),
         const SizedBox(height: 16),
-        const Text("The scale is taking too long to stabilize.",
+        const Text(
+            "The scale is taking too long to stabilize. Please try stepping off and back on. If the problem persists, call a health worker for assistance.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, color: Colors.grey)),
         const SizedBox(height: 40),

@@ -84,48 +84,65 @@ class SensorHubService implements ISensorService {
 
   void _handleRawData(Uint8List bytes) {
     try {
-      _stringBuffer += utf8.decode(bytes);
-      _processStringBuffer();
+      // Use utf8.decoder as per directive
+      final String decoded = utf8.decode(bytes);
+      _stringBuffer += decoded;
+      
+      // Look for full lines
+      if (_stringBuffer.contains('\n')) {
+        final List<String> lines = const LineSplitter().convert(_stringBuffer);
+        
+        // If the buffer doesn't end with a newline, the last line is incomplete
+        if (!_stringBuffer.endsWith('\n')) {
+          _stringBuffer = lines.removeLast();
+        } else {
+          _stringBuffer = "";
+        }
+
+        for (final line in lines) {
+          _parseLine(line);
+        }
+      }
     } catch (e) {
-      // Ignore UTF-8 decode errors during mid-stream chunks
+      debugPrint("⚠️ [SensorHubService] UTF8 Decode Error: $e");
+      // On error, clear buffer to avoid junk buildup
+      _stringBuffer = "";
     }
   }
 
-  void _processStringBuffer() {
-    while (_stringBuffer.contains('{') && _stringBuffer.contains('}')) {
-      final startIndex = _stringBuffer.indexOf('{');
-      final endIndex = _stringBuffer.indexOf('}', startIndex);
+  void _parseLine(String line) {
+    if (line.isEmpty) return;
+    
+    debugPrint("📡 [SensorHubService] Raw Line: $line");
 
-      if (endIndex == -1) break; // Incomplete JSON
-
-      final jsonString = _stringBuffer.substring(startIndex, endIndex + 1);
-
-      try {
-        final json = jsonDecode(jsonString);
-        final String dataType = json['type'] ?? '';
-        final value = json['value'];
-
-        if (dataType == 'weight') {
-          _dataController.add(value);
-        } else if (dataType == 'temp') {
-          _secondaryDataController.add(value);
-        } else if (dataType == 'battery') {
-          final double? batteryVal = double.tryParse(value.toString());
-          if (batteryVal != null) {
-            _batteryDataController.add(batteryVal);
+    try {
+      // Pattern: T:{temp},W:{weight}
+      // Example: T:36.5,W:65.2
+      final segments = line.split(',');
+      for (final segment in segments) {
+        if (segment.startsWith('T:')) {
+          final tempStr = segment.substring(2);
+          final temp = double.tryParse(tempStr);
+          if (temp != null) {
+            _secondaryDataController.add(temp);
+          }
+        } else if (segment.startsWith('W:')) {
+          final weightStr = segment.substring(2);
+          final weight = double.tryParse(weightStr);
+          if (weight != null) {
+            _dataController.add(weight);
+          }
+        } else if (segment.startsWith('B:')) {
+          // Assuming B: for battery if provided
+          final batStr = segment.substring(2);
+          final bat = double.tryParse(batStr);
+          if (bat != null) {
+            _batteryDataController.add(bat);
           }
         }
-      } catch (e) {
-        debugPrint("⚠️ [SensorHubService] JSON Parse Error: $e");
       }
-
-      // Remove processed part from buffer
-      _stringBuffer = _stringBuffer.substring(endIndex + 1);
-    }
-
-    // Protection against runaway buffer
-    if (_stringBuffer.length > 2048) {
-      _stringBuffer = "";
+    } catch (e) {
+      debugPrint("⚠️ [SensorHubService] Parse Error on line '$line': $e");
     }
   }
 

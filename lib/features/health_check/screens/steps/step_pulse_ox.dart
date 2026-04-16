@@ -396,7 +396,7 @@ class _StepPulseOxState extends State<StepPulseOx>
                 color: AppColors.brandDark)),
         const SizedBox(height: 16),
         const Text(
-            "Ensure your finger is correctly inserted into the clip\nand keep your hand very still.",
+            "Ensure your finger is correctly inserted into the clip\nand keep your hand very still. If the problem persists,\nplease call a health worker for assistance.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, color: Colors.grey)),
         const SizedBox(height: 40),
