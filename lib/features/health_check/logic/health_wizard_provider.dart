@@ -139,6 +139,12 @@ class HealthWizardProvider extends ChangeNotifier {
                   SensorType.bloodPressure, _currentSystolic.toDouble());
             }
             break;
+          case SensorType.height:
+            // Automated IR sensor measurement
+            final height = (event.data as num).toDouble();
+            _heightCm = height.round();
+            _updateStability(SensorType.height, height);
+            break;
           case SensorType.battery:
             break;
         }

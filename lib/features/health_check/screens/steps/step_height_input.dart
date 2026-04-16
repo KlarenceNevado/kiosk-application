@@ -19,7 +19,18 @@ class _StepHeightInputState extends State<StepHeightInput> {
       TextEditingController(text: "165");
 
   @override
+  void initState() {
+    super.initState();
+    // Start automated height scan if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HealthWizardProvider>().startSensor(SensorType.height);
+    });
+  }
+
+  @override
   void dispose() {
+    // We don't stop it here because the user might still be on the screen, 
+    // but the next step will stop it via captureVital.
     _heightController.dispose();
     super.dispose();
   }
@@ -37,6 +48,19 @@ class _StepHeightInputState extends State<StepHeightInput> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<HealthWizardProvider>();
+    
+    // AUTO-FILL: If sensor provides a stable reading, update the manual field
+    if (provider.getSensorStatus(SensorType.height) == SensorStatus.reading &&
+        provider.heightCm > 50 &&
+        provider.heightCm != int.tryParse(_heightController.text)) {
+      Future.delayed(Duration.zero, () {
+        if (mounted) {
+           _heightController.text = provider.heightCm.toString();
+        }
+      });
+    }
+
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 800),

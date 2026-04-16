@@ -370,7 +370,8 @@ class _StepBpConnectState extends State<StepBpConnect>
                 fontWeight: FontWeight.w900,
                 color: AppColors.brandDark)),
         const SizedBox(height: 16),
-        const Text("Ensure the cuff is tightened correctly and repeat.",
+        const Text(
+            "Ensure the cuff is tightened correctly and repeat. If the problem persists, please call a health worker for assistance.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, color: Colors.grey)),
         const SizedBox(height: 40),

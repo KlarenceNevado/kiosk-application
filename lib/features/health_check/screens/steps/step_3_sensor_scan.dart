@@ -383,7 +383,7 @@ class _Step3SensorScanState extends State<Step3SensorScan>
                 color: AppColors.brandDark)),
         const SizedBox(height: 16),
         const Text(
-            "Could not get a stable reading.\nPlease ensure you are 5cm from the sensor.",
+            "Could not get a stable reading. Please ensure you are 5cm from the sensor and stay very still. If the problem persists, please call a health worker for assistance.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, color: Colors.grey)),
         const SizedBox(height: 40),

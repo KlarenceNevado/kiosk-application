@@ -6,6 +6,7 @@ class SpO2ParserResult {
   SpO2ParserResult(this.data, this.bytesConsumed);
 }
 
+class SpO2Parser {
   /// Parses the CMS50D+ 9-byte pulse oximeter binary format from a buffer.
   ///
   /// Protocol (9-byte version):
@@ -38,3 +39,4 @@ class SpO2ParserResult {
     // but the directive specifically requested 9-byte implementation.
     return null;
   }
+}

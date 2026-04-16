@@ -13,6 +13,7 @@ enum SensorType {
   thermometer,
   bloodPressure,
   battery,
+  height,
 }
 
 abstract class ISensorService {

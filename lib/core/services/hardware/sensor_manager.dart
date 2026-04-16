@@ -71,11 +71,22 @@ class SensorManager {
   void _setupHubSubscribers() {
     if (_sensors[SensorType.weight] is SensorHubService) {
       final hub = _sensors[SensorType.weight] as SensorHubService;
-      hub.secondaryDataStream.listen((tempData) {
-        _allDataController.add(SensorEvent(
-            type: SensorType.thermometer,
-            data: tempData,
-            status: hub.currentStatus));
+      hub.secondaryDataStream.listen((data) {
+        if (data is Map<String, dynamic>) {
+          final type = data['type'];
+          final value = data['value'];
+          if (type == 'temp') {
+            _allDataController.add(SensorEvent(
+                type: SensorType.thermometer,
+                data: value,
+                status: hub.currentStatus));
+          } else if (type == 'height') {
+            _allDataController.add(SensorEvent(
+                type: SensorType.height,
+                data: value,
+                status: hub.currentStatus));
+          }
+        }
       });
       hub.batteryStream.listen((voltage) {
         _allDataController.add(SensorEvent(

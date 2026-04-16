@@ -124,13 +124,19 @@ class SensorHubService implements ISensorService {
           final tempStr = segment.substring(2);
           final temp = double.tryParse(tempStr);
           if (temp != null) {
-            _secondaryDataController.add(temp);
+            _secondaryDataController.add({'type': 'temp', 'value': temp});
           }
         } else if (segment.startsWith('W:')) {
           final weightStr = segment.substring(2);
           final weight = double.tryParse(weightStr);
           if (weight != null) {
             _dataController.add(weight);
+          }
+        } else if (segment.startsWith('H:')) {
+          final heightStr = segment.substring(2);
+          final height = double.tryParse(heightStr);
+          if (height != null) {
+            _secondaryDataController.add({'type': 'height', 'value': height});
           }
         } else if (segment.startsWith('B:')) {
           // Assuming B: for battery if provided
