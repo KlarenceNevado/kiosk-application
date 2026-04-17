@@ -3,6 +3,9 @@
 #include <HX711.h>
 #include <ArduinoJson.h>
 
+// --- FUNCTION PROTOTYPES ---
+void sendHeartbeat();
+
 // --- PIN DEFINITIONS ---
 // MLX90614 (Temperature) - I2C standard
 #define SDA_PIN 22

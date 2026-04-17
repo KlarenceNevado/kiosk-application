@@ -201,7 +201,7 @@ class SerialSensorService implements ISensorService {
 
   final List<int> _buffer = [];
 
-  void _handleRawData(Uint8List bytes) {
+  void _handleRawData(List<int> bytes) {
     _lastDataReceived = DateTime.now();
     _buffer.addAll(bytes);
     _processBuffer();
