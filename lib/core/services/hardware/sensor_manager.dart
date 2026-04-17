@@ -32,6 +32,13 @@ class SensorManager {
   final _allDataController = StreamController<SensorEvent>.broadcast();
   Stream<SensorEvent> get allDataStream => _allDataController.stream;
 
+  // NEW: Physical Connectivity Status
+  final Map<SensorType, bool> _physicalStatus = {};
+  final _physicalStatusController = StreamController<Map<SensorType, bool>>.broadcast();
+  Stream<Map<SensorType, bool>> get physicalStatusStream => _physicalStatusController.stream;
+
+  bool isPhysicallyConnected(SensorType type) => _physicalStatus[type] ?? false;
+
   void _initSensors() {
     final bool isRealHardware = AppEnvironment().isKiosk &&
         !AppEnvironment().useSimulation &&
@@ -56,10 +63,20 @@ class SensorManager {
   void _setupSensorListeners() {
     for (var type in _sensors.keys) {
       final service = _sensors[type]!;
+      
+      // 1. Parsed Data Stream
       service.dataStream.listen((data) {
         _allDataController.add(
             SensorEvent(type: type, data: data, status: service.currentStatus));
       });
+
+      // 2. Raw Signal Stream (For Testing/Diagnostics)
+      service.rawStream.listen((rawBytes) {
+        _allDataController.add(
+            SensorEvent(type: type, data: {'raw': rawBytes}, status: service.currentStatus));
+      });
+
+      // 3. Status Stream
       service.statusStream.listen((status) {
         _allDataController.add(SensorEvent(type: type, status: status));
         if (status == SensorStatus.error ||
@@ -105,10 +122,10 @@ class SensorManager {
         "🔍 [SensorManager] Scanning ${availablePorts.length} ports using dynamic config...");
     debugPrint("📂 Available Ports: $availablePorts");
 
+    // DYNAMIC PORT DISCOVERY (No hardcoding)
     String? foundHubPort = config.hub.portOverride;
-    // FORCE PATHS FOR RASPBERRY PI
-    String? foundOxiPort = Platform.isLinux ? '/dev/ttyUSB0' : config.oximeter.portOverride;
-    String? foundBpPort = Platform.isLinux ? '/dev/hidraw1' : config.bloodPressure.portOverride;
+    String? foundOxiPort = config.oximeter.portOverride;
+    String? foundBpPort = config.bloodPressure.portOverride;
 
     // Auto-detect HID for the CONTEC 08A which mounts as hidraw on Linux
     if (Platform.isLinux && foundBpPort == null) {
@@ -121,26 +138,53 @@ class SensorManager {
       }
     }
 
-    // Filter and prioritise based on common Linux patterns shared by user
-    // User specifically stated: /dev/ttyUSB0 -> ESP32, /dev/ttyUSB1 -> Contec
+    // Filter and prioritise ports
     List<String> portsToScan = availablePorts
         .where(
             (p) => p != foundHubPort && p != foundOxiPort && p != foundBpPort)
         .toList();
 
-    // Sort to ensure /dev/ttyUSB0 is checked early
-    portsToScan.sort((a, b) => a.compareTo(b));
-
+    // PHASE 1: FIND THE ESP32 HUB (The brain of the operation)
     for (var portName in portsToScan) {
-      if (foundHubPort != null && foundOxiPort != null && foundBpPort != null) {
-        break;
+      if (foundHubPort != null) break;
+      debugPrint("📡 [SensorManager] Probing Port $portName for ESP32 Hub...");
+      if (await _probePort(portName, config.hub.baudRate,
+          config.hub.handshakeSignature, null, null)) {
+        foundHubPort = portName;
+        debugPrint("✅ Found ESP32 Hub on $portName");
       }
+    }
 
-      debugPrint("📡 Probing $portName...");
+    // Refresh remaining ports
+    portsToScan.remove(foundHubPort);
+
+    // PHASE 2: FIND OTHER SENSORS
+    for (var portName in portsToScan) {
+      if (foundOxiPort != null && foundBpPort != null) break;
+      debugPrint("📡 [SensorManager] Probing Port $portName...");
 
       try {
-        // 1. Probe for ESP32 Hub at 115200 baud
-        // The ESP32 is usually the first device and uses 115200.
+        final port = SerialPort(portName);
+        final int vid = port.vendorId ?? 0;
+        final int pid = port.productId ?? 0;
+
+        // NEW: Identity by VID/PID (Fast Detection)
+        if (foundHubPort == null && config.hub.vendorId == vid && config.hub.productId == pid) {
+          foundHubPort = portName;
+          _physicalStatus[SensorType.weight] = true;
+          _physicalStatus[SensorType.thermometer] = true;
+          debugPrint("✅ Found ESP32 Hub by VID/PID on $portName");
+          continue;
+        }
+
+        if (foundOxiPort == null && config.oximeter.vendorId == vid && config.oximeter.productId == pid) {
+          foundOxiPort = portName;
+          _physicalStatus[SensorType.oximeter] = true;
+          debugPrint("✅ Found Oximeter by VID/PID on $portName");
+          continue;
+        }
+
+        // Old signature-based fallout
         if (foundHubPort == null &&
             await _probePort(portName, config.hub.baudRate,
                 config.hub.handshakeSignature, null, null)) {
@@ -223,6 +267,52 @@ class SensorManager {
 
     // Explicitly map battery to the Hub service which provides the telemetry
     _sensors[SensorType.battery] = _sensors[SensorType.weight]!;
+
+    // Initial physical status update
+    _physicalStatusController.add(Map.from(_physicalStatus));
+
+    // DISCOVERY HARDENING: If a device is missing but mapped, try to start it anyway
+    for (var type in _sensors.keys) {
+      if (_physicalStatus[type] != true && _portMapping[type] != null) {
+        debugPrint("📡 [SensorManager] Attempting fallback start for $type on ${_portMapping[type]}");
+        _sensors[type]?.startReading();
+      }
+    }
+    
+    // Start background monitor for hot-plugging
+    _startHotPlugMonitor();
+  }
+
+  void _startHotPlugMonitor() {
+    Timer.periodic(const Duration(seconds: 3), (timer) {
+      final ports = SerialPort.availablePorts;
+      final config = HardwareConfig.instance;
+      bool changed = false;
+
+      void check(SensorType type, DeviceSettings settings) {
+        bool connected = false;
+        for (var pName in ports) {
+          final p = SerialPort(pName);
+          if (p.vendorId == settings.vendorId && p.productId == settings.productId) {
+            connected = true;
+            break;
+          }
+        }
+        if (_physicalStatus[type] != connected) {
+          _physicalStatus[type] = connected;
+          changed = true;
+        }
+      }
+
+      check(SensorType.weight, config.hub);
+      check(SensorType.thermometer, config.hub);
+      check(SensorType.oximeter, config.oximeter);
+      check(SensorType.bloodPressure, config.bloodPressure);
+
+      if (changed) {
+        _physicalStatusController.add(Map.from(_physicalStatus));
+      }
+    });
   }
 
   Future<bool> _probePort(String portName, int baudRate, String? asciiSig, String? hexSig, Uint8List? initCmd) async {

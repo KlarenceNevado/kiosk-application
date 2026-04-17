@@ -8,10 +8,18 @@ class ContecBpResult {
 
 class ContecBpParser {
   /// Parses binary data from CONTEC08A Blood Pressure Monitor with buffer support.
+  /// Handles both Serial (raw) and HID (prefixed) packets.
   static ContecBpResult? parse(Uint8List buffer) {
     if (buffer.length < 7) return null;
 
-    for (int i = 0; i <= buffer.length - 7; i++) {
+    // HID Check: If the buffer starts with 0x00 (Report ID), we shift our window.
+    int offset = 0;
+    if (buffer[0] == 0x00 && buffer.length > 7) {
+      // Look for the header at index 1 instead of 0
+      offset = 1;
+    }
+
+    for (int i = offset; i <= buffer.length - 7; i++) {
       // CONTEC Sync: Real-time packets often start with 0x02 (Length 7)
       // Result packets often start with 0x01 (Length 9+)
 

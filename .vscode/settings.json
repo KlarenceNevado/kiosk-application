@@ -1,10 +1,8 @@
 {
-    "cmake.sourceDirectory": "C:/KioskApplication/kiosk_application/linux",
-    "clangd.arguments": [
-        "--query-driver=C:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-gcc.exe",
-        "--background-index",
-        "--log=verbose",
-        "--compile-commands-dir=C:/KioskApplication/kiosk_application/hardware/esp32_sensor_hub/build"
-    ],
-    "arduino.enableCompileCommands": true
+    "C_Cpp.errorSquiggles": "Disabled",
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.intelliSenseEngineFallback": "Disabled",
+    "C_Cpp.diagnostics.enabled": false,
+    "arduino.analyzeOnOpen": false,
+    "arduino.autoDetect": false
 }

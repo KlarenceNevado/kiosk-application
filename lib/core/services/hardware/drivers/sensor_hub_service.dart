@@ -17,6 +17,7 @@ class SensorHubService implements ISensorService {
   final _secondaryDataController = StreamController<dynamic>.broadcast();
   final _batteryDataController = StreamController<double>.broadcast();
   final _statusController = StreamController<SensorStatus>.broadcast();
+  final _rawController = StreamController<List<int>>.broadcast();
 
   SensorStatus _status = SensorStatus.disconnected;
   SerialPort? _port;
@@ -30,6 +31,9 @@ class SensorHubService implements ISensorService {
 
   @override
   Stream<dynamic> get dataStream => _dataController.stream;
+
+  @override
+  Stream<List<int>> get rawStream => _rawController.stream;
 
   Stream<dynamic> get secondaryDataStream => _secondaryDataController.stream;
 
@@ -83,6 +87,7 @@ class SensorHubService implements ISensorService {
   String _stringBuffer = "";
 
   void _handleRawData(Uint8List bytes) {
+    _rawController.add(bytes); // Pulse raw data immediately
     try {
       // Use utf8.decoder as per directive
       final String decoded = utf8.decode(bytes);

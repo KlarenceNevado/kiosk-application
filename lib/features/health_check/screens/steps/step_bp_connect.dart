@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
 import '../../../../core/services/hardware/sensor_service_interface.dart';
-import '../../../../core/services/system/app_environment.dart';
 import '../../../auth/domain/i_auth_repository.dart';
 
 class StepBpConnect extends StatefulWidget {
@@ -20,7 +18,6 @@ class StepBpConnect extends StatefulWidget {
 class _StepBpConnectState extends State<StepBpConnect>
     with TickerProviderStateMixin {
   int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
-  Timer? _simTimer;
   Timer? _timeoutTimer;
   String _lockedSys = "--";
   String _lockedDia = "--";
@@ -43,30 +40,10 @@ class _StepBpConnectState extends State<StepBpConnect>
 
     context.read<IAuthRepository>().resetSessionTimer();
 
-    // HARDENING: Safety Timeout
-    // BP takes time, so 30s is more reasonable for the entire cycle.
     _timeoutTimer?.cancel();
-    _timeoutTimer = Timer(const Duration(seconds: 45), () {
+    _timeoutTimer = Timer(const Duration(seconds: 15), () {
       if (mounted && _viewState == 1) {
         setState(() => _viewState = 3); // Error State
-      }
-    });
-
-    if (!AppEnvironment().useSimulation) return;
-
-    int ticks = 0;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      ticks++;
-      if (ticks >= 30) {
-        timer.cancel();
-        final sys = 115 + Random().nextInt(15);
-        final dia = 75 + Random().nextInt(10);
-        provider.setBloodPressure(sys, dia);
-        // Step logic will auto-detect result from provider via listener
       }
     });
   }
@@ -86,7 +63,6 @@ class _StepBpConnectState extends State<StepBpConnect>
 
   @override
   void dispose() {
-    _simTimer?.cancel();
     _timeoutTimer?.cancel();
     _iconController.dispose();
     super.dispose();
@@ -95,7 +71,6 @@ class _StepBpConnectState extends State<StepBpConnect>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
-    final isSim = AppEnvironment().useSimulation;
 
     // HARDENING: Auto-lock when result arrives
     if (_viewState == 1 &&
@@ -114,7 +89,7 @@ class _StepBpConnectState extends State<StepBpConnect>
             ? _buildPrepView()
             : _viewState == 3
                 ? _buildErrorView(provider)
-                : _buildMeasuringView(provider, isSim),
+                : _buildMeasuringView(provider),
       ),
     );
   }
@@ -180,7 +155,7 @@ class _StepBpConnectState extends State<StepBpConnect>
     );
   }
 
-  Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
+  Widget _buildMeasuringView(HealthWizardProvider provider) {
     bool isDone = _viewState == 2;
     String sysVal = isDone
         ? _lockedSys
@@ -265,17 +240,26 @@ class _StepBpConnectState extends State<StepBpConnect>
                           color: AppColors.bpBlue, size: 48),
                     ),
                   const SizedBox(height: 8),
-                  Text("$sysVal/$diaVal",
-                      style: TextStyle(
-                          fontSize: 52,
-                          fontWeight: FontWeight.w900,
-                          color: isDone
-                              ? AppColors.brandGreen
-                              : AppColors.brandDark,
-                          height: 1.0,
-                          letterSpacing: -3)),
-                  const Text("BP (mmHg)",
-                      style: TextStyle(
+                  if (!isDone && provider.currentPressure > 0)
+                    Text(provider.currentPressure.toString(),
+                        style: const TextStyle(
+                            fontSize: 72,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.bpBlue,
+                            height: 1.0,
+                            letterSpacing: -3))
+                  else
+                    Text("$sysVal/$diaVal",
+                        style: TextStyle(
+                            fontSize: 52,
+                            fontWeight: FontWeight.w900,
+                            color: isDone
+                                ? AppColors.brandGreen
+                                : AppColors.brandDark,
+                            height: 1.0,
+                            letterSpacing: -3)),
+                  Text(isDone ? "BP (mmHg)" : "INFLATING (mmHg)...",
+                      style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
                           color: Colors.grey,

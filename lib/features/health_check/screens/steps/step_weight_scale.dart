@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
+import '../../../../core/services/hardware/sensor_manager.dart';
 import '../../../../core/services/hardware/sensor_service_interface.dart';
-import '../../../../core/services/system/app_environment.dart';
 import '../../../auth/domain/i_auth_repository.dart';
 
 class StepWeightScale extends StatefulWidget {
@@ -19,6 +18,7 @@ class StepWeightScale extends StatefulWidget {
 
 class _StepWeightScaleState extends State<StepWeightScale>
     with TickerProviderStateMixin {
+  final SensorManager _sensorManager = SensorManager();
   int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
   Timer? _simTimer;
   Timer? _timeoutTimer;
@@ -42,28 +42,10 @@ class _StepWeightScaleState extends State<StepWeightScale>
 
     context.read<IAuthRepository>().resetSessionTimer();
 
-    // HARDENING: Safety Timeout
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(seconds: 15), () {
       if (mounted && _viewState == 1) {
         setState(() => _viewState = 3); // Error State
-      }
-    });
-
-    if (!AppEnvironment().useSimulation) return;
-
-    int ticks = 0;
-    double targetWeight = 62.5 + Random().nextDouble() * 5;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      ticks++;
-      if (ticks >= 25) {
-        timer.cancel();
-        provider.setWeight(targetWeight);
-        // Step logic will auto-detect stability from provider via listener
       }
     });
   }
@@ -91,7 +73,6 @@ class _StepWeightScaleState extends State<StepWeightScale>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
-    final isSim = AppEnvironment().useSimulation;
 
     // HARDENING: Auto-lock when stable OR Fast-Failure if hardware disconnects
     if (_viewState == 1) {
@@ -106,15 +87,45 @@ class _StepWeightScaleState extends State<StepWeightScale>
       }
     }
 
+    final isPhysicallyConnected =
+        provider.getSensorStatus(SensorType.weight) != SensorStatus.disconnected ||
+        _sensorManager.isPhysicallyConnected(SensorType.weight);
+
     return Center(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
-        child: _viewState == 0
-            ? _buildPrepView()
-            : _viewState == 3
-                ? _buildErrorView(provider)
-                : _buildMeasuringView(provider, isSim),
+        child: !isPhysicallyConnected && _viewState != 2
+            ? _buildUnpluggedView()
+            : _viewState == 0
+                ? _buildPrepView()
+                : _viewState == 3
+                    ? _buildErrorView(provider)
+                    : _buildMeasuringView(provider),
       ),
+    );
+  }
+
+  Widget _buildUnpluggedView() {
+    return const Column(
+      key: ValueKey(4),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.usb_off_rounded, color: Colors.orange, size: 80),
+        SizedBox(height: 24),
+        Text("Hardware Missing",
+            style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: AppColors.brandDark)),
+        SizedBox(height: 16),
+        Text(
+          "I-plug ang USB cable ng Weight Scale (ESP32 Hub) \npara magpatuloy sa checkup.",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 18, color: Colors.grey, height: 1.4),
+        ),
+        SizedBox(height: 48),
+        CircularProgressIndicator(color: Colors.orange),
+      ],
     );
   }
 
@@ -178,7 +189,7 @@ class _StepWeightScaleState extends State<StepWeightScale>
     );
   }
 
-  Widget _buildMeasuringView(HealthWizardProvider provider, bool isSim) {
+  Widget _buildMeasuringView(HealthWizardProvider provider) {
     bool isDone = _viewState == 2;
     bool isStable = provider.isVitalStable(SensorType.weight);
     String displayWeight = isDone

@@ -1,7 +1,8 @@
-#include <Wire.h>
 #include <Adafruit_MLX90614.h>
-#include <HX711.h>
+#include <Arduino.h>
 #include <ArduinoJson.h>
+#include <HX711.h>
+#include <Wire.h>
 
 // --- PIN DEFINITIONS ---
 #define SDA_PIN 22
@@ -12,6 +13,9 @@
 // --- SENSOR OBJECTS ---
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 HX711 scale;
+
+// Prototypes for IDE stability
+void sendHeartbeat();
 
 // --- CONFIGURATION ---
 float calibration_factor = 2280.f;
@@ -44,7 +48,8 @@ void setup() {
     hx711Status = "ERROR";
   }
 
-  Serial.println("{\"device\": \"esp32\", \"status\": \"booted\"}");
+  Serial.println("{\"device\": \"esp32\", \"status\": \"booted\", "
+                 "\"test_signal\": \"OK\"}");
 }
 
 void loop() {
@@ -100,6 +105,6 @@ void sendHeartbeat() {
     doc["hx711_val"] = 0.0;
   }
 
-  serializeJson(doc, Serial);
+  serializeJson(doc, (Print &)Serial);
   Serial.println();
 }

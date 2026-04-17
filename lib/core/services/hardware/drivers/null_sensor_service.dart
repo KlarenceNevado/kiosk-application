@@ -14,6 +14,9 @@ class NullSensorService implements ISensorService {
   Stream<dynamic> get dataStream => const Stream.empty();
 
   @override
+  Stream<List<int>> get rawStream => const Stream.empty();
+
+  @override
   Stream<SensorStatus> get statusStream => Stream.value(SensorStatus.disconnected);
 
   @override

@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/flow_animated_button.dart';
 import '../../logic/health_wizard_provider.dart';
 import '../../../../core/services/hardware/sensor_service_interface.dart';
-import '../../../../core/services/system/app_environment.dart';
 import '../../../auth/domain/i_auth_repository.dart';
 
 class StepPulseOx extends StatefulWidget {
@@ -20,7 +18,6 @@ class StepPulseOx extends StatefulWidget {
 class _StepPulseOxState extends State<StepPulseOx>
     with TickerProviderStateMixin {
   int _viewState = 0; // 0=Prep, 1=Measuring, 2=Result, 3=Error
-  Timer? _simTimer;
   Timer? _timeoutTimer;
 
   String _lockedHR = "--";
@@ -44,29 +41,10 @@ class _StepPulseOxState extends State<StepPulseOx>
 
     context.read<IAuthRepository>().resetSessionTimer();
 
-    // HARDENING: Safety Timeout
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(seconds: 15), () {
       if (mounted && _viewState == 1) {
         setState(() => _viewState = 3); // Error State
-      }
-    });
-
-    if (!AppEnvironment().useSimulation) return;
-
-    int ticks = 0;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      ticks++;
-      if (ticks >= 25) {
-        timer.cancel();
-        final hr = 72 + Random().nextInt(8);
-        final spo2 = 97 + Random().nextInt(3);
-        provider.setPulseOx(hr, spo2);
-        // Step logic will auto-detect stability from provider via listener
       }
     });
   }
@@ -86,7 +64,6 @@ class _StepPulseOxState extends State<StepPulseOx>
 
   @override
   void dispose() {
-    _simTimer?.cancel();
     _timeoutTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
@@ -95,7 +72,6 @@ class _StepPulseOxState extends State<StepPulseOx>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
-    final isSim = AppEnvironment().useSimulation;
 
     // HARDENING: Auto-lock when stable OR Fast-Failure
     if (_viewState == 1) {
@@ -120,7 +96,7 @@ class _StepPulseOxState extends State<StepPulseOx>
             ? _buildPrepView()
             : _viewState == 3
                 ? _buildErrorView(provider)
-                : _buildMeasurementView(provider, isSim),
+                : _buildMeasuringView(provider),
       ),
     );
   }
@@ -186,7 +162,7 @@ class _StepPulseOxState extends State<StepPulseOx>
     );
   }
 
-  Widget _buildMeasurementView(HealthWizardProvider provider, bool isSim) {
+  Widget _buildMeasuringView(HealthWizardProvider provider) {
     bool isDone = _viewState == 2;
     bool isStable = provider.isVitalStable(SensorType.oximeter);
     String hrValue = isDone

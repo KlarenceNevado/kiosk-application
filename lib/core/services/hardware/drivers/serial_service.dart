@@ -17,11 +17,13 @@ class SerialSensorService implements ISensorService {
 
   final _dataController = StreamController<dynamic>.broadcast();
   final _statusController = StreamController<SensorStatus>.broadcast();
+  final _rawController = StreamController<List<int>>.broadcast();
 
   SensorStatus _status = SensorStatus.disconnected;
   SerialPort? _port;
   SerialPortReader? _reader;
   StreamSubscription? _hidStreamSub;
+  RandomAccessFile? _hidFile;
   Timer? _watchdogTimer;
   DateTime? _lastDataReceived;
 
@@ -33,6 +35,9 @@ class SerialSensorService implements ISensorService {
 
   @override
   Stream<dynamic> get dataStream => _dataController.stream;
+
+  @override
+  Stream<List<int>> get rawStream => _rawController.stream;
 
   @override
   Stream<SensorStatus> get statusStream => _statusController.stream;
@@ -68,6 +73,10 @@ class SerialSensorService implements ISensorService {
         _updateStatus(SensorStatus.reading);
         _startWatchdog();
 
+        // Open file for reading AND writing (required for sending BP Start commands)
+        final openFile = await file.open(mode: FileMode.append);
+        _hidFile = openFile;
+
         _hidStreamSub = file.openRead().listen(_handleRawData, onError: (e) {
           _updateStatus(SensorStatus.error);
           _dataController.addError("HID stream error: $e");
@@ -98,13 +107,16 @@ class SerialSensorService implements ISensorService {
             "Could not open port $portName. Error: ${SerialPort.lastError}");
       }
 
-      // Configure port
+      // Configure port (Crucial for USB Extenders)
       _port!.config = SerialPortConfig()
         ..baudRate = baudRate
         ..bits = 8
         ..stopBits = 1
-        ..parity = SerialPortParity.none;
+        ..parity = SerialPortParity.none
+        ..setFlowControl(SerialPortFlowControl.none);
 
+      _port!.flush(); // Clear stale garbage from cable noise
+      
       _updateStatus(SensorStatus.reading);
       _startWatchdog();
 
@@ -124,6 +136,8 @@ class SerialSensorService implements ISensorService {
   void stopReading() {
     _watchdogTimer?.cancel();
     _hidStreamSub?.cancel();
+    _hidFile?.closeSync();
+    _hidFile = null;
     _reader?.close();
     _port?.close();
     _port = null;
@@ -172,12 +186,23 @@ class SerialSensorService implements ISensorService {
 
   @override
   Future<void> sendCommand(Uint8List command) async {
-    if (_port == null || _status != SensorStatus.reading) {
+    if (_status != SensorStatus.reading) {
       debugPrint(
-          "⚠️ [SerialSensorService] Cannot send command to $type: Port not open.");
+          "⚠️ [SerialSensorService] Cannot send command to $type: Sensor not reading.");
       return;
     }
+
     try {
+      if (portName.startsWith('/dev/hidraw') && _hidFile != null) {
+        // HID devices often require a Report ID (usually 0x00 for raw)
+        final hidPacket = Uint8List(command.length + 1);
+        hidPacket[0] = 0x00; 
+        hidPacket.setRange(1, hidPacket.length, command);
+        await _hidFile!.writeFrom(hidPacket);
+        return;
+      }
+
+      if (_port == null) return;
       final bytesWritten = _port!.write(command);
       if (bytesWritten != command.length) {
         debugPrint(
@@ -196,6 +221,7 @@ class SerialSensorService implements ISensorService {
   void dispose() {
     stopReading();
     _dataController.close();
+    _rawController.close();
     _statusController.close();
   }
 
@@ -203,6 +229,7 @@ class SerialSensorService implements ISensorService {
 
   void _handleRawData(List<int> bytes) {
     _lastDataReceived = DateTime.now();
+    _rawController.add(bytes); // Pass through immediately
     _buffer.addAll(bytes);
     _processBuffer();
   }

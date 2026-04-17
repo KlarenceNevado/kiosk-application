@@ -30,6 +30,9 @@ abstract class ISensorService {
   /// Stream of raw OR parsed data
   Stream<dynamic> get dataStream;
 
+  /// NEW: Stream of direct bytes from hardware (for diagnostics)
+  Stream<List<int>> get rawStream;
+
   void startReading();
   void stopReading();
 

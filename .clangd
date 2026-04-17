@@ -1,4 +1,7 @@
-# Minimal Clangd configuration to reset the indexer
+# Clangd configuration to SILENCE all false-positive hardware errors
+Diagnostics:
+  Suppress: ["ovl_no_viable_member_function_in_call"]
+
 CompileFlags:
   Add: 
     - "--driver-mode=g++"
@@ -7,12 +10,17 @@ CompileFlags:
     - "-DARDUINO=10813"
     - "-DARDUINO_ARCH_ESP32"
     - "-DESP32"
+    # Core ESP32 Includes
     - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/cores/esp32"
     - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/variants/esp32"
-    - "-IC:/ArduinoLibs/libraries/Adafruit_MLX90614_Library"
-    - "-IC:/ArduinoLibs/libraries/HX711"
-    - "-IC:/ArduinoLibs/libraries/ArduinoJson/src"
-    - "-IC:/ArduinoLibs/libraries/Adafruit_BusIO"
+    # FreeRTOS Includes (CORRECTED)
+    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/freertos/FreeRTOS-Kernel/include"
+    # Library Includes
+    - "-IC:/Users/Klarence Nevado/Documents/Arduino/libraries/Adafruit_MLX90614_Library"
+    - "-IC:/Users/Klarence Nevado/Documents/Arduino/libraries/HX711"
+    - "-IC:/Users/Klarence Nevado/Documents/Arduino/libraries/ArduinoJson/src"
+    - "-IC:/Users/Klarence Nevado/Documents/Arduino/libraries/Adafruit_BusIO"
     - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/libraries/Wire/src"
+
 Index:
-  Background: Build
+  Background: Skip

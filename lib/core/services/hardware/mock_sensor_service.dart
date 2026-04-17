@@ -20,6 +20,9 @@ class MockSensorService implements ISensorService {
   Stream<dynamic> get dataStream => _dataController.stream;
 
   @override
+  Stream<List<int>> get rawStream => const Stream.empty();
+
+  @override
   Stream<SensorStatus> get statusStream => _statusController.stream;
 
   @override

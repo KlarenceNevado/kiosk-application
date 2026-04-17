@@ -18,6 +18,10 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
   final Map<SensorType, Map<String, dynamic>> _lastReadings = {};
   final Map<SensorType, bool> _heartbeats = {};
   final List<String> _availablePorts = [];
+  final Map<SensorType, bool> _physicalConnections = {};
+  final Map<SensorType, int> _packetCounts = {};
+  final Map<SensorType, DateTime> _lastUpdate = {};
+  StreamSubscription? _physicalSubscription;
 
   @override
   void initState() {
@@ -32,16 +36,55 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
           _rawLogs[event.type]!.insert(0, logEntry);
           if (_rawLogs[event.type]!.length > 15) _rawLogs[event.type]!.removeLast();
 
+          // Signal Integrity Tracking
+          _packetCounts[event.type] = (_packetCounts[event.type] ?? 0) + 1;
+          _lastUpdate[event.type] = DateTime.now();
+
           // Update Parsed Readings
           if (event.data is Map<String, dynamic>) {
-            _lastReadings[event.type] = event.data as Map<String, dynamic>;
+            final map = event.data as Map<String, dynamic>;
             
-            // Trigger heartbeat animation
+            // Handle Raw Passthrough for the Terminal
+            if (map.containsKey('raw')) {
+              final rawBytes = map['raw'] as List<int>;
+              _rawLogs.putIfAbsent(event.type, () => []);
+              
+              // NEW: Enhanced Hex/Text Log
+              String hex = rawBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+              String text = String.fromCharCodes(rawBytes.where((b) => b > 31 && b < 127));
+              String logEntry = "[RAW] $hex | $text";
+              
+              _rawLogs[event.type]!.insert(0, logEntry);
+              if (_rawLogs[event.type]!.length > 20) _rawLogs[event.type]!.removeLast();
+              
+              // Trigger heartbeats even on raw noise
+              _heartbeats[event.type] = true;
+              Timer(const Duration(milliseconds: 150), () {
+                if (mounted) setState(() => _heartbeats[event.type] = false);
+              });
+              return; 
+            }
+
+            _lastReadings[event.type] = map;
+            
+            // Trigger heartbeat animation for structured data
             _heartbeats[event.type] = true;
             Timer(const Duration(milliseconds: 300), () {
               if (mounted) setState(() => _heartbeats[event.type] = false);
             });
+          } else if (event.data != null) {
+            // Primitive data (single numbers)
+             _lastReadings[event.type] = {'value': event.data};
           }
+        });
+      }
+    });
+
+    _physicalSubscription = _sensorManager.physicalStatusStream.listen((statusMap) {
+      if (mounted) {
+        setState(() {
+          _physicalConnections.clear();
+          _physicalConnections.addAll(statusMap);
         });
       }
     });
@@ -57,6 +100,7 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
   @override
   void dispose() {
     _dataSubscription?.cancel();
+    _physicalSubscription?.cancel();
     super.dispose();
   }
 
@@ -132,7 +176,13 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
                           children: [
                             Text(type.toString().split('.').last.toUpperCase(),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            _StatusIndicator(status: status),
+                            Row(
+                              children: [
+                                _PhysicalIndicator(isConnected: _physicalConnections[type] ?? false),
+                                const SizedBox(width: 8),
+                                _StatusIndicator(status: status),
+                              ],
+                            ),
                           ],
                         ),
                         Text("Port: $port", style: TextStyle(color: Colors.grey[600])),
@@ -142,11 +192,13 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
                         _LiveSignalIndicator(
                           type: type, 
                           data: _lastReadings[type], 
-                          isPulsing: _heartbeats[type] ?? false
+                          isPulsing: _heartbeats[type] ?? false,
+                          packetCount: _packetCounts[type] ?? 0,
+                          lastSeen: _lastUpdate[type],
                         ),
                         
                         const SizedBox(height: 8),
-                        const Text("Recent Raw Data:", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        const Text("Recent Raw Data (Hex):", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                         Expanded(
                           child: Container(
                             width: double.infinity,
@@ -197,6 +249,44 @@ class _HardwareDiagnosticScreenState extends State<HardwareDiagnosticScreen> {
   }
 }
 
+class _PhysicalIndicator extends StatelessWidget {
+  final bool isConnected;
+  const _PhysicalIndicator({required this.isConnected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isConnected ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isConnected ? Colors.green.withValues(alpha: 0.3) : Colors.red.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isConnected ? Icons.usb_rounded : Icons.usb_off_rounded,
+            size: 14,
+            color: isConnected ? Colors.green : Colors.red,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isConnected ? "NAKASAKSAK" : "HINDI NAKASAKSAK",
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isConnected ? Colors.green : Colors.red,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusIndicator extends StatelessWidget {
   final SensorStatus status;
   const _StatusIndicator({required this.status});
@@ -231,16 +321,21 @@ class _LiveSignalIndicator extends StatelessWidget {
   final Map<String, dynamic>? data;
   final bool isPulsing;
 
+  final int packetCount;
+  final DateTime? lastSeen;
+
   const _LiveSignalIndicator({
     required this.type,
     this.data,
     required this.isPulsing,
+    required this.packetCount,
+    this.lastSeen,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (data == null) {
-      return const Text("Waiting for data signal...", 
+    if (data == null && packetCount == 0) {
+      return const Text("Waiting for hardware signal...", 
           style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12));
     }
 
@@ -278,16 +373,41 @@ class _LiveSignalIndicator extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: isPulsing ? Colors.red.withValues(alpha: 0.2) : Colors.transparent),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 16, color: iconColor),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                display,
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-              ),
+            Row(
+              children: [
+                Icon(icon, size: 16, color: iconColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    display,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
+                ),
+                Text(
+                  "#$packetCount",
+                  style: const TextStyle(fontSize: 10, color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
+            if (lastSeen != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Active ${DateTime.now().difference(lastSeen!).inMilliseconds}ms ago",
+                    style: const TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic),
+                  ),
+                  const Text(
+                    "RAW SIGNAL OK",
+                    style: TextStyle(fontSize: 8, color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ]
           ],
         ),
       ),

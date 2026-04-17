@@ -15,6 +15,7 @@ class HealthWizardProvider extends ChangeNotifier {
   double _currentTemp = 0.0;
   int _currentSystolic = 0;
   int _currentDiastolic = 0;
+  int _currentPressure = 0; // NEW: Live Gauge for BP
 
   // BMI DATA
   int _heightCm = 165;
@@ -46,6 +47,7 @@ class HealthWizardProvider extends ChangeNotifier {
   double get currentTemp => _currentTemp;
   int get currentSystolic => _currentSystolic;
   int get currentDiastolic => _currentDiastolic;
+  int get currentPressure => _currentPressure;
   double get weightKg => _weightKg;
   int get heightCm => _heightCm;
 
@@ -134,10 +136,14 @@ class HealthWizardProvider extends ChangeNotifier {
           case SensorType.bloodPressure:
             if (!_isBpLocked) {
               final bp = event.data as Map<String, dynamic>;
-              _currentSystolic = bp['sys'] as int;
-              _currentDiastolic = bp['dia'] as int;
-              _updateStability(
-                  SensorType.bloodPressure, _currentSystolic.toDouble());
+              if (bp['type'] == 'realtime') {
+                _currentPressure = bp['pressure'] as int;
+              } else if (bp['type'] == 'result') {
+                _currentSystolic = bp['sys'] as int;
+                _currentDiastolic = bp['dia'] as int;
+                _updateStability(
+                    SensorType.bloodPressure, _currentSystolic.toDouble());
+              }
             }
             break;
           case SensorType.battery:
@@ -225,6 +231,7 @@ class HealthWizardProvider extends ChangeNotifier {
     _isTempLocked = false;
     _isPulseOxLocked = false;
     _isBpLocked = false;
+    _currentPressure = 0;
     
     // Auto-start weight as first step
     _sensorManager.startSensor(SensorType.weight);

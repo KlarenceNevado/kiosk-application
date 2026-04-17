@@ -102,6 +102,8 @@ class DeviceSettings {
   final int watchdogTimeoutMs;
   final String? handshakeSignature;
   final String? handshakeSignatureHex;
+  final int? vendorId;
+  final int? productId;
 
   DeviceSettings({
     required this.name,
@@ -110,6 +112,8 @@ class DeviceSettings {
     this.watchdogTimeoutMs = 10000,
     this.handshakeSignature,
     this.handshakeSignatureHex,
+    this.vendorId,
+    this.productId,
   });
 
   void validate() {
@@ -130,6 +134,8 @@ class DeviceSettings {
       watchdogTimeoutMs: json['watchdog_timeout_ms'] ?? 10000,
       handshakeSignature: json['handshake_signature'],
       handshakeSignatureHex: json['handshake_signature_hex'],
+      vendorId: json['vendor_id'],
+      productId: json['product_id'],
     );
   }
 }
