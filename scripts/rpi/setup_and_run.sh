@@ -2,6 +2,8 @@
 # Isla Verde Kiosk: Network + Deploy Setup for Raspberry Pi
 # Run this script on the Pi to set a static IP and deploy the kiosk app.
 
+export PATH="$PATH:/home/kiosk/flutter/bin"
+
 echo "🌐 Skipping strict Netplan config to prevent routing conflicts with WiFi."
 # The Pi will rely on DHCP or NetworkManager for the LAN connection.
 
