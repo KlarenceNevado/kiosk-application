@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Isla Verde Kiosk
+Comment=Health Kiosk Application
+Exec=/home/kiosk/kiosk_update/build/linux/arm64/release/bundle/kiosk_application
+Path=/home/kiosk/kiosk_update/build/linux/arm64/release/bundle/
+Icon=/home/kiosk/kiosk_update/assets/images/logo.png
+Terminal=false
+Categories=Medical;Health;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true

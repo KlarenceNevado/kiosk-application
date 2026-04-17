@@ -52,6 +52,14 @@ class AppTheme {
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
       ),
+
+      // Hide Scrollbars for Kiosk UI
+      scrollbarTheme: ScrollbarThemeData(
+        thumbVisibility: WidgetStateProperty.all(false),
+        trackVisibility: WidgetStateProperty.all(false),
+        thickness: WidgetStateProperty.all(0),
+        interactive: false,
+      ),
     );
   }
 }

@@ -19,9 +19,14 @@ except Exception as e:
     sys.exit(1)
 
 # Sequence of commands to fix path and build everything
-# Using 'bash -l -c' to ensure Flutter is in the PATH
+# 1. Force WiFi route
+# 2. Fresh clone from GitHub
+# 3. Build using login shell for Flutter path
 commands = [
     "sudo ip route del default dev eth0 2>/dev/null || true",
+    "rm -rf ~/kiosk_update",
+    "echo \"--- Downloading Latest Code from GitHub ---\"",
+    "git clone https://github.com/KlarenceNevado/kiosk-application.git ~/kiosk_update",
     "cd ~/kiosk_update/scripts/rpi",
     "chmod +x setup_and_run.sh",
     "bash -l -c \"cd ~/kiosk_update/scripts/rpi && ./setup_and_run.sh\""

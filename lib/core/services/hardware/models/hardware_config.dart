@@ -67,11 +67,13 @@ class SystemSettings {
   final int discoveryTimeoutMs;
   final int probeDelayMs;
   final bool debugLogs;
+  final bool forceManualVitals;
 
   SystemSettings({
     this.discoveryTimeoutMs = 500,
     this.probeDelayMs = 500,
     this.debugLogs = true,
+    this.forceManualVitals = false,
   });
 
   void validate() {
@@ -88,6 +90,7 @@ class SystemSettings {
       discoveryTimeoutMs: json['discovery_timeout_ms'] ?? 500,
       probeDelayMs: json['probe_delay_ms'] ?? 500,
       debugLogs: json['debug_logs'] ?? true,
+      forceManualVitals: json['force_manual_vitals'] ?? false,
     );
   }
 }

@@ -2,7 +2,8 @@
   "system": {
     "discovery_timeout_ms": 3000,
     "probe_delay_ms": 800,
-    "debug_logs": true
+    "debug_logs": true,
+    "force_manual_vitals": true
   },
   "hub": {
     "name": "ESP32 Sensor Hub",

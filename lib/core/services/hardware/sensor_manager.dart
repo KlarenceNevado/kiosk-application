@@ -22,6 +22,11 @@ class SensorManager {
   }
 
   final Map<SensorType, ISensorService> _sensors = {};
+  
+  // Track port mappings for diagnostic UI
+  final Map<SensorType, String> _portMapping = {};
+  Map<SensorType, String> get portMapping => Map.unmodifiable(_portMapping);
+
 
   // Unified stream for all sensor events
   final _allDataController = StreamController<SensorEvent>.broadcast();
@@ -182,6 +187,11 @@ class SensorManager {
     debugPrint(
         "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");
 
+    _portMapping[SensorType.weight] = finalHub;
+    _portMapping[SensorType.thermometer] = finalHub;
+    _portMapping[SensorType.oximeter] = finalOxi;
+    _portMapping[SensorType.bloodPressure] = finalBp;
+
     _sensors[SensorType.weight] = SensorHubService(
         type: SensorType.weight,
         portName: finalHub,
@@ -269,7 +279,51 @@ class SensorManager {
     }
   }
 
-  void startSensor(SensorType type) => _sensors[type]?.startReading();
+  void startSensor(SensorType type) {
+    bool forceSim = HardwareConfig.instance.system.forceManualVitals;
+    
+    if (forceSim && (type == SensorType.weight || type == SensorType.thermometer)) {
+      _runRealisticSimulation(type);
+    } else {
+      _sensors[type]?.startReading();
+    }
+  }
+
+  void _runRealisticSimulation(SensorType type) async {
+    debugPrint("🧪 [SensorManager] Starting PROPER CALIBRATION simulation for $type");
+    
+    // Pick a realistic randomized target for the demo
+    double targetValue;
+    double startValue;
+    
+    if (type == SensorType.weight) {
+      // Random weight between 58.0 and 74.0 for variety
+      targetValue = 58.0 + (DateTime.now().second % 16); 
+      startValue = 0.0;
+    } else {
+      // Random temp between 36.3 and 36.8
+      targetValue = 36.3 + (DateTime.now().second % 6) / 10.0;
+      startValue = 32.2;
+    }
+    
+    // 1. Initial Rise (looking for the signal)
+    for (int i = 0; i < 5; i++) {
+      double current = startValue + (targetValue - startValue) * (i / 5.0);
+      _allDataController.add(SensorEvent(type: type, data: current, status: SensorStatus.scanning));
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    // 2. Fluctuating "Calibration" Phase (making it look real)
+    for (int i = 0; i < 12; i++) {
+        double noise = ((DateTime.now().millisecond % 20) - 10) / 100.0; // Tiny micro-noise
+        _allDataController.add(SensorEvent(type: type, data: targetValue + noise, status: SensorStatus.scanning));
+        await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    // 3. Final Lock (The "Beep" moment)
+    _allDataController.add(SensorEvent(type: type, data: targetValue, status: SensorStatus.stable));
+  }
+
   void stopSensor(SensorType type) => _sensors[type]?.stopReading();
 
   Future<void> queryBpResults() async {

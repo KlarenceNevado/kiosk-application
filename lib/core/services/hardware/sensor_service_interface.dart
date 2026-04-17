@@ -5,6 +5,8 @@ enum SensorStatus {
   connecting,
   reading,
   error,
+  scanning,
+  stable,
 }
 
 enum SensorType {
@@ -13,6 +15,7 @@ enum SensorType {
   thermometer,
   bloodPressure,
   battery,
+  height,
 }
 
 abstract class ISensorService {

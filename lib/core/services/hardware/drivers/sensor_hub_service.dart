@@ -115,10 +115,40 @@ class SensorHubService implements ISensorService {
     
     debugPrint("📡 [SensorHubService] Raw Line: $line");
 
-    // 1. Attempt JSON Parsing (Current Firmware & Robust Fallback)
+    // 1. Attempt JSON Parsing (New Robust Heartbeat)
     try {
       final decoded = jsonDecode(line);
       if (decoded is Map<String, dynamic>) {
+        final device = decoded['device'];
+        
+        if (device == 'esp32') {
+          // Weight (HX711)
+          if (decoded.containsKey('hx711_val')) {
+            final val = double.tryParse(decoded['hx711_val'].toString()) ?? 0.0;
+            _dataController.add(val);
+          }
+          
+          // Temperature (MLX)
+          if (decoded.containsKey('mlx_val')) {
+            final val = double.tryParse(decoded['mlx_val'].toString());
+            if (val != null) {
+              _secondaryDataController.add({'type': 'temp', 'value': val});
+            }
+          }
+
+          // Status Reporting (Optional: broadcast to a notification system if status is ERROR)
+          final hxStatus = decoded['hx711_status'];
+          final mlxStatus = decoded['mlx_status'];
+          if (hxStatus == 'ERROR' || mlxStatus == 'ERROR') {
+             _updateStatus(SensorStatus.error);
+          } else if (_status == SensorStatus.error) {
+             _updateStatus(SensorStatus.reading);
+          }
+          
+          return; // Early exit on successful structured parse
+        }
+
+        // Legacy/Fallback parsing for other types
         final type = decoded['type'];
         final value = decoded['value'];
 
@@ -126,12 +156,8 @@ class SensorHubService implements ISensorService {
           _dataController.add(double.tryParse(value.toString()) ?? 0.0);
         } else if (type == 'temp' || type == 'thermometer') {
           _secondaryDataController.add({'type': 'temp', 'value': double.tryParse(value.toString())});
-        } else if (type == 'height') {
-          _secondaryDataController.add({'type': 'height', 'value': double.tryParse(value.toString())});
-        } else if (type == 'battery') {
-          _batteryDataController.add(double.tryParse(value.toString()) ?? 0.0);
         }
-        return; // Early exit on successful JSON parse
+        return; 
       }
     } catch (_) {
       // Not JSON, fall back to comma-separated parsing

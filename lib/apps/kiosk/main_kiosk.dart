@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -99,30 +100,47 @@ class KioskApp extends StatelessWidget {
       ],
       builder: (context, child) {
         ErrorWidget.builder = ErrorHandler.errorWidgetBuilder;
-        return SessionTimeoutManager(
-          isPaused: context.watch<HealthWizardProvider>().isSessionActive,
-          duration: const Duration(seconds: 45),
-          onTimeout: () {
-            final String location =
-                appRouter.routerDelegate.currentConfiguration.uri.toString();
-            if (location == AppRoutes.login) return;
+        return ScrollConfiguration(
+          behavior: const KioskScrollBehavior(),
+          child: SessionTimeoutManager(
+            isPaused: context.watch<HealthWizardProvider>().isSessionActive,
+            duration: const Duration(seconds: 45),
+            onTimeout: () {
+              final String location =
+                  appRouter.routerDelegate.currentConfiguration.uri.toString();
+              if (location == AppRoutes.login) return;
 
-            context.read<IAuthRepository>().logout();
-            appRouter.go(AppRoutes.login);
+              context.read<IAuthRepository>().logout();
+              appRouter.go(AppRoutes.login);
 
-            final messenger = ScaffoldMessenger.maybeOf(context);
-            messenger?.clearSnackBars();
-            messenger?.showSnackBar(
-              const SnackBar(
-                content: Text("Logged out due to inactivity."),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 5),
-              ),
-            );
-          },
-          child: child,
+              final messenger = ScaffoldMessenger.maybeOf(context);
+              messenger?.clearSnackBars();
+              messenger?.showSnackBar(
+                const SnackBar(
+                  content: Text("Logged out due to inactivity."),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            },
+            child: child!,
+          ),
         );
       },
     );
   }
+}
+
+/// Custom ScrollBehavior to enable dragging with all pointer types.
+/// Essential for Raspberry Pi kiosks where touch input might be seen as mouse input.
+class KioskScrollBehavior extends MaterialScrollBehavior {
+  const KioskScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.unknown,
+      };
 }

@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 
 // --- PIN DEFINITIONS ---
-// MLX90614 (Temperature)
+// MLX90614 (Temperature) - I2C standard
 #define SDA_PIN 22
 #define SCL_PIN 21
 
@@ -18,81 +18,88 @@ HX711 scale;
 
 // --- CONFIGURATION ---
 float calibration_factor = 2280.f;  
+const int HEARTBEAT_INTERVAL_MS = 1000;
 
-// Timing
-unsigned long lastTempRead = 0;
-unsigned long lastWeightRead = 0;
-const int TEMP_INTERVAL_MS = 1000;
-const int WEIGHT_INTERVAL_MS = 500;
+// State Variables
+unsigned long lastHeartbeatTime = 0;
+String mlxStatus = "INIT";
+String hx711Status = "INIT";
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) { delay(10); }
+  delay(1000); 
 
-  Serial.println("{ \"type\": \"status\", \"value\": \"booting\" }");
-
-  // Initialize Sensors
+  // Initialize I2C for MLX
   Wire.begin(SDA_PIN, SCL_PIN);
-  if (!mlx.begin()) {
-    Serial.println("{ \"type\": \"error\", \"value\": \"MLX90614 error\" }");
+  if (mlx.begin()) {
+    mlxStatus = "ACTIVE";
+  } else {
+    mlxStatus = "ERROR";
   }
 
+  // Initialize HX711
   scale.begin(HX711_DT_PIN, HX711_SCK_PIN);
   if (scale.is_ready()) {
     scale.set_scale(calibration_factor);
     scale.tare();
+    hx711Status = "ACTIVE";
   } else {
-    Serial.println("{ \"type\": \"error\", \"value\": \"HX711 error\" }");
+    hx711Status = "ERROR";
   }
+
+  Serial.println("{\"device\": \"esp32\", \"status\": \"booted\"}");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
-  // --- READ TEMPERATURE ---
-  if (currentMillis - lastTempRead >= TEMP_INTERVAL_MS) {
-    lastTempRead = currentMillis;
-    double tempC = mlx.readObjectTempC();
-    if (!isnan(tempC) && tempC > 0) sendJsonData("temp", tempC);
+  // --- HEARTBEAT LOGIC ---
+  if (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS) {
+    lastHeartbeatTime = currentMillis;
+    sendHeartbeat();
   }
 
-  // --- READ WEIGHT ---
-  if (currentMillis - lastWeightRead >= WEIGHT_INTERVAL_MS) {
-    lastWeightRead = currentMillis;
-    if (scale.is_ready()) {
-      float weight = scale.get_units(5);
-      if (weight < 0.05 && weight > -0.05) weight = 0.0;
-      sendJsonData("weight", weight);
-    }
-  }
-
-  // --- COMMANDS ---
+  // --- COMMAND HANDLING ---
   if (Serial.available()) {
     String incoming = Serial.readStringUntil('\n');
     incoming.trim();
     
-    if (incoming.indexOf("tare") != -1) {
+    if (incoming == "tare" || incoming == "TARE") {
        scale.tare();
-       Serial.println("{ \"type\": \"status\", \"value\": \"tared\" }");
-    } else if (incoming.indexOf("handshake") != -1 || incoming == "HANDSHAKE") {
-       Serial.println("{ \"type\": \"status\", \"value\": \"ready\" }");
+       Serial.println("{\"type\": \"status\", \"value\": \"tared\"}");
+    } else if (incoming == "handshake" || incoming == "HANDSHAKE") {
+       sendHeartbeat();
     }
   }
 }
 
-void sendJsonData(String type, float value) {
-  StaticJsonDocument<128> doc;
-  doc["type"] = type;
-  doc["value"] = serialized(String(value, (type == "weight" ? 2 : 1)));
+void sendHeartbeat() {
+  StaticJsonDocument<256> doc;
+  
+  doc["device"] = "esp32";
+  
+  // Temperature Check
+  float tempC = mlx.readObjectTempC();
+  if (isnan(tempC) || tempC < 0 || tempC > 100) {
+    doc["mlx_status"] = "ERROR";
+    doc["mlx_val"] = 0.0;
+  } else {
+    doc["mlx_status"] = "ACTIVE";
+    doc["mlx_val"] = serialized(String(tempC, 1));
+  }
+
+  // Weight Check
+  if (scale.is_ready()) {
+    float weight = scale.get_units(3); // Average of 3 readings
+    if (weight < 0.1 && weight > -0.1) weight = 0.0;
+    doc["hx711_status"] = "ACTIVE";
+    doc["hx711_val"] = serialized(String(weight, 2));
+  } else {
+    doc["hx711_status"] = "ERROR";
+    doc["hx711_val"] = 0.0;
+  }
+
   serializeJson(doc, Serial);
   Serial.println();
-  
-  // Minimal CSV Fallback
-  if (type == "weight") {
-    Serial.print("W:");
-    Serial.println(String(value, 2));
-  } else if (type == "temp") {
-    Serial.print("T:");
-    Serial.println(String(value, 1));
-  }
 }
+
