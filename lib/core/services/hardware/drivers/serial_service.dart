@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import '../sensor_service_interface.dart';
@@ -20,6 +21,7 @@ class SerialSensorService implements ISensorService {
   SensorStatus _status = SensorStatus.disconnected;
   SerialPort? _port;
   SerialPortReader? _reader;
+  StreamSubscription? _hidStreamSub;
   Timer? _watchdogTimer;
   DateTime? _lastDataReceived;
 
@@ -54,6 +56,25 @@ class SerialSensorService implements ISensorService {
     _updateStatus(SensorStatus.connecting);
 
     try {
+      // HID SUPPORT: If the port is an HID device, bypass libserialport entirely.
+      if (portName.startsWith('/dev/hidraw')) {
+        final file = File(portName);
+        if (!file.existsSync()) {
+          _updateStatus(SensorStatus.disconnected);
+          debugPrint("ℹ️ [SerialSensorService] HID port $portName not found.");
+          return;
+        }
+
+        _updateStatus(SensorStatus.reading);
+        _startWatchdog();
+
+        _hidStreamSub = file.openRead().listen(_handleRawData, onError: (e) {
+          _updateStatus(SensorStatus.error);
+          _dataController.addError("HID stream error: $e");
+        });
+        return;
+      }
+
       // SMART CACHE: Check if port exists before attempting to open
       // Use a 5-second cache to avoid redundant bus scans across multiple sensors.
       if (_availablePortsCache == null ||
@@ -102,6 +123,7 @@ class SerialSensorService implements ISensorService {
   @override
   void stopReading() {
     _watchdogTimer?.cancel();
+    _hidStreamSub?.cancel();
     _reader?.close();
     _port?.close();
     _port = null;
@@ -128,6 +150,7 @@ class SerialSensorService implements ISensorService {
   }
 
   void _reconnect() async {
+    _hidStreamSub?.cancel();
     _reader?.close();
     _port?.close();
     await Future.delayed(const Duration(seconds: 1));

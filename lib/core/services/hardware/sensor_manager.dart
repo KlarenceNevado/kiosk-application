@@ -109,6 +109,17 @@ class SensorManager {
     String? foundOxiPort = config.oximeter.portOverride;
     String? foundBpPort = config.bloodPressure.portOverride;
 
+    // Auto-detect HID for the CONTEC 08A which mounts as hidraw on Linux
+    if (Platform.isLinux && foundBpPort == null) {
+      if (File('/dev/hidraw1').existsSync()) {
+        foundBpPort = '/dev/hidraw1';
+        debugPrint("✅ Found Blood Pressure (HID) on $foundBpPort");
+      } else if (File('/dev/hidraw0').existsSync()) {
+        foundBpPort = '/dev/hidraw0';
+        debugPrint("✅ Found Blood Pressure (HID) on $foundBpPort");
+      }
+    }
+
     // Filter and prioritise based on common Linux patterns shared by user
     // User specifically stated: /dev/ttyUSB0 -> ESP32, /dev/ttyUSB1 -> Contec
     List<String> portsToScan = availablePorts

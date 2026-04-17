@@ -6,39 +6,38 @@ password = '12345678'
 
 script_content = r'''
 import serial, time, os
-def check(p, b, name):
-    print(f"--- Probing {name} on {p} ---")
+def sniff(p, b, label):
+    print(f"Testing {label} speed ({b} baud)...")
     try:
-        ser = serial.Serial(p, b, timeout=2)
+        ser = serial.Serial(p, b, timeout=3)
         time.sleep(1)
-        line = ser.readline().decode('utf-8', errors='ignore').strip()
-        if line:
-            print(f"  [SUCCESS] {name} is alive: {line}")
-        else:
-            print(f"  [IDLE] {name} is connected but waiting for data.")
+        raw = ser.read(10)
         ser.close()
-        return True
-    except Exception as e:
-        print(f"  [FAILED] {e}")
+        if raw:
+            print(f"  [FOUND DATA] Raw Hex: {raw.hex()}")
+            return True
+        return False
+    except:
         return False
 
-print("\nISLA VERDE USB DEVICE LIST (lsusb)")
-print("=============================")
-os.system('lsusb')
-print("=============================\n")
+print("\n--- RPI KERNEL LOGS (USB ERRORS) ---")
+os.system('dmesg | grep -i usb | tail -n 20')
+
+print("\n--- BLUETOOTH SCAN (CONTEC ALTERNATIVE) ---")
+os.system('hciconfig -a')
+os.system('bluetoothctl --timeout 5 scan on')
+
+print("\n--- GPIO UART CHECK ---")
+os.system('ls -l /dev/ttyAMA0 /dev/ttyS0')
+print("--- SCAN COMPLETE ---")
 '''
 
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 try:
     client.connect(ip, username=username, password=password)
-    # Write the file
-    sftp = client.open_sftp()
-    with sftp.file('/home/kiosk/hardware_check.py', 'w') as f:
+    with client.open_sftp().file('/home/kiosk/hardware_check.py', 'w') as f:
         f.write(script_content)
-    sftp.close()
-    
-    # Run the file
     stdin, stdout, stderr = client.exec_command('python3 /home/kiosk/hardware_check.py')
     print(stdout.read().decode())
     client.close()
