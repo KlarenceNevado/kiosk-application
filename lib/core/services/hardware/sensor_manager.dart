@@ -106,8 +106,9 @@ class SensorManager {
     debugPrint("📂 Available Ports: $availablePorts");
 
     String? foundHubPort = config.hub.portOverride;
-    String? foundOxiPort = config.oximeter.portOverride;
-    String? foundBpPort = config.bloodPressure.portOverride;
+    // FORCE PATHS FOR RASPBERRY PI
+    String? foundOxiPort = Platform.isLinux ? '/dev/ttyUSB0' : config.oximeter.portOverride;
+    String? foundBpPort = Platform.isLinux ? '/dev/hidraw1' : config.bloodPressure.portOverride;
 
     // Auto-detect HID for the CONTEC 08A which mounts as hidraw on Linux
     if (Platform.isLinux && foundBpPort == null) {

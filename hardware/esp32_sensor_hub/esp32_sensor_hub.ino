@@ -1,24 +1,11 @@
 #include <Wire.h>
-#include <Print.h>
-#include <Stream.h>
-#include <HardwareSerial.h>
 #include <Adafruit_MLX90614.h>
 #include <HX711.h>
 #include <ArduinoJson.h>
 
-// --- FUNCTION PROTOTYPES ---
-void sendHeartbeat();
-
-// --- IDE INTELLISENSE FIX ---
-// Using a pointer forces the IDE to recognize Serial as a Print/Stream object
-Print* debugOut = (Print*)&Serial;
-
 // --- PIN DEFINITIONS ---
-// MLX90614 (Temperature) - I2C standard
 #define SDA_PIN 22
 #define SCL_PIN 21
-
-// HX711 (Weight/Load Cell)
 #define HX711_DT_PIN 16
 #define HX711_SCK_PIN 17
 
@@ -27,7 +14,7 @@ Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 HX711 scale;
 
 // --- CONFIGURATION ---
-float calibration_factor = 2280.f;  
+float calibration_factor = 2280.f;
 const int HEARTBEAT_INTERVAL_MS = 1000;
 
 // State Variables
@@ -37,7 +24,7 @@ String hx711Status = "INIT";
 
 void setup() {
   Serial.begin(115200);
-  delay(1000); 
+  delay(1000);
 
   // Initialize I2C for MLX
   Wire.begin(SDA_PIN, SCL_PIN);
@@ -47,7 +34,7 @@ void setup() {
     mlxStatus = "ERROR";
   }
 
-  // Initialize HX711
+  // Initialize HX711 (Weight)
   scale.begin(HX711_DT_PIN, HX711_SCK_PIN);
   if (scale.is_ready()) {
     scale.set_scale(calibration_factor);
@@ -57,7 +44,7 @@ void setup() {
     hx711Status = "ERROR";
   }
 
-  debugOut->println("{\"device\": \"esp32\", \"status\": \"booted\"}");
+  Serial.println("{\"device\": \"esp32\", \"status\": \"booted\"}");
 }
 
 void loop() {
@@ -73,21 +60,24 @@ void loop() {
   if (Serial.available()) {
     String incoming = Serial.readStringUntil('\n');
     incoming.trim();
-    
+
     if (incoming == "tare" || incoming == "TARE") {
-       scale.tare();
-       debugOut->println("{\"type\": \"status\", \"value\": \"tared\"}");
+      scale.tare();
+      Serial.println("{\"type\": \"status\", \"value\": \"tared\"}");
     } else if (incoming == "handshake" || incoming == "HANDSHAKE") {
-       sendHeartbeat();
+      sendHeartbeat();
     }
   }
 }
 
+/**
+ * sendHeartbeat - Sync with Arduino Cloud logic
+ * Uses Zero-clamping and Fixed Precision (2 decimal places)
+ */
 void sendHeartbeat() {
   StaticJsonDocument<256> doc;
-  
   doc["device"] = "esp32";
-  
+
   // Temperature Check
   float tempC = mlx.readObjectTempC();
   if (isnan(tempC) || tempC < 0 || tempC > 100) {
@@ -100,8 +90,9 @@ void sendHeartbeat() {
 
   // Weight Check
   if (scale.is_ready()) {
-    float weight = scale.get_units(3); // Average of 3 readings
-    if (weight < 0.1 && weight > -0.1) weight = 0.0;
+    float weight = scale.get_units(5);
+    if (weight < 0.1 && weight > -0.1)
+      weight = 0.0; // Zero-clamping from Cloud Version
     doc["hx711_status"] = "ACTIVE";
     doc["hx711_val"] = serialized(String(weight, 2));
   } else {
@@ -109,6 +100,6 @@ void sendHeartbeat() {
     doc["hx711_val"] = 0.0;
   }
 
-  serializeJson(doc, *debugOut);
-  debugOut->println();
+  serializeJson(doc, Serial);
+  Serial.println();
 }

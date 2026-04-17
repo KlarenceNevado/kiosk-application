@@ -1,42 +1,18 @@
-# Root-level Clangd configuration for Kiosk Application
-# This file provides IntelliSense context for mixed Dart/C++ projects.
-
-# Universal hardware settings for Arduino/ESP32 files
+# Minimal Clangd configuration to reset the indexer
 CompileFlags:
   Add: 
     - "--driver-mode=g++"
     - "-xc++"
     - "-std=c++17"
-    # Force-include Arduino.h to resolve "Unknown type String/Serial/etc" errors
-    - "-include"
-    - "Arduino.h"
     - "-DARDUINO=10813"
     - "-DARDUINO_ARCH_ESP32"
     - "-DESP32"
-    - "-DARDUINO_VARIANT=\"esp32\""
-    - "-DARDUINO_BOARD=\"ESP32_DEV\""
-    # Board Core and Variant (Using -isystem to help with inheritance prioritization)
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/cores/esp32"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/variants/esp32"
-    # Essential SDK Headers (Deeply nested v3.3.8 structure)
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/soc/esp32/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_system/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/freertos/FreeRTOS-Kernel/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_common/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_hw_support/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/log/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/hal/include"
-    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_rom/include"
-    # Sensor Libraries
+    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/cores/esp32"
+    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/variants/esp32"
     - "-IC:/ArduinoLibs/libraries/Adafruit_MLX90614_Library"
     - "-IC:/ArduinoLibs/libraries/HX711"
     - "-IC:/ArduinoLibs/libraries/ArduinoJson/src"
     - "-IC:/ArduinoLibs/libraries/Adafruit_BusIO"
     - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/libraries/Wire/src"
-  
-  CompilationDatabase: "hardware/esp32_sensor_hub"
-
----
-# Compiler specific flags and background indexing settings
 Index:
   Background: Build

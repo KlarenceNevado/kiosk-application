@@ -3,6 +3,8 @@
     "clangd.arguments": [
         "--query-driver=C:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-gcc.exe",
         "--background-index",
-        "--log=verbose"
-    ]
+        "--log=verbose",
+        "--compile-commands-dir=C:/KioskApplication/kiosk_application/hardware/esp32_sensor_hub/build"
+    ],
+    "arduino.enableCompileCommands": true
 }
