@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import '../../../core/services/hardware/sensor_manager.dart';
 import '../../../core/services/hardware/sensor_service_interface.dart';
-import '../../../core/services/hardware/sensor_data_models.dart';
 import 'dart:async';
 
 class HardwareDiagnosticScreen extends StatefulWidget {

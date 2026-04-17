@@ -241,9 +241,6 @@ class SerialSensorService implements ISensorService {
         case SensorType.height:
           // Height sensor logic if standalone
           break;
-        default:
-          debugPrint("ℹ️ [SerialSensorService] Unhandled sensor type in buffer: $type");
-          break;
       }
 
       // Safeguard: If buffer is getting too large without finding a packet,

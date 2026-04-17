@@ -198,10 +198,15 @@ class HealthWizardProvider extends ChangeNotifier {
 
       // STRICTER TOLERANCE for medical readings
       double tolerance;
-      if (type == SensorType.weight) tolerance = 0.1;
-      else if (type == SensorType.thermometer) tolerance = 0.1;
-      else if (type == SensorType.oximeter) tolerance = 1.0;
-      else tolerance = 2.0;
+      if (type == SensorType.weight) {
+        tolerance = 0.1;
+      } else if (type == SensorType.thermometer) {
+        tolerance = 0.1;
+      } else if (type == SensorType.oximeter) {
+        tolerance = 1.0;
+      } else {
+        tolerance = 2.0;
+      }
 
       bool wasStable = _sensorIsStable[type] ?? false;
       _sensorIsStable[type] = diff <= tolerance;
