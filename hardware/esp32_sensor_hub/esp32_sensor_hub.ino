@@ -1,10 +1,17 @@
 #include <Wire.h>
+#include <Print.h>
+#include <Stream.h>
+#include <HardwareSerial.h>
 #include <Adafruit_MLX90614.h>
 #include <HX711.h>
 #include <ArduinoJson.h>
 
 // --- FUNCTION PROTOTYPES ---
 void sendHeartbeat();
+
+// --- IDE INTELLISENSE FIX ---
+// Using a pointer forces the IDE to recognize Serial as a Print/Stream object
+Print* debugOut = (Print*)&Serial;
 
 // --- PIN DEFINITIONS ---
 // MLX90614 (Temperature) - I2C standard
@@ -50,7 +57,7 @@ void setup() {
     hx711Status = "ERROR";
   }
 
-  Serial.println("{\"device\": \"esp32\", \"status\": \"booted\"}");
+  debugOut->println("{\"device\": \"esp32\", \"status\": \"booted\"}");
 }
 
 void loop() {
@@ -69,7 +76,7 @@ void loop() {
     
     if (incoming == "tare" || incoming == "TARE") {
        scale.tare();
-       Serial.println("{\"type\": \"status\", \"value\": \"tared\"}");
+       debugOut->println("{\"type\": \"status\", \"value\": \"tared\"}");
     } else if (incoming == "handshake" || incoming == "HANDSHAKE") {
        sendHeartbeat();
     }
@@ -102,7 +109,6 @@ void sendHeartbeat() {
     doc["hx711_val"] = 0.0;
   }
 
-  serializeJson(doc, Serial);
-  Serial.println();
+  serializeJson(doc, *debugOut);
+  debugOut->println();
 }
-

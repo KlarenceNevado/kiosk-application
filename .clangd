@@ -1,10 +1,7 @@
 # Root-level Clangd configuration for Kiosk Application
 # This file provides IntelliSense context for mixed Dart/C++ projects.
 
-# Hardware-specific settings for Arduino/ESP32 files
-If:
-  PathMatch: hardware/.*
-
+# Universal hardware settings for Arduino/ESP32 files
 CompileFlags:
   Add: 
     - "--driver-mode=g++"
@@ -16,36 +13,30 @@ CompileFlags:
     - "-DARDUINO=10813"
     - "-DARDUINO_ARCH_ESP32"
     - "-DESP32"
-    # Board Core and Variant
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/cores/esp32"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/variants/esp32"
-    # Essential SDK Headers (v3.3.8 structure)
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_system"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_hw_support"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/driver"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/soc"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/hal"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/freertos"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_common"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_timer"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/log"
-    - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/newlib"
-    # Libraries
-    - "-IC:/ArduinoLibs/libraries/Adafruit_MLX90614_Library/src"
-    - "-IC:/ArduinoLibs/libraries/HX711/src"
+    - "-DARDUINO_VARIANT=\"esp32\""
+    - "-DARDUINO_BOARD=\"ESP32_DEV\""
+    # Board Core and Variant (Using -isystem to help with inheritance prioritization)
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/cores/esp32"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/variants/esp32"
+    # Essential SDK Headers (Deeply nested v3.3.8 structure)
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/soc/esp32/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_system/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/freertos/FreeRTOS-Kernel/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_common/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_hw_support/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/log/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/hal/include"
+    - "-isystemC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/tools/esp32-libs/3.3.8/include/esp_rom/include"
+    # Sensor Libraries
+    - "-IC:/ArduinoLibs/libraries/Adafruit_MLX90614_Library"
+    - "-IC:/ArduinoLibs/libraries/HX711"
     - "-IC:/ArduinoLibs/libraries/ArduinoJson/src"
-    - "-IC:/ArduinoLibs/libraries/Adafruit_BusIO/src"
+    - "-IC:/ArduinoLibs/libraries/Adafruit_BusIO"
     - "-IC:/Users/Klarence Nevado/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.8/libraries/Wire/src"
   
   CompilationDatabase: "hardware/esp32_sensor_hub"
 
-Diagnostics:
-  Suppress: 
-    - "drv_compilation_interpreter_failed"
-    - "pp_file_not_found"
-
 ---
 # Compiler specific flags and background indexing settings
 Index:
-  Background: true
-
+  Background: Build
