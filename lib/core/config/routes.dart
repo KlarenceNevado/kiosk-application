@@ -28,6 +28,8 @@ import '../../features/admin/screens/admin_user_management_screen.dart';
 import '../../features/admin/screens/system_info_screen.dart';
 import '../../features/admin/screens/admin_settings_screen.dart';
 import '../../features/admin/screens/admin_diagnostics_screen.dart';
+import '../../features/health_check/screens/hardware_diagnostic_screen.dart';
+
 
 // --- PATIENT MOBILE APP ---
 import '../../features/patient/screens/patient_dashboard_screen.dart';
@@ -69,6 +71,8 @@ List<GoRoute> _sharedRoutes = [
   _fluidRoute(AppRoutes.adminSystemInfo, const SystemInfoScreen()),
   _fluidRoute(AppRoutes.adminSettings, const AdminSettingsScreen()),
   _fluidRoute(AppRoutes.adminDiagnostics, const AdminDiagnosticsScreen()),
+  _fluidRoute(AppRoutes.adminHardware, const HardwareDiagnosticScreen()),
+
   _fluidRoute(AppRoutes.patientSplash, const MobileSplashScreen()),
   _fluidRoute(AppRoutes.patientLogin, const MobileLoginScreen()),
   _fluidRoute(AppRoutes.patientDashboard, const PatientDashboardScreen()),

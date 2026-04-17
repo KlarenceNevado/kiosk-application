@@ -196,10 +196,12 @@ class HealthWizardProvider extends ChangeNotifier {
       double max = buffer.reduce((a, b) => a > b ? a : b);
       double diff = max - min;
 
-      double tolerance =
-          (type == SensorType.weight || type == SensorType.thermometer)
-              ? 0.2
-              : 1.5;
+      // STRICTER TOLERANCE for medical readings
+      double tolerance;
+      if (type == SensorType.weight) tolerance = 0.1;
+      else if (type == SensorType.thermometer) tolerance = 0.1;
+      else if (type == SensorType.oximeter) tolerance = 1.0;
+      else tolerance = 2.0;
 
       bool wasStable = _sensorIsStable[type] ?? false;
       _sensorIsStable[type] = diff <= tolerance;
@@ -218,6 +220,10 @@ class HealthWizardProvider extends ChangeNotifier {
     _isTempLocked = false;
     _isPulseOxLocked = false;
     _isBpLocked = false;
+    
+    // Auto-start weight as first step
+    _sensorManager.startSensor(SensorType.weight);
+    
     notifyListeners();
     SystemLogService()
         .logAction(action: 'HEALTH_CHECK_START', module: 'HEALTH_CHECK');
@@ -229,15 +235,25 @@ class HealthWizardProvider extends ChangeNotifier {
     switch (type) {
       case SensorType.weight:
         _isWeightLocked = true;
+        _sensorManager.stopSensor(type);
+        // Start next step: Temperature
+        _sensorManager.startSensor(SensorType.thermometer);
         break;
       case SensorType.thermometer:
         _isTempLocked = true;
+        _sensorManager.stopSensor(type);
+        // Start next step: Blood Pressure
+        _sensorManager.startSensor(SensorType.bloodPressure);
         break;
       case SensorType.oximeter:
         _isPulseOxLocked = true;
+        _sensorManager.stopSensor(type);
         break;
       case SensorType.bloodPressure:
         _isBpLocked = true;
+        _sensorManager.stopSensor(type);
+        // Start last step: Oxygen
+        _sensorManager.startSensor(SensorType.oximeter);
         break;
       case SensorType.battery:
       case SensorType.height:

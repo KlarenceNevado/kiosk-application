@@ -4,6 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/system/log_manager_service.dart';
+import '../../../core/config/routes.dart';
+import 'package:go_router/go_router.dart';
 
 class AdminDiagnosticsScreen extends StatefulWidget {
   const AdminDiagnosticsScreen({super.key});
@@ -93,6 +95,16 @@ class _AdminDiagnosticsScreenState extends State<AdminDiagnosticsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadLogList,
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.hardware),
+            label: const Text("Hardware"),
+            onPressed: () => context.push(AppRoutes.adminHardware),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
           ),
           const SizedBox(width: 8),
         ],
