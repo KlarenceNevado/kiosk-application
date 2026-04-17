@@ -1,0 +1,23 @@
+# Root-level Clangd configuration for Kiosk Application
+# This file provides IntelliSense context for mixed Dart/C++ projects.
+
+# Hardware-specific settings for Arduino/ESP32 files
+If:
+  PathMatch: hardware/.*
+
+CompileFlags:
+  Add: 
+    - "--driver-mode=g++"
+    - "-xc++"
+    - "-std=c++17"
+    - "-DARDUINO=10813"
+    - "-DARDUINO_ARCH_ESP32"
+    - "-DESP32"
+  # This prevents Clangd from trying to find a compilation database for hardware files
+  # and failing with driver errors on Windows.
+  CompilationDatabase: "hardware/esp32_sensor_hub"
+
+Diagnostics:
+  Suppress: 
+    - "drv_compilation_interpreter_failed"
+    - "pp_file_not_found"

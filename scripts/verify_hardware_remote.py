@@ -5,9 +5,9 @@ username = 'kiosk'
 password = '12345678'
 
 script_content = r'''
-import serial, time
+import serial, time, os
 def check(p, b, name):
-    print(f"--- Checking {name} on {p} ---")
+    print(f"--- Probing {name} on {p} ---")
     try:
         ser = serial.Serial(p, b, timeout=2)
         time.sleep(1)
@@ -17,14 +17,15 @@ def check(p, b, name):
         else:
             print(f"  [IDLE] {name} is connected but waiting for data.")
         ser.close()
+        return True
     except Exception as e:
-        print(f"  [MISSING] {name} not found: {e}")
+        print(f"  [FAILED] {e}")
+        return False
 
-print("\nISLA VERDE HARDWARE SCAN (4 SENSORS)")
-print("====================================")
-check('/dev/ttyUSB0', 115200, "Hub (Weight/Temp)")
-check('/dev/ttyUSB1', 19200, "Contec (Oxi/BP)")
-print("====================================\n")
+print("\nISLA VERDE USB DEVICE LIST (lsusb)")
+print("=============================")
+os.system('lsusb')
+print("=============================\n")
 '''
 
 client = paramiko.SSHClient()

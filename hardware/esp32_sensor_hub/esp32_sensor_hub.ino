@@ -26,7 +26,7 @@ String mlxStatus = "INIT";
 String hx711Status = "INIT";
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(1000); 
 
   // Initialize I2C for MLX

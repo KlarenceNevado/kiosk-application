@@ -8,7 +8,7 @@
   "hub": {
     "name": "ESP32 Sensor Hub",
     "port_override": null,
-    "baud_rate": 9600,
+    "baud_rate": 115200,
     "watchdog_timeout_ms": 10000,
     "handshake_signature": "{",
     "data_keys": ["weight", "temp", "battery"]
