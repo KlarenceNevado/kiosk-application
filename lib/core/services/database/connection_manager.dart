@@ -86,7 +86,7 @@ class ConnectionManager extends ChangeNotifier {
         try {
           final response = await http
               .head(Uri.parse('https://www.google.com'))
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 1));
 
           if (response.statusCode >= 200 && response.statusCode < 400) {
             newStatus = ConnectionStatus.online;

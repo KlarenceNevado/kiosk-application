@@ -74,14 +74,11 @@ class _StepWeightScaleState extends State<StepWeightScale>
   Widget build(BuildContext context) {
     final provider = context.watch<HealthWizardProvider>();
 
-    // HARDENING: Auto-lock when stable OR Fast-Failure if hardware disconnects
+    // HARDENING: Auto-lock when stable OR when sensor explicitly reports stable status
     if (_viewState == 1) {
-      final sStatus = provider.getSensorStatus(SensorType.weight);
-      if (sStatus == SensorStatus.disconnected ||
-          sStatus == SensorStatus.error) {
-        Future.delayed(Duration.zero, () => setState(() => _viewState = 3));
-      } else if (provider.isVitalStable(SensorType.weight) &&
-          provider.weightKg > 5.0) {
+      final status = provider.getSensorStatus(SensorType.weight);
+      if (status == SensorStatus.stable || 
+         (provider.isVitalStable(SensorType.weight) && provider.weightKg > 5.0)) {
         Future.delayed(Duration.zero,
             () => _finishTest(provider.weightKg.toStringAsFixed(1)));
       }

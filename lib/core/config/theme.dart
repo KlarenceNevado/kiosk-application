@@ -17,12 +17,12 @@ class AppTheme {
       textTheme: GoogleFonts.outfitTextTheme(const TextTheme(
         displayLarge: TextStyle(
             fontSize: 40,
-            fontWeight: FontWeight.w700, // Reduced from w900
+            fontWeight: FontWeight.w700,
             color: AppColors.brandDark,
             letterSpacing: -0.5),
         headlineMedium: TextStyle(
             fontSize: 28,
-            fontWeight: FontWeight.w700, // Reduced from w800
+            fontWeight: FontWeight.w700,
             color: AppColors.brandDark),
         bodyLarge: TextStyle(fontSize: 18, color: Colors.black87),
         labelLarge: TextStyle(

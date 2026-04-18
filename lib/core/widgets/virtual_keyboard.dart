@@ -156,7 +156,6 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
       width: double.infinity,
       decoration: BoxDecoration(
           color: const Color(0xFFE5E7EB), // Lighter, more modern grey
-          // FIXED: Uniform rounded corners on all sides
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -165,7 +164,6 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
               offset: const Offset(0, 4), // Balanced shadow
             )
           ]),
-      // FIXED: Uniform padding on all sides for consistent edges
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: widget.type == KeyboardType.numeric
           ? _buildNumericPad()
@@ -343,7 +341,6 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
       {double height = 48, VoidCallback? onTap, bool isNumeric = false}) {
     return Material(
       color: Colors.white,
-      // FIXED: Rounded corners for keys (16.0)
       borderRadius: BorderRadius.circular(16),
       elevation: 1,
       shadowColor: Colors.black12,
@@ -378,7 +375,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
       flex: flex,
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16), // Rounded
+        borderRadius: BorderRadius.circular(16),
         elevation: 1,
         shadowColor: Colors.black12,
         child: InkWell(
@@ -412,7 +409,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
       flex: flex,
       child: Material(
         color: color,
-        borderRadius: BorderRadius.circular(16), // Rounded
+        borderRadius: BorderRadius.circular(16),
         elevation: isDark ? 4 : 1,
         shadowColor: isDark
             ? AppColors.brandGreen.withValues(alpha: 0.4)

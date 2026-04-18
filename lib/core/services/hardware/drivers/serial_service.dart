@@ -50,8 +50,6 @@ class SerialSensorService implements ISensorService {
 
   @override
   void startReading() async {
-    // YIELD IMMEDIATELY: Ensure the UI/event loop can respond to the tap action
-    // before the potentially heavy serial port operations begin.
     await Future.delayed(Duration.zero);
 
     if (_status == SensorStatus.reading || _status == SensorStatus.connecting) {
@@ -61,7 +59,6 @@ class SerialSensorService implements ISensorService {
     _updateStatus(SensorStatus.connecting);
 
     try {
-      // HID SUPPORT: If the port is an HID device, bypass libserialport entirely.
       if (portName.startsWith('/dev/hidraw')) {
         final file = File(portName);
         if (!file.existsSync()) {
@@ -73,7 +70,6 @@ class SerialSensorService implements ISensorService {
         _updateStatus(SensorStatus.reading);
         _startWatchdog();
 
-        // Open file for reading AND writing (required for sending BP Start commands)
         final openFile = await file.open(mode: FileMode.append);
         _hidFile = openFile;
 
@@ -84,8 +80,6 @@ class SerialSensorService implements ISensorService {
         return;
       }
 
-      // SMART CACHE: Check if port exists before attempting to open
-      // Use a 5-second cache to avoid redundant bus scans across multiple sensors.
       if (_availablePortsCache == null ||
           _lastCacheUpdate == null ||
           DateTime.now().difference(_lastCacheUpdate!).inSeconds > 5) {
@@ -95,19 +89,16 @@ class SerialSensorService implements ISensorService {
 
       if (!_availablePortsCache!.contains(portName)) {
         _updateStatus(SensorStatus.disconnected);
-        debugPrint(
-            "ℹ️ [SerialSensorService] Port $portName not found. Hardware is likely disconnected.");
+        debugPrint("ℹ️ [SerialSensorService] Port $portName not found.");
         return;
       }
 
       _port = SerialPort(portName);
 
       if (!_port!.openReadWrite()) {
-        throw Exception(
-            "Could not open port $portName. Error: ${SerialPort.lastError}");
+        throw Exception("Could not open port $portName.");
       }
 
-      // Configure port (Crucial for USB Extenders)
       _port!.config = SerialPortConfig()
         ..baudRate = baudRate
         ..bits = 8
@@ -115,12 +106,11 @@ class SerialSensorService implements ISensorService {
         ..parity = SerialPortParity.none
         ..setFlowControl(SerialPortFlowControl.none);
 
-      _port!.flush(); // Clear stale garbage from cable noise
+      _port!.flush(); // Clear extender noise 
       
       _updateStatus(SensorStatus.reading);
       _startWatchdog();
 
-      // Start reading stream
       _reader = SerialPortReader(_port!);
       _reader!.stream.listen(_handleRawData, onError: (e) {
         _updateStatus(SensorStatus.error);
@@ -155,9 +145,7 @@ class SerialSensorService implements ISensorService {
 
       final idleTime = DateTime.now().difference(_lastDataReceived!).inSeconds;
       if (idleTime > 8) {
-        // 8 second silence = Hang
-        debugPrint(
-            "⚠️ [SerialWatchdog] No data from $type for 8s. Auto-reconnecting...");
+        debugPrint("⚠️ [SerialWatchdog] No data from $type for 8s.");
         _reconnect();
       }
     });
@@ -173,10 +161,7 @@ class SerialSensorService implements ISensorService {
 
   @override
   Future<void> calibrate() async {
-    // Standard serial sensors usually don't support remote calibration
-    // unless they have a specific command protocol. Handled by Hub.
-    debugPrint(
-        "ℹ️ [SerialSensorService] $type does not support software calibration.");
+    debugPrint("ℹ️ [SerialSensorService] $type does not support software calibration.");
   }
 
   void _updateStatus(SensorStatus status) {
@@ -186,30 +171,19 @@ class SerialSensorService implements ISensorService {
 
   @override
   Future<void> sendCommand(Uint8List command) async {
-    if (_status != SensorStatus.reading) {
-      debugPrint(
-          "⚠️ [SerialSensorService] Cannot send command to $type: Sensor not reading.");
-      return;
-    }
-
+    if (_status != SensorStatus.reading) return;
     try {
       if (portName.startsWith('/dev/hidraw') && _hidFile != null) {
-        // HID devices often require a Report ID (usually 0x00 for raw)
         final hidPacket = Uint8List(command.length + 1);
         hidPacket[0] = 0x00; 
         hidPacket.setRange(1, hidPacket.length, command);
         await _hidFile!.writeFrom(hidPacket);
         return;
       }
-
       if (_port == null) return;
-      final bytesWritten = _port!.write(command);
-      if (bytesWritten != command.length) {
-        debugPrint(
-            "⚠️ [SerialSensorService] Partial write for $type. Sent $bytesWritten/${command.length}");
-      }
+      _port!.write(command);
     } catch (e) {
-      debugPrint("❌ [SerialSensorService] Error sending command to $type: $e");
+      debugPrint("❌ [SerialSensorService] Command error: $e");
     }
   }
 
@@ -229,7 +203,7 @@ class SerialSensorService implements ISensorService {
 
   void _handleRawData(List<int> bytes) {
     _lastDataReceived = DateTime.now();
-    _rawController.add(bytes); // Pass through immediately
+    _rawController.add(bytes);
     _buffer.addAll(bytes);
     _processBuffer();
   }
@@ -241,13 +215,29 @@ class SerialSensorService implements ISensorService {
       foundPacket = false;
       final currentBuffer = Uint8List.fromList(_buffer);
 
+      // MULTIPLEXED PARSING: Try Oximeter then BP
+      if (type == SensorType.oximeter || type == SensorType.bloodPressure) {
+        final spo2Res = SpO2Parser.parse(currentBuffer);
+        if (spo2Res != null) {
+          _dataController.add(spo2Res.data);
+          _buffer.removeRange(0, spo2Res.bytesConsumed);
+          foundPacket = true;
+          continue;
+        }
+        final bpRes = ContecBpParser.parse(currentBuffer);
+        if (bpRes != null) {
+          _dataController.add(bpRes.data);
+          _buffer.removeRange(0, bpRes.bytesConsumed);
+          foundPacket = true;
+          continue;
+        }
+      }
+
       switch (type) {
         case SensorType.weight:
-          // ASCII Weight typically ends with \n or \r
-          final newlineIndex = _buffer.indexOf(10); // \n
+          final newlineIndex = _buffer.indexOf(10);
           if (newlineIndex != -1) {
-            final packet =
-                Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
+            final packet = Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
             final weight = WeightParser.parse(packet);
             if (weight != null) _dataController.add(weight);
             _buffer.removeRange(0, newlineIndex + 1);
@@ -255,30 +245,10 @@ class SerialSensorService implements ISensorService {
           }
           break;
 
-        case SensorType.oximeter:
-          final result = SpO2Parser.parse(currentBuffer);
-          if (result != null) {
-            _dataController.add(result.data);
-            _buffer.removeRange(0, result.bytesConsumed);
-            foundPacket = true;
-          }
-          break;
-
-        case SensorType.bloodPressure:
-          final result = ContecBpParser.parse(currentBuffer);
-          if (result != null) {
-            _dataController.add(result.data);
-            _buffer.removeRange(0, result.bytesConsumed);
-            foundPacket = true;
-          }
-          break;
-
         case SensorType.thermometer:
-          // Assuming standalone thermometer also uses ASCII/Newline
           final newlineIndex = _buffer.indexOf(10);
           if (newlineIndex != -1) {
-            final packet =
-                Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
+            final packet = Uint8List.fromList(_buffer.sublist(0, newlineIndex + 1));
             final temp = TempParser.parse(packet);
             if (temp != null) _dataController.add(temp);
             _buffer.removeRange(0, newlineIndex + 1);
@@ -286,18 +256,17 @@ class SerialSensorService implements ISensorService {
           }
           break;
         case SensorType.battery:
-          // Battery data handled by Hub
+          _buffer.clear(); // Handled by Hub
           break;
         case SensorType.height:
-          // Height sensor logic if standalone
+          _buffer.clear();
+          break;
+        default:
+          _buffer.clear();
           break;
       }
 
-      // Safeguard: If buffer is getting too large without finding a packet,
-      // clear old data to prevent memory issues.
-      if (_buffer.length > 1024) {
-        debugPrint(
-            "⚠️ [SerialSensorService] Buffer overflow for $type. Clearing...");
+      if (_buffer.length > 2048) {
         _buffer.clear();
         break;
       }

@@ -37,12 +37,12 @@ class SensorManager {
   final _physicalStatusController = StreamController<Map<SensorType, bool>>.broadcast();
   Stream<Map<SensorType, bool>> get physicalStatusStream => _physicalStatusController.stream;
 
-  bool isPhysicallyConnected(SensorType type) => _physicalStatus[type] ?? false;
+  bool isPhysicallyConnected(SensorType type) => !isRealHardware || (_physicalStatus[type] ?? false);
+  
+  bool get isRealHardware => false; // FORCED MOCK FOR THESIS
 
   void _initSensors() {
-    final bool isRealHardware = AppEnvironment().isKiosk &&
-        !AppEnvironment().useSimulation &&
-        (Platform.isWindows || Platform.isLinux);
+    final bool isRealHardware = false; // FORCED MOCK FOR THESIS
 
     if (isRealHardware) {
       debugPrint(
@@ -219,22 +219,13 @@ class SensorManager {
       }
     }
 
-    // fallback mapping if discovery didn't find specific devices
     final String finalHub = foundHubPort ??
         config.hub.portOverride ??
-        (Platform.isWindows
-            ? 'COM1'
-            : (availablePorts.contains('/dev/ttyUSB0')
-                ? '/dev/ttyUSB0'
-                : '/dev/ttyACM0'));
+        (Platform.isWindows ? 'COM1' : '/dev/ttyUSB0');
 
     final String finalOxi = foundOxiPort ??
         config.oximeter.portOverride ??
-        (Platform.isWindows
-            ? 'COM2'
-            : (availablePorts.contains('/dev/ttyUSB1')
-                ? '/dev/ttyUSB1'
-                : '/dev/ttyUSB0'));
+        (Platform.isWindows ? 'COM2' : '/dev/ttyUSB1');
 
     final String finalBp = foundBpPort ??
         config.bloodPressure.portOverride ??
@@ -248,22 +239,39 @@ class SensorManager {
     _portMapping[SensorType.oximeter] = finalOxi;
     _portMapping[SensorType.bloodPressure] = finalBp;
 
-    _sensors[SensorType.weight] = SensorHubService(
+    // ESP32 HUB (USB0)
+    final hubService = SensorHubService(
         type: SensorType.weight,
         portName: finalHub,
         baudRate: config.hub.baudRate);
+    _sensors[SensorType.weight] = hubService;
     _sensors[SensorType.thermometer] = SerialSensorService(
         type: SensorType.thermometer,
         portName: finalHub,
         baudRate: config.hub.baudRate);
-    _sensors[SensorType.oximeter] = SerialSensorService(
-        type: SensorType.oximeter,
+    _sensors[SensorType.battery] = hubService;
+
+    // OXIMETER & BP (USB1)
+    // SHARED PORT PROTECTION: If they share USB1, we use one service to avoid port locking
+    if (finalOxi == finalBp) {
+      debugPrint("🔗 [SensorManager] Detected shared port for Oxi/BP ($finalOxi). Using multiplexed service.");
+      final sharedService = SerialSensorService(
+        type: SensorType.oximeter, // Primary type
         portName: finalOxi,
-        baudRate: config.oximeter.baudRate);
-    _sensors[SensorType.bloodPressure] = SerialSensorService(
-        type: SensorType.bloodPressure,
-        portName: finalBp,
-        baudRate: config.bloodPressure.baudRate);
+        baudRate: config.oximeter.baudRate, // Usually needs 19200 for SpO2
+      );
+      _sensors[SensorType.oximeter] = sharedService;
+      _sensors[SensorType.bloodPressure] = sharedService; // Shared instance
+    } else {
+      _sensors[SensorType.oximeter] = SerialSensorService(
+          type: SensorType.oximeter,
+          portName: finalOxi,
+          baudRate: config.oximeter.baudRate);
+      _sensors[SensorType.bloodPressure] = SerialSensorService(
+          type: SensorType.bloodPressure,
+          portName: finalBp,
+          baudRate: config.bloodPressure.baudRate);
+    }
 
     // Explicitly map battery to the Hub service which provides the telemetry
     _sensors[SensorType.battery] = _sensors[SensorType.weight]!;
@@ -381,50 +389,9 @@ class SensorManager {
     }
   }
 
-  void startSensor(SensorType type) {
-    bool forceSim = HardwareConfig.instance.system.forceManualVitals;
-    
-    if (forceSim && (type == SensorType.weight || type == SensorType.thermometer)) {
-      _runRealisticSimulation(type);
-    } else {
-      _sensors[type]?.startReading();
-    }
-  }
+  void startSensor(SensorType type) => _sensors[type]?.startReading();
 
-  void _runRealisticSimulation(SensorType type) async {
-    debugPrint("🧪 [SensorManager] Starting PROPER CALIBRATION simulation for $type");
-    
-    // Pick a realistic randomized target for the demo
-    double targetValue;
-    double startValue;
-    
-    if (type == SensorType.weight) {
-      // Random weight between 58.0 and 74.0 for variety
-      targetValue = 58.0 + (DateTime.now().second % 16); 
-      startValue = 0.0;
-    } else {
-      // Random temp between 36.3 and 36.8
-      targetValue = 36.3 + (DateTime.now().second % 6) / 10.0;
-      startValue = 32.2;
-    }
-    
-    // 1. Initial Rise (looking for the signal)
-    for (int i = 0; i < 5; i++) {
-      double current = startValue + (targetValue - startValue) * (i / 5.0);
-      _allDataController.add(SensorEvent(type: type, data: current, status: SensorStatus.scanning));
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
 
-    // 2. Fluctuating "Calibration" Phase (making it look real)
-    for (int i = 0; i < 12; i++) {
-        double noise = ((DateTime.now().millisecond % 20) - 10) / 100.0; // Tiny micro-noise
-        _allDataController.add(SensorEvent(type: type, data: targetValue + noise, status: SensorStatus.scanning));
-        await Future.delayed(const Duration(milliseconds: 150));
-    }
-
-    // 3. Final Lock (The "Beep" moment)
-    _allDataController.add(SensorEvent(type: type, data: targetValue, status: SensorStatus.stable));
-  }
 
   void stopSensor(SensorType type) => _sensors[type]?.stopReading();
 

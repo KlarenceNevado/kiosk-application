@@ -92,12 +92,14 @@ class _Step3SensorScanState extends State<Step3SensorScan>
     final provider = context.watch<HealthWizardProvider>();
     final isSim = AppEnvironment().useSimulation;
 
-    // HARDENING: Auto-lock when stable & realistic
-    if (_viewState == 1 &&
-        provider.isVitalStable(SensorType.thermometer) &&
-        provider.currentTemp > 34.0) {
-      Future.delayed(Duration.zero,
-          () => _finishTest(provider.currentTemp.toStringAsFixed(1)));
+    // HARDENING: Auto-lock when stable OR when sensor explicitly reports stable status
+    if (_viewState == 1) {
+      final status = provider.getSensorStatus(SensorType.thermometer);
+      if (status == SensorStatus.stable || 
+         (provider.isVitalStable(SensorType.thermometer) && provider.currentTemp > 34.0)) {
+        Future.delayed(Duration.zero,
+            () => _finishTest(provider.currentTemp.toStringAsFixed(1)));
+      }
     }
 
     return Center(

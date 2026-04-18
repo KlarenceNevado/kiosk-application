@@ -193,6 +193,10 @@ class SyncService with WidgetsBindingObserver {
   }
 
   Future<void> fullSyncForUser(String userId) async {
+    if (ConnectionManager().currentStatus != ConnectionStatus.online) {
+      debugPrint("⏭️ SyncService: Skipping Eager Sync (Offline-First Mode)");
+      return;
+    }
     SecurityLogger.info("Starting EAGER FULL SYNC for user ID: $userId");
     await _withSyncMutex(() async {
       try {
@@ -202,7 +206,11 @@ class SyncService with WidgetsBindingObserver {
         await chatHandler.pull(userId);
         await _cacheFilesInBackground();
       } catch (e) {
-        debugPrint("❌ SyncService: Full Sync Error: $e");
+        if (e.toString().contains("SocketException") || e.toString().contains("ClientException")) {
+          debugPrint("📡 SyncService: Cloud unreachable (Normal offline behavior).");
+        } else {
+          debugPrint("❌ SyncService: Full Sync Error: $e");
+        }
       }
     });
   }

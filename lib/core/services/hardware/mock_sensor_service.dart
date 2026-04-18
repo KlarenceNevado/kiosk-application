@@ -35,44 +35,77 @@ class MockSensorService implements ISensorService {
     }
 
     _updateStatus(SensorStatus.connecting);
-    await Future.delayed(const Duration(seconds: 1)); // Faster for testing
+    await Future.delayed(const Duration(milliseconds: 800));
 
     _updateStatus(SensorStatus.reading);
 
+    // Initial base values for this "session"
+    double targetWeight = 62.0 + _random.nextDouble() * 15.0; // 62-77 kg
+    double targetTemp = 36.4 + _random.nextDouble() * 0.4;    // 36.4-36.8 C
+    int targetSpo2 = 96 + _random.nextInt(4);               // 96-99%
+    int targetBpm = 68 + _random.nextInt(12);               // 68-80 bpm
+    int targetSys = 110 + _random.nextInt(15);              // 110-125
+    int targetDia = 70 + _random.nextInt(10);               // 70-80
+
+    int ticks = 0;
+    const int maxTicks = 20; // ~5 seconds at 250ms
+
     _timer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+      ticks++;
       dynamic value;
+
+      // Realistic fluctuation logic
+      double progress = ticks / maxTicks;
+      if (progress > 1.0) progress = 1.0;
+
       switch (type) {
         case SensorType.weight:
-          // Smooth increment until ~70kg
-          double baseWeight = 70.0;
-          value = baseWeight + (_random.nextDouble() * 0.5);
+          // Start at 0, climb to weight, then fluctuate slightly
+          double current = (ticks < 5) ? (targetWeight * (ticks / 5.0)) : targetWeight;
+          value = current + (_random.nextDouble() * 0.2 - 0.1);
           break;
         case SensorType.oximeter:
           value = {
-            'spo2': 97 + _random.nextInt(3),
-            'bpm': 72 + _random.nextInt(10)
+            'spo2': targetSpo2 + (ticks % 2 == 0 ? 0 : (_random.nextInt(2) - 1)),
+            'bpm': targetBpm + (_random.nextInt(3) - 1)
           };
           break;
         case SensorType.thermometer:
-          value = 36.6 + (_random.nextDouble() * 0.4);
+          // Warm up simulation
+          double current = 32.0 + (targetTemp - 32.0) * progress;
+          value = current + (_random.nextDouble() * 0.1 - 0.05);
           break;
         case SensorType.bloodPressure:
-          // Simulate the "pumping" feel or just fluctuating final values
-          value = {
-            'sys': 115 + _random.nextInt(10),
-            'dia': 75 + _random.nextInt(10)
-          };
+          if (ticks < 12) {
+            // Pumping phase
+            value = {'type': 'realtime', 'pressure': ticks * 15};
+          } else {
+            // Result phase
+            value = {
+              'type': 'result',
+              'sys': targetSys,
+              'dia': targetDia,
+              'hr': targetBpm
+            };
+          }
           break;
         case SensorType.battery:
-          value = 12.0 + (_random.nextDouble() * 2.0);
+          value = 12.4 + (_random.nextDouble() * 0.2);
           break;
         case SensorType.height:
-          // Simulate height around 160-170cm
-          value = 160.0 + _random.nextInt(15);
+          value = 165.0 + _random.nextInt(10);
           break;
       }
 
       _dataController.add(value);
+
+      // Auto-lock after enough ticks to simulate "Proper Calibration"
+      if (ticks >= maxTicks) {
+        _updateStatus(SensorStatus.stable);
+        // Explicitly send one final stable data packet
+        _dataController.add(value);
+        _timer?.cancel();
+      }
     });
   }
 
@@ -89,8 +122,6 @@ class MockSensorService implements ISensorService {
 
   @override
   Future<void> sendCommand(Uint8List command) async {
-    // Mimic the Uint8List or dynamic command
-    // In mock, we just log it.
     debugPrint("🧪 [MockSensorService] $type received command: $command");
   }
 
