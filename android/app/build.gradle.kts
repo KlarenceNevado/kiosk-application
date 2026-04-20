@@ -41,10 +41,13 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    @Suppress("UnstableApiUsage")
+    experimentalProperties["android.experimental.art-profile-generation.enabled"] = false
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 
 flutter {

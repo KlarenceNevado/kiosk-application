@@ -8,7 +8,6 @@ import 'drivers/sensor_hub_service.dart';
 import 'sensor_data_models.dart';
 import 'drivers/null_sensor_service.dart';
 import 'models/hardware_config.dart';
-import '../system/app_environment.dart';
 import '../system/power_manager_service.dart';
 import '../security/notification_service.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
@@ -42,7 +41,7 @@ class SensorManager {
   bool get isRealHardware => false; // FORCED MOCK FOR THESIS
 
   void _initSensors() {
-    final bool isRealHardware = false; // FORCED MOCK FOR THESIS
+    const bool isRealHardware = false; // FORCED MOCK FOR THESIS
 
     if (isRealHardware) {
       debugPrint(

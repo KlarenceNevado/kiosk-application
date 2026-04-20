@@ -290,6 +290,14 @@ class SystemSyncHandler extends SyncHandler {
       await supabase
           .from('announcements')
           .update({'reactions': reactions}).eq('id', id);
+
+      // LOCAL UPDATE: Ensure the UI gets immediate feedback
+      await dbHelper.systemDao.insertAnnouncement({
+        'id': id,
+        'reactions': reactions,
+        'is_synced': 1,
+      });
+      dbHelper.systemDao.refreshAnnouncements();
     } catch (e) {
       debugPrint("❌ reactToAnnouncement Error: $e");
     }

@@ -102,9 +102,7 @@ class InitializationService {
 
     // 5. Monitoring & Logs
     ConnectionManager().startMonitoring();
-    if (!AppEnvironment().isDesktopAdmin) {
-      SyncService().startSyncLoop();
-    }
+    SyncService().startSyncLoop();
 
     if (mode == AppMode.kiosk) {
       PowerManagerService().startMonitoring();
@@ -116,9 +114,13 @@ class InitializationService {
   }
 
   /// Legacy compatibility wrapper
-  Future<void> initialize() async {
+  Future<void> initialize({bool awaitDeferred = false}) async {
     await initializeCritical();
-    unawaited(initializeDeferred());
+    if (awaitDeferred) {
+      await initializeDeferred();
+    } else {
+      unawaited(initializeDeferred());
+    }
   }
 
   /// Non-blocking Firebase initialization

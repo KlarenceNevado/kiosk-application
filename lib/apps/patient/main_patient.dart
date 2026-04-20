@@ -27,8 +27,8 @@ void main() {
     WidgetsFlutterBinding.ensureInitialized();
     AppEnvironment().setMode(AppMode.mobilePatient);
 
-    // Centralized Initialization
-    await InitializationService().initialize();
+    // Centralized Initialization (Awaited for Mobile to ensure stable connections)
+    await InitializationService().initialize(awaitDeferred: true);
 
     debugPrint("✅ [Bootstrap] Launching UI...");
 

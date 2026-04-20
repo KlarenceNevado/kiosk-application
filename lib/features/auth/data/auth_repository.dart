@@ -434,6 +434,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
           userRole: 'patient',
           sitio: _currentUser!.sitio,
         );
+        // RESTART SYNC ENGINE: Ensure Kiosk refreshes listeners for this specific user
+        SyncService().restartSync(_currentUser!.id);
         SyncService()
             .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
 
@@ -501,11 +503,15 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         _currentUser = localUser;
         _isLoading = false;
 
-        // Start Security Session
+        // RESTART SYNC ENGINE: Force resubscription with the new User ID (Fixes Realtime Chat)
+        SyncService().restartSync(_currentUser!.id);
+
+        // Start Security & Background Listeners
         ChatListenerService().startListening(_currentUser!.id);
         SystemLogService().startSession(_currentUser!.id);
         SystemAlertListenerService()
             .startListening(userRole: 'patient', sitio: _currentUser!.sitio);
+
         SyncService()
             .syncFamilyVitals(getLinkedAccounts().map((u) => u.id).toList());
 
@@ -559,6 +565,10 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     }
 
     _currentUser = null;
+
+    // HARD RESET: Clear persistent session ID from disk
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_logged_in_user_id');
 
     if (mode == AppMode.mobilePatient) {
       _users.clear();
