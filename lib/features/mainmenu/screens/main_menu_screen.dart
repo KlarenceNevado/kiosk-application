@@ -22,6 +22,11 @@ import '../../auth/models/user_model.dart';
 import '../../user_history/domain/i_history_repository.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import 'package:intl/intl.dart';
+import '../../../core/services/system/weather_service.dart';
+import '../../../core/services/database/sync_service.dart';
+import '../../../core/services/database/connection_manager.dart';
+import '../../../core/services/hardware/sensor_manager.dart';
+import '../../../core/services/hardware/sensor_service_interface.dart';
 
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
@@ -51,12 +56,13 @@ class MainMenuScreen extends StatelessWidget {
                     width: 600,
                     padding: const EdgeInsets.all(40),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(32),
+                      color: Colors.white.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(40),
                       border: Border.all(
-                        color: AppColors.brandGreen.withValues(alpha: 0.3),
+                        color: Colors.white.withValues(alpha: 0.4),
                         width: 2,
                       ),
+                      boxShadow: AppColors.premiumShadow,
                     ),
                     child: Material(
                       color: Colors.transparent,
@@ -376,110 +382,165 @@ class MainMenuScreen extends StatelessWidget {
                         child: Container(
                           width: double.infinity,
                           color: AppColors.bodyBackground,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              // HEADLINE
+                              // --- LEFT SIDEBAR ---
+                              _buildSidebar(context, loc),
+                              
+                              // --- MAIN CONTENT ---
                               Expanded(
-                                flex: 15,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      "What would you like to do today, $firstName?",
-                                      style: AppTextStyles.displayLarge,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // GRID LAYOUT
-                              Expanded(
-                                flex: 85,
-                                child: Row(
-                                  children: [
-                                    // COLUMN 1: Hero Button
-                                    Expanded(
-                                      flex: 40,
-                                      child: FlowAnimatedButton(
-                                        child: SizedBox.expand(
-                                          child: HeroSplitCard(
-                                            icon: Icons.monitor_heart,
-                                            label: loc?.btnHealthCheck ??
-                                                "Full Health Check",
-                                            onTap: () => context
-                                                .push(AppRoutes.healthWizard),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // HEADLINE
+                                      Expanded(
+                                        flex: 15,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              "What would you like to do today, $firstName?",
+                                              style: AppTextStyles.displayLarge,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
 
-                                    const SizedBox(width: 24),
-
-                                    // COLUMN 2 & 3: Small Grid
-                                    Expanded(
-                                      flex: 60,
-                                      child: Column(
-                                        children: [
-                                          // Row 1
-                                          Expanded(
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildCard(
-                                                        Icons.search_rounded,
-                                                        loc?.btnTests ??
-                                                            "Individual Tests",
-                                                        onTap: () => context
-                                                            .push(AppRoutes
-                                                                .individualTests))),
-                                                const SizedBox(width: 24),
-                                                Expanded(
-                                                    child: _buildCard(
-                                                        Icons
-                                                            .health_and_safety_rounded,
-                                                        loc?.btnHealthTips ??
-                                                            "Health Tips",
-                                                        onTap: () => context
-                                                            .push(AppRoutes
-                                                                .healthTips))),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 24),
-
-                                          // Row 2
-                                          Expanded(
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  child: _buildCard(
-                                                    Icons.description_outlined,
-                                                    loc?.btnHistory ??
-                                                        "View History",
-                                                    onTap: () => context.push(
-                                                        AppRoutes.history),
+                                      // GRID LAYOUT
+                                      Expanded(
+                                        flex: 85,
+                                        child: Row(
+                                          children: [
+                                            // COLUMN 1: Hero Button
+                                            Expanded(
+                                              flex: currentUser?.role == 'visitor' ? 50 : 40,
+                                              child: TweenAnimationBuilder<double>(
+                                                tween: Tween(begin: 0.0, end: 1.0),
+                                                duration: const Duration(milliseconds: 600),
+                                                curve: Curves.easeOutCubic,
+                                                builder: (context, value, child) {
+                                                  return Opacity(
+                                                    opacity: value,
+                                                    child: Transform.translate(
+                                                      offset: Offset(0, 30 * (1 - value)),
+                                                      child: child,
+                                                    ),
+                                                  );
+                                                },
+                                                child: FlowAnimatedButton(
+                                                  child: SizedBox.expand(
+                                                    child: HeroSplitCard(
+                                                      icon: Icons.monitor_heart,
+                                                      label: loc?.btnHealthCheck ??
+                                                          "Full Health Check",
+                                                      onTap: () => context
+                                                          .push(AppRoutes.healthWizard),
+                                                    ),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 24),
-                                                Expanded(
-                                                    child: _buildCard(
-                                                  Icons.help_outline_rounded,
-                                                  loc?.btnHelp ?? "Help & Info",
-                                                  onTap: () => context
-                                                      .push(AppRoutes.help),
-                                                )),
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
+
+                                            const SizedBox(width: 24),
+
+                                            // COLUMN 2 & 3: Selection Grid
+                                            Expanded(
+                                              flex: currentUser?.role == 'visitor' ? 50 : 60,
+                                              child: currentUser?.role == 'visitor'
+                                                ? Column(
+                                                    children: [
+                                                      Expanded(
+                                                        child: _buildCard(
+                                                          Icons.search_rounded,
+                                                          loc?.btnTests ?? "Individual Tests",
+                                                          index: 1,
+                                                          onTap: () => context.push(AppRoutes.individualTests),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 24),
+                                                      Expanded(
+                                                        child: _buildCard(
+                                                          Icons.health_and_safety_rounded,
+                                                          loc?.btnHealthTips ?? "Health Tips",
+                                                          index: 2,
+                                                          onTap: () => context.push(AppRoutes.healthTips),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 24),
+                                                      Expanded(
+                                                        child: _buildCard(
+                                                          Icons.help_outline_rounded,
+                                                          loc?.btnHelp ?? "Help & Info",
+                                                          index: 3,
+                                                          onTap: () => context.push(AppRoutes.help),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  )
+                                                : Column(
+                                                    mainAxisAlignment: MainAxisAlignment.start,
+                                                    children: [
+                                                      // Row 1: Resident Tests & Tips
+                                                      Expanded(
+                                                        child: Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: _buildCard(
+                                                                Icons.search_rounded,
+                                                                loc?.btnTests ?? "Individual Tests",
+                                                                index: 1,
+                                                                onTap: () => context.push(AppRoutes.individualTests),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 24),
+                                                            Expanded(
+                                                              child: _buildCard(
+                                                                Icons.health_and_safety_rounded,
+                                                                loc?.btnHealthTips ?? "Health Tips",
+                                                                index: 2,
+                                                                onTap: () => context.push(AppRoutes.healthTips),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 24),
+                                                      // Row 2: Resident History & Help
+                                                      Expanded(
+                                                        child: Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: _buildCard(
+                                                                Icons.description_outlined,
+                                                                loc?.btnHistory ?? "View History",
+                                                                index: 3,
+                                                                onTap: () => context.push(AppRoutes.history),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 24),
+                                                            Expanded(
+                                                              child: _buildCard(
+                                                                Icons.help_outline_rounded,
+                                                                loc?.btnHelp ?? "Help & Info",
+                                                                index: 4,
+                                                                onTap: () => context.push(AppRoutes.help),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -525,16 +586,30 @@ class MainMenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCard(IconData icon, String label, {VoidCallback? onTap}) {
-    return FlowAnimatedButton(
-      child: SizedBox.expand(
-        child: StandardCard(
-          icon: icon,
-          label: label,
-          onTap: onTap ??
-              () {
-                debugPrint("Tapped $label");
-              },
+  Widget _buildCard(IconData icon, String label, {int index = 0, VoidCallback? onTap}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 600 + (index * 100)),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 30 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: FlowAnimatedButton(
+        child: SizedBox.expand(
+          child: StandardCard(
+            icon: icon,
+            label: label,
+            onTap: onTap ??
+                () {
+                  debugPrint("Tapped $label");
+                },
+          ),
         ),
       ),
     );
@@ -548,6 +623,109 @@ class MainMenuScreen extends StatelessWidget {
           label: label,
           onTap: onTap ?? () {},
         ),
+      ),
+    );
+  }
+
+  Widget _buildSidebar(BuildContext context, AppLocalizations? loc) {
+    return Container(
+      width: 200,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.5),
+        border: const Border(right: BorderSide(color: AppColors.brandGreen, width: 2)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          // Weather
+          FutureBuilder<WeatherData?>(
+            future: WeatherService().fetchCurrentWeather(),
+            builder: (context, snapshot) {
+              final weather = snapshot.data;
+              return _sidebarItem(
+                context,
+                weather?.condition.contains("Rain") ?? false ? Icons.umbrella_rounded : Icons.wb_sunny_rounded,
+                "Weather",
+                "${weather?.temperature.toStringAsFixed(0) ?? '29'}°C ${weather?.condition ?? 'Clear'}",
+                Colors.orangeAccent,
+              );
+            },
+          ),
+          const Divider(indent: 20, endIndent: 20),
+          // Sync / System
+          StreamBuilder<DateTime?>(
+            stream: SyncService().lastSyncStream,
+            builder: (context, snapshot) {
+              final lastSync = snapshot.data ?? SyncService().lastSyncTime;
+              final isOnline = ConnectionManager().currentStatus == ConnectionStatus.online;
+              return _sidebarItem(
+                context,
+                Icons.sync_rounded,
+                "System",
+                isOnline ? (lastSync != null ? "Last Sync: ${DateFormat('HH:mm').format(lastSync)}" : "Syncing...") : "Offline Mode",
+                isOnline ? Colors.blueAccent : Colors.grey,
+              );
+            },
+          ),
+          const Divider(indent: 20, endIndent: 20),
+          // Hardware status
+          StreamBuilder<Map<SensorType, bool>>(
+            stream: SensorManager().physicalStatusStream,
+            builder: (context, snapshot) {
+              final status = snapshot.data ?? {};
+              final isHubConnected = status[SensorType.weight] ?? false;
+              return _sidebarItem(
+                context,
+                isHubConnected ? Icons.sensors_rounded : Icons.sensors_off_rounded,
+                "Hardware",
+                isHubConnected ? "Ready & Calibrated" : "Check Sensors",
+                isHubConnected ? AppColors.brandGreen : Colors.redAccent,
+              );
+            },
+          ),
+          const Spacer(),
+          // Hotline
+          _sidebarItem(
+            context,
+            Icons.emergency_rounded,
+            "Barangay Hotline",
+            "911 / 143",
+            Colors.redAccent,
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebarItem(BuildContext context, IconData icon, String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(label.toUpperCase(),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.brandDark.withValues(alpha: 0.5),
+                      letterSpacing: 0.5)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 28),
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.brandDark)),
+          ),
+        ],
       ),
     );
   }

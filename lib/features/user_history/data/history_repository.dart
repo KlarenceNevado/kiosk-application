@@ -106,10 +106,16 @@ class LocalHistoryRepository extends ChangeNotifier
     Future.microtask(() => notifyListeners());
 
     try {
-      await _dbHelper.createRecord(record);
+      if (record.userId.startsWith('visitor-')) {
+        await _dbHelper.createVisitorRecord(record);
+        debugPrint("✅ Saved VISITOR record for guest ${record.userId}");
+      } else {
+        await _dbHelper.createRecord(record);
+        debugPrint("✅ Saved RESIDENT record for user ${record.userId}");
+      }
+      
       // Add to local list (prepend)
       _records.insert(0, record);
-      debugPrint("✅ Saved record for user ${record.userId}");
 
       // Trigger Cloud Sync for the new Vital Sign
       SyncService().createVitalSign(record);

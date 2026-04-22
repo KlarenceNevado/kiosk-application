@@ -70,6 +70,7 @@ class HealthWizardProvider extends ChangeNotifier {
         return _isBpLocked;
       case SensorType.battery:
       case SensorType.height:
+      case SensorType.fingerprint:
         return false;
     }
   }
@@ -150,6 +151,9 @@ class HealthWizardProvider extends ChangeNotifier {
             break;
           case SensorType.height:
             _heightCm = (event.data as num).toInt();
+            break;
+          case SensorType.fingerprint:
+            // Biometrics are handled by Authentication, not clinical wizard
             break;
         }
       }
@@ -269,6 +273,7 @@ class HealthWizardProvider extends ChangeNotifier {
         break;
       case SensorType.battery:
       case SensorType.height:
+      case SensorType.fingerprint:
         break;
     }
 

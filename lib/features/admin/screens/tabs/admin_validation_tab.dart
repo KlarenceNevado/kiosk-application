@@ -133,7 +133,8 @@ class _AdminValidationTabState extends State<AdminValidationTab> {
           phoneNumber: '',
           pinCode: '123456',
           dateOfBirth: DateTime.now(),
-          gender: ''),
+          gender: '',
+          username: 'unknown'),
     );
 
     return Container(

@@ -21,17 +21,23 @@ class HeroSplitCard extends StatelessWidget {
         // 1. Background
         Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(32), // More rounded for premium feel
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.brandGreen, AppColors.brandGreenDark],
+              colors: AppColors.premiumGreenGradient,
+              stops: [0.0, 0.5, 1.0],
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandGreen.withValues(alpha: 0.4),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
+                color: AppColors.brandGreen.withValues(alpha: 0.35),
+                blurRadius: 30,
+                offset: const Offset(0, 15),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -141,14 +147,9 @@ class StandardCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-              color: const Color(0xFF6B7A99).withValues(alpha: 0.05),
-              blurRadius: 15,
-              offset: const Offset(0, 8)),
-        ],
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: AppColors.brandGreen.withValues(alpha: 0.08), width: 1.5),
+        boxShadow: AppColors.premiumShadow,
       ),
       child: Material(
         color: Colors.transparent,

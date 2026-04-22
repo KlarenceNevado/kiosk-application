@@ -36,6 +36,7 @@ void main() {
         gender: 'Female',
         sitio: 'Test Sitio',
         dateOfBirth: DateTime(2000, 1, 1),
+        username: 'h260001',
       );
 
       // Insert

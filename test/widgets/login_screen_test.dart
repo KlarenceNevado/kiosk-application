@@ -63,6 +63,7 @@ void main() {
         pinCode: '123456',
         gender: 'Male',
         dateOfBirth: DateTime(1990, 1, 1),
+        username: 'h260001',
       );
 
       when(() => mockAuthRepository.users).thenReturn([testUser]);
@@ -85,6 +86,7 @@ void main() {
         pinCode: '123456',
         gender: 'Male',
         dateOfBirth: DateTime(1990, 1, 1),
+        username: 'h260001',
       );
 
       when(() => mockAuthRepository.users).thenReturn([testUser]);

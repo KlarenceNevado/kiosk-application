@@ -12,6 +12,7 @@ import '../../models/system_log_model.dart';
 import '../../services/security/encryption_service.dart';
 import '../system/app_environment.dart';
 import 'migration_service.dart';
+import 'sync_service.dart';
 import 'dao/patient_dao.dart';
 import 'dao/vitals_dao.dart';
 import 'dao/system_dao.dart';
@@ -116,7 +117,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 22, // BUMPED TO 22 FOR PIN HASHING (Zero Knowledge)
+      version: 24, // BUMPED TO 24 FOR BIOMETRIC LOGIN
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -126,6 +127,10 @@ class DatabaseHelper {
       final migrationService = MigrationService();
       await migrationService.runMigrations(db);
       await migrationService.performSanityCheck(db);
+
+      // --- TRIGGER BULK CLOUD SYNC ---
+      // Force a push to update the newly assigned usernames to Supabase
+      unawaited(SyncService().forcePushAll());
     } else {
       debugPrint(
           "📂 [DatabaseHelper] Background Isolate: Skipping migrations & sanity checks.");
@@ -161,7 +166,43 @@ class DatabaseHelper {
       relation TEXT,
       device_token TEXT,
       pin_hash TEXT,
-      pin_salt TEXT
+      pin_salt TEXT,
+      username TEXT,
+      fingerprint_id INTEGER
+    )
+    ''');
+
+    // Visitors Table (Separated from Residents)
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS visitors (
+      id TEXT PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      phone_number TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      is_synced INTEGER NOT NULL DEFAULT 0
+    )
+    ''');
+
+     // Visitor Vitals Table (Separated from Resident Vitals)
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS visitor_vitals (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      heart_rate TEXT NOT NULL,
+      systolic_bp TEXT NOT NULL,
+      diastolic_bp TEXT NOT NULL,
+      oxygen TEXT NOT NULL,
+      temperature TEXT NOT NULL,
+      bmi REAL,
+      bmi_category TEXT,
+      status TEXT NOT NULL DEFAULT 'visitor_check',
+      remarks TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      is_synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (visitor_id) REFERENCES visitors (id) ON DELETE CASCADE
     )
     ''');
 
@@ -519,13 +560,39 @@ class DatabaseHelper {
       debugPrint("🚀 Database Upgraded to Version 18 (System Logs Table)");
     }
 
-    if (oldVersion < 22) {
+    if (oldVersion < 23) {
       try {
-        await db.execute('ALTER TABLE patients ADD COLUMN pin_hash TEXT');
-        await db.execute('ALTER TABLE patients ADD COLUMN pin_salt TEXT');
+        await db.execute('ALTER TABLE patients ADD COLUMN username TEXT');
+        // Pre-populate usernames for existing users to avoid null issues
+        final List<Map<String, dynamic>> users = await db.query('patients');
+        final now = DateTime.now();
+        final yearSuffix = now.year.toString().substring(2);
+        
+        for (int i = 0; i < users.length; i++) {
+          final id = users[i]['id'];
+          final sequence = (i + 1).toString().padLeft(4, '0');
+          final generatedUsername = 'h$yearSuffix$sequence';
+          await db.update(
+            'patients',
+            {'username': generatedUsername},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
         debugPrint(
-            "🚀 Database Upgraded to Version 22 (Zero-Knowledge Architecture)");
-      } catch (_) {}
+            "🚀 Database Upgraded to Version 23 (Username System Active)");
+      } catch (e) {
+        debugPrint("❌ Database Upgrade Error (v23): $e");
+      }
+    }
+
+    if (oldVersion < 24) {
+      try {
+        await db.execute('ALTER TABLE patients ADD COLUMN fingerprint_id INTEGER');
+        debugPrint("🚀 Database Upgraded to Version 24 (Biometrics Active)");
+      } catch (e) {
+        debugPrint("⚠️ Database Upgrade (v24) - column may already exist: $e");
+      }
     }
   }
 
@@ -826,6 +893,8 @@ class DatabaseHelper {
       'device_token': map['device_token'] ?? map['deviceToken'],
       'pin_hash': map['pin_hash'] ?? map['pinHash'],
       'pin_salt': map['pin_salt'] ?? map['pinSalt'],
+      'username': map['username'],
+      'fingerprint_id': map['fingerprint_id'],
     };
 
     await db.insert('patients', encryptedMap,
@@ -844,6 +913,7 @@ class DatabaseHelper {
       decrypted['pin_hash'] = json['pin_hash'];
       decrypted['pin_salt'] = json['pin_salt'];
       decrypted['deviceToken'] = json['device_token'];
+      decrypted['fingerprint_id'] = json['fingerprint_id'];
       // Ensure model mapping works with snake_case from DB
       return User.fromMap(decrypted);
     }).toList();
@@ -860,6 +930,7 @@ class DatabaseHelper {
       decrypted['pin_hash'] = maps.first['pin_hash'];
       decrypted['pin_salt'] = maps.first['pin_salt'];
       decrypted['deviceToken'] = maps.first['device_token'];
+      decrypted['fingerprint_id'] = maps.first['fingerprint_id'];
       return User.fromMap(decrypted);
     }
     return null;
@@ -894,6 +965,8 @@ class DatabaseHelper {
       'device_token': map['device_token'] ?? map['deviceToken'],
       'pin_hash': map['pin_hash'] ?? map['pinHash'],
       'pin_salt': map['pin_salt'] ?? map['pinSalt'],
+      'username': map['username'],
+      'fingerprint_id': map['fingerprint_id'],
     };
     await db.update('patients', encryptedMap,
         where: 'id = ?', whereArgs: [user.id]);
@@ -1032,5 +1105,42 @@ class DatabaseHelper {
   Future<void> markSystemLogAsSynced(String id) async {
     await database;
     return systemDao.markSystemLogAsSynced(id);
+  }
+
+  // --- NEW: VISITOR MODULE (HIWALAY DATA) ---
+
+  Future<void> insertVisitor(Map<String, dynamic> visitor) async {
+    final db = await database;
+    await db.insert('visitors', visitor, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Map<String, dynamic>?> getVisitorByName(String firstName, String lastName) async {
+    final db = await database;
+    final results = await db.query(
+      'visitors',
+      where: 'LOWER(first_name) = ? AND LOWER(last_name) = ?',
+      whereArgs: [firstName.toLowerCase(), lastName.toLowerCase()],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<void> createVisitorRecord(VitalSigns record) async {
+    final db = await database;
+    await db.insert('visitor_vitals', {
+      'id': record.id,
+      'visitor_id': record.userId,
+      'timestamp': record.timestamp.toIso8601String(),
+      'heart_rate': record.heartRate.toString(),
+      'systolic_bp': record.systolicBP.toString(),
+      'diastolic_bp': record.diastolicBP.toString(),
+      'oxygen': record.oxygen.toString(),
+      'temperature': record.temperature.toString(),
+      'bmi': record.bmi,
+      'bmi_category': record.bmiCategory,
+      'status': record.status,
+      'remarks': record.remarks,
+      'created_at': DateTime.now().toIso8601String(),
+      'is_synced': 0,
+    });
   }
 }

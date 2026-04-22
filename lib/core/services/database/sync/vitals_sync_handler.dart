@@ -146,6 +146,9 @@ class VitalsSyncHandler extends SyncHandler {
 
   Future<bool> _upsertVitalSign(VitalSigns vital) async {
     try {
+      final isVisitor = vital.userId.startsWith('VIS-');
+      final tableName = isVisitor ? 'visitors_vitals' : 'vitals';
+
       final Map<String, dynamic> supabaseData = {
         'id': vital.id,
         'user_id': vital.userId,
@@ -162,7 +165,7 @@ class VitalsSyncHandler extends SyncHandler {
         'follow_up_action': vital.followUpAction,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
-      await supabase.from('vitals').upsert(supabaseData);
+      await supabase.from(tableName).upsert(supabaseData);
       return true;
     } catch (e) {
       return false;
@@ -171,6 +174,9 @@ class VitalsSyncHandler extends SyncHandler {
 
   Future<void> createVitalSign(VitalSigns vital) async {
     try {
+      final isVisitor = vital.userId.startsWith('VIS-');
+      final tableName = isVisitor ? 'visitors_vitals' : 'vitals';
+
       final Map<String, dynamic> supabaseData = {
         'id': vital.id,
         'user_id': vital.userId,
@@ -187,7 +193,7 @@ class VitalsSyncHandler extends SyncHandler {
         'follow_up_action': vital.followUpAction,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
-      await supabase.from('vitals').insert(supabaseData);
+      await supabase.from(tableName).upsert(supabaseData);
     } catch (e) {
       debugPrint("⚠️ VitalsSyncHandler: Create failed. $e");
     }
@@ -195,6 +201,9 @@ class VitalsSyncHandler extends SyncHandler {
 
   Future<void> updateVitalSign(VitalSigns vital) async {
     try {
+      final isVisitor = vital.userId.startsWith('VIS-');
+      final tableName = isVisitor ? 'visitors_vitals' : 'vitals';
+
       final Map<String, dynamic> supabaseData = {
         'heart_rate': dbHelper.encrypt(vital.heartRate),
         'systolic_bp': dbHelper.encrypt(vital.systolicBP),
@@ -206,7 +215,7 @@ class VitalsSyncHandler extends SyncHandler {
         'remarks': vital.remarks,
         'follow_up_action': vital.followUpAction,
       };
-      await supabase.from('vitals').update(supabaseData).eq('id', vital.id);
+      await supabase.from(tableName).update(supabaseData).eq('id', vital.id);
     } catch (e) {
       debugPrint("⚠️ VitalsSyncHandler: Update failed. $e");
     }

@@ -16,6 +16,7 @@ enum SensorType {
   bloodPressure,
   battery,
   height,
+  fingerprint,
 }
 
 abstract class ISensorService {

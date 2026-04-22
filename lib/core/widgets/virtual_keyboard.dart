@@ -164,7 +164,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
               offset: const Offset(0, 4), // Balanced shadow
             )
           ]),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: widget.type == KeyboardType.numeric
           ? _buildNumericPad()
           : _buildFullBoard(),
@@ -173,7 +173,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
 
   Widget _buildFullBoard() {
     final rows = _isSymbols ? _rowsSymbols : _rowsText;
-    const double keyHeight = 56.0;
+    const double keyHeight = 62.0;
     const double rowSpacing = 8.0;
 
     return Column(
@@ -330,7 +330,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
     return Expanded(
       flex: flex,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2.0),
+        padding: const EdgeInsets.symmetric(horizontal: 1.0),
         child: _buildKeyWidget(label,
             height: height, onTap: onTap, isNumeric: isNumeric),
       ),

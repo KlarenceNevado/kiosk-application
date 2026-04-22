@@ -11,6 +11,19 @@ mixin VirtualKeyboardMixin<T extends StatefulWidget> on State<T> {
     KeyboardType type = KeyboardType.text,
     int? maxLength,
   }) {
+    // If the keyboard is already open, just ensure the field is visible
+    if (isKeyboardVisible) {
+      if (fieldKey?.currentContext != null) {
+        Scrollable.ensureVisible(
+          fieldKey!.currentContext!,
+          alignment: 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+      return;
+    }
+
     setState(() => isKeyboardVisible = true);
 
     showModalBottomSheet(
@@ -19,6 +32,7 @@ mixin VirtualKeyboardMixin<T extends StatefulWidget> on State<T> {
       enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: VirtualKeyboard(
@@ -44,7 +58,7 @@ mixin VirtualKeyboardMixin<T extends StatefulWidget> on State<T> {
         if (fieldKey?.currentContext == null) return;
         Scrollable.ensureVisible(
           fieldKey!.currentContext!,
-          alignment: 0.3,
+          alignment: 0.0, // Push field to the very top to avoid keyboard overlap
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );

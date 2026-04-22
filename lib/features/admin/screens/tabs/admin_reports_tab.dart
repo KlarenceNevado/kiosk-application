@@ -97,7 +97,8 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                 phoneNumber: '',
                 pinCode: '',
                 dateOfBirth: DateTime.now(),
-                gender: ''));
+                gender: '',
+                username: 'unknown'));
         rows.add([
           record.id,
           user.fullName,
@@ -316,7 +317,8 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
               phoneNumber: '',
               pinCode: '',
               dateOfBirth: DateTime.now(),
-              gender: ''));
+              gender: '',
+              username: 'unknown'));
       sitioStats[user.sitio] = (sitioStats[user.sitio] ?? 0) + 1;
     }
 
@@ -522,7 +524,8 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                         phoneNumber: '',
                         pinCode: '',
                         dateOfBirth: DateTime.now(),
-                        gender: ''));
+                        gender: '',
+                        username: 'unknown'));
                 return TableRow(
                   children: [
                     Padding(

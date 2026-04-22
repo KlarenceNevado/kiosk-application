@@ -150,6 +150,7 @@ class PatientSyncHandler extends SyncHandler {
       'parent_id': user.parentId,
       'pin_hash': user.pinHash,
       'pin_salt': user.pinSalt,
+      'username': user.username,
       'updated_at': DateTime.now().toIso8601String(),
     };
 
@@ -198,12 +199,13 @@ class PatientSyncHandler extends SyncHandler {
         'last_name': user.lastName,
         'middle_initial': user.middleInitial,
         'sitio': user.sitio,
-        'phone_number': dbHelper.encrypt(user.phoneNumber),
+        'phone_number': user.phoneNumber, // Removing encryption for admin readability as requested
         'date_of_birth': birthDate,
         'gender': user.gender,
         'parent_id': user.parentId,
         'pin_hash': user.pinHash,
         'pin_salt': user.pinSalt,
+        'username': user.username,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
@@ -304,35 +306,56 @@ class PatientSyncHandler extends SyncHandler {
   }
 
   Future<List<Map<String, dynamic>>> findPatient(
-      String nameInput, String phoneNumber) async {
+      String identifier, String phoneNumber) async {
     try {
-      // Strategy: Search by Name (Plain Text) then decrypt found phone numbers to match input
-      final results = await supabase
+      // 1. Try Primary Search (Username)
+      try {
+        final result = await supabase
+            .from('patients')
+            .select()
+            .eq('username', identifier)
+            .limit(5);
+
+        if (result.isNotEmpty) {
+          return _filterByPhone(result, phoneNumber);
+        }
+      } catch (e) {
+        // If 'username' column is missing in Supabase (Cloud Error 42703), 
+        // we swallow and proceed to legacy fallback.
+        debugPrint("⚠️ Cloud Search Fallback: Username column missing or error: $e");
+      }
+
+      // 2. Legacy Fallback (Search by Name using the identifier)
+      final nameResults = await supabase
           .from('patients')
           .select()
-          .or('first_name.ilike.%$nameInput%,last_name.ilike.%$nameInput%')
+          .or('first_name.ilike.%$identifier%,last_name.ilike.%$identifier%')
           .limit(10);
 
-      final List<Map<String, dynamic>> matches = [];
-      for (var row in results) {
-        final dbEncPhone = row['phone_number']?.toString();
-        if (dbEncPhone == null) continue;
-
-        try {
-          final decPhone = dbHelper.decrypt(dbEncPhone);
-          if (decPhone == phoneNumber.trim()) {
-            final preparedRow = Map<String, dynamic>.from(row);
-            preparedRow['phone_number'] =
-                decPhone; // Use plain for AuthRepo logic
-            matches.add(preparedRow);
-          }
-        } catch (_) {}
-      }
-      return matches;
+      return _filterByPhone(nameResults, phoneNumber);
     } catch (e) {
       debugPrint("❌ findPatient (Cloud) Error: $e");
       return [];
     }
+  }
+
+  List<Map<String, dynamic>> _filterByPhone(
+      List<dynamic> results, String phoneNumber) {
+    final List<Map<String, dynamic>> matches = [];
+    for (var row in results) {
+      final dbEncPhone = row['phone_number']?.toString();
+      if (dbEncPhone == null) continue;
+
+      try {
+        final decPhone = dbHelper.decrypt(dbEncPhone);
+        if (decPhone == phoneNumber.trim()) {
+          final preparedRow = Map<String, dynamic>.from(row);
+          preparedRow['phone_number'] = decPhone;
+          matches.add(preparedRow);
+        }
+      } catch (_) {}
+    }
+    return matches;
   }
 
   // --- PRIVATE HELPERS ---
@@ -372,6 +395,8 @@ class PatientSyncHandler extends SyncHandler {
     'updated_at',
     'pin_hash',
     'pin_salt',
+    'username',
+    'fingerprint_id',
   };
 
   Map<String, dynamic> _prepareRowForSqlite(Map<String, dynamic> row) {

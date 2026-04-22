@@ -6,12 +6,14 @@ class LogoGlow extends StatefulWidget {
   final double size;
   final Color glowColor;
   final Widget? child;
+  final bool animate;
 
   const LogoGlow({
     super.key,
     this.size = 180.0,
     this.glowColor = AppColors.brandGreen,
     this.child,
+    this.animate = true,
   });
 
   @override
@@ -32,7 +34,7 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
     );
 
     // Initial state check
-    if (!AppEnvironment().isEcoModeActive.value) {
+    if (widget.animate && !AppEnvironment().isEcoModeActive.value) {
       _controller.repeat(reverse: true);
     }
 
@@ -49,10 +51,12 @@ class _LogoGlowState extends State<LogoGlow> with SingleTickerProviderStateMixin
   }
 
   void _handleEcoChange() {
-    if (AppEnvironment().isEcoModeActive.value) {
-      _controller.stop();
-    } else {
-      _controller.repeat(reverse: true);
+    if (widget.animate) {
+      if (AppEnvironment().isEcoModeActive.value) {
+        _controller.stop();
+      } else {
+        _controller.repeat(reverse: true);
+      }
     }
   }
 

@@ -622,6 +622,7 @@ class _PatientProfileTab extends StatelessWidget {
                     phoneNumber: phoneCtrl.text,
                     relation: relation,
                     parentId: parentId, // Establish Link!
+                    username: '', // Desktop/Sync handles this for dependents
                   );
 
                   // Call backend directly (for demo simplicity, avoiding provider scopes overhead inside dialog)

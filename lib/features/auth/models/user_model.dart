@@ -20,6 +20,8 @@ class User {
   final String? relation;
   final String role;
   final String? deviceToken;
+  final String username;
+  final int? fingerprintId; // NEW: Biometric ID (1-1000)
 
   User({
     required this.id,
@@ -41,6 +43,8 @@ class User {
     this.relation,
     this.role = 'patient',
     this.deviceToken,
+    required this.username,
+    this.fingerprintId,
   });
 
   String get fullName {
@@ -81,6 +85,8 @@ class User {
       'relation': relation,
       'role': role,
       'device_token': deviceToken,
+      'username': username,
+      'fingerprint_id': fingerprintId,
     };
   }
 
@@ -115,6 +121,8 @@ class User {
       relation: map['relation'],
       role: map['role'] ?? 'patient',
       deviceToken: map['deviceToken'] ?? map['device_token'],
+      username: map['username'] ?? '',
+      fingerprintId: map['fingerprint_id'] != null ? (map['fingerprint_id'] as num).toInt() : null,
     );
   }
 
@@ -140,6 +148,8 @@ class User {
     String? relation,
     String? role,
     String? deviceToken,
+    String? username,
+    int? fingerprintId,
   }) {
     return User(
       id: id ?? this.id,
@@ -161,6 +171,8 @@ class User {
       relation: relation ?? this.relation,
       role: role ?? this.role,
       deviceToken: deviceToken ?? this.deviceToken,
+      username: username ?? this.username,
+      fingerprintId: fingerprintId ?? this.fingerprintId,
     );
   }
 

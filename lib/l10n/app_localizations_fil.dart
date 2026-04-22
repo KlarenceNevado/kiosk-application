@@ -9,7 +9,13 @@ class AppLocalizationsFil extends AppLocalizations {
   AppLocalizationsFil([String locale = 'fil']) : super(locale);
 
   @override
-  String get appTitle => 'Kiosk Kalusugan';
+  String get appTitle => 'San Agustin Kanluran Health';
+
+  @override
+  String get barangayHeader => 'Barangay San Agustin Health';
+
+  @override
+  String get whatsNew => 'Mga Bagong Balita';
 
   @override
   String get welcome => 'Mabuhay';
@@ -78,13 +84,19 @@ class AppLocalizationsFil extends AppLocalizations {
   String get settingsTitle => 'Mga Setting ng System';
 
   @override
-  String get kioskAccess => 'Kiosk Access';
+  String get kioskAccess => 'Kiosk Login';
 
   @override
-  String get securePatientLogin => 'Ligtas na Pag-login';
+  String get kioskLogin => 'Kiosk Login';
 
   @override
-  String get findYourAccount => '1. Hanapin ang Iyong Account';
+  String get securePatientLogin => 'Ligtas na Pag-login ng User';
+
+  @override
+  String get findYourAccount => '1. I-type ang Iyong Account';
+
+  @override
+  String get typeYourAccount => '1. I-type ang Iyong Account';
 
   @override
   String get enterPassword => '2. Ilagay ang Password';
@@ -106,7 +118,7 @@ class AppLocalizationsFil extends AppLocalizations {
   String get accessRecord => 'BUKSAN ANG REKORD';
 
   @override
-  String get searchName => 'I-type ang Pangalan...';
+  String get searchName => 'Username';
 
   @override
   String get phoneNumber => 'Numero ng Telepono';
@@ -115,10 +127,10 @@ class AppLocalizationsFil extends AppLocalizations {
   String get incorrectCredentials => 'Maling Impormasyon';
 
   @override
-  String get patientRegistration => 'Pagpaparehistro ng Pasyente';
+  String get patientRegistration => 'Pagpaparehistro ng User';
 
   @override
-  String get patientInfoForm => 'Impormasyon ng Pasyente';
+  String get patientInfoForm => 'Impormasyon ng User';
 
   @override
   String get demographics => 'Demograpiya';
@@ -152,4 +164,36 @@ class AppLocalizationsFil extends AppLocalizations {
 
   @override
   String get phoneLengthError => 'Dapat ay 11 numero';
+
+  @override
+  String get iamResident => 'Taga-Dito Ako';
+
+  @override
+  String get iamVisitor => 'Bisita Ako';
+
+  @override
+  String get residentDesc =>
+      'Mag-login gamit ang iyong Patient ID o Pangalan para sa iyong rekord.';
+
+  @override
+  String get visitorDesc =>
+      'Maaaring gumamit ang mga bisita sa pamamagitan ng paglalagay ng buong pangalan.';
+
+  @override
+  String get fullName => 'Buong Pangalan';
+
+  @override
+  String get btnGoBack => 'Bumalik';
+
+  @override
+  String get enterFullName => 'Ilagay ang Iyong Buong Pangalan';
+
+  @override
+  String get placeFingerToLogin => 'Ipadama ang daliri sa scanner';
+
+  @override
+  String get residentLogin => 'Login ng Resident';
+
+  @override
+  String get fingerprintReady => 'NAKAHANDA ANG BIOMETRIC';
 }

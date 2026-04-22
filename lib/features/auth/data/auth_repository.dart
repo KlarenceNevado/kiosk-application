@@ -17,6 +17,7 @@ import '../../../core/services/security/security_logger.dart';
 import '../../../core/services/system/system_log_service.dart';
 import 'package:uuid/uuid.dart';
 import '../domain/i_auth_repository.dart';
+import '../services/username_service.dart';
 
 class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   User? _currentUser;
@@ -163,10 +164,13 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
 
     try {
-      // 1. LOCAL-FIRST AUTONOMY: Generate UUID locally (100% Offline Support)
+      // 1. LOCAL-FIRST AUTONOMY: Generate UUID and Username locally
       final String localId = const Uuid().v4();
+      final String generatedUsername = await UsernameService.generateNextUsername();
+      
       final User autonomousUser = newUser.copyWith(
         id: localId,
+        username: generatedUsername,
         isSynced: false,
         updatedAt: DateTime.now(),
       );
@@ -178,11 +182,11 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       _users = await DatabaseHelper.instance.getPatients();
       _currentUser = autonomousUser;
 
-      SecurityLogger.info("New patient registered (Offline-First)",
+      SecurityLogger.info("New user registered (Offline-First)",
           pii: autonomousUser.fullName);
 
       DatabaseHelper.instance.logSecurityEvent(
-          "REGISTER", "New patient registered autonomously",
+          "REGISTER", "New user registered autonomously",
           userId: autonomousUser.id);
 
       // 4. Background Cloud Handoff (Non-blocking)
@@ -249,9 +253,93 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     notifyListeners();
   }
 
-  // Login Logic (Lookup by Name + Phone)
   @override
-  Future<String?> login(String firstName, String phoneNumber) async {
+  Future<void> loginAsVisitor(String fullName) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Parse name for the hiwalay visitors table
+      final nameParts = fullName.split(' ');
+      final firstName = nameParts.first;
+      final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'Visitor';
+
+      // 2. Check if visitor exists locally
+      Map<String, dynamic>? visitorData = await DatabaseHelper.instance.getVisitorByName(firstName, lastName);
+      
+      String visitorId;
+      if (visitorData != null) {
+        visitorId = visitorData['id'];
+        debugPrint("👋 Returning Visitor Detected: $fullName (ID: $visitorId)");
+      } else {
+        // 3. Create NEW Visitor for the HIWALAY table
+        visitorId = "visitor-${const Uuid().v4()}";
+        await DatabaseHelper.instance.insertVisitor({
+          'id': visitorId,
+          'first_name': firstName,
+          'last_name': lastName,
+          'created_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
+        debugPrint("🆕 New Visitor Registered: $fullName (ID: $visitorId)");
+      }
+
+      final visitorUser = User(
+        id: visitorId,
+        firstName: firstName,
+        middleInitial: "",
+        lastName: lastName,
+        sitio: "Non-Resident",
+        phoneNumber: "00000000000",
+        pinCode: "",
+        dateOfBirth: DateTime.now(),
+        gender: "Unknown",
+        username: "visitor_${DateTime.now().millisecondsSinceEpoch}",
+        role: "visitor",
+      );
+
+      _currentUser = visitorUser;
+      _users = [visitorUser];
+
+      // Visitors don't need persistent resident sessions
+      SystemLogService().startSession(_currentUser!.id);
+      
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("❌ Error during visitor login: $e");
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<String?> loginWithFingerprint(int fingerprintId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Find the user with this fingerprint ID in our local database
+      final matchingUser = _users.where((u) => u.fingerprintId == fingerprintId).toList();
+      
+      if (matchingUser.isNotEmpty) {
+        _currentUser = matchingUser.first;
+        return await _handleSuccessfulLogin();
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return "Fingerprint not recognized. Please register your fingerprint first.";
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return "Biometric Login Error: $e";
+    }
+  }
+
+  // --- INTERNAL LOGIN HANDLERS ---
+  @override
+  Future<String?> login(String username, String phoneNumber) async {
     _isLoading = true;
     notifyListeners();
 
@@ -260,12 +348,13 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       // Since local SQLite data is stored with deterministic re-encryption (or plain if using getPatients),
       // the comparison here might be tricky if the Repository list is stale.
       // But _loadUsers correctly decrypts when loading.
-      final localUser = _users
-          .where((u) =>
-              (u.firstName.toLowerCase().contains(firstName.toLowerCase()) ||
-                  u.fullName.toLowerCase().contains(firstName.toLowerCase())) &&
-              u.phoneNumber.trim() == phoneNumber.trim())
-          .toList();
+      final localUser = _users.where((u) {
+        final matchesUsername = u.username.toLowerCase().trim() == username.toLowerCase().trim();
+        final matchesPhone = u.phoneNumber.trim() == phoneNumber.trim();
+
+        // STRICT LOGIC: Only allow Username matches for Residents as requested.
+        return matchesUsername && matchesPhone;
+      }).toList();
 
       if (localUser.isNotEmpty) {
         _currentUser = localUser.first;
@@ -274,7 +363,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       // 2. Cloud Fallback (Critical for new accounts not yet pulled)
       final cloudMatches =
-          await SyncService().findPatient(firstName, phoneNumber);
+          await SyncService().findPatient(username, phoneNumber);
       if (cloudMatches.isNotEmpty) {
         final cloudUser = User.fromMap(cloudMatches.first);
         await DatabaseHelper.instance.insertPatient(cloudUser);
@@ -285,7 +374,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       _isLoading = false;
       notifyListeners();
-      return "Patient not found or Credentials mismatch. Please ensure you are registered.";
+      return "Account not found or Credentials mismatch. Please ensure you are typing the correct Username.";
     } catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -421,7 +510,8 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
             phoneNumber: '',
             pinCode: '',
             dateOfBirth: DateTime.now(),
-            gender: ''),
+            gender: '',
+            username: ''),
       );
 
       if (localUser.id.isNotEmpty) {

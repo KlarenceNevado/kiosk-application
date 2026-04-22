@@ -17,16 +17,23 @@ class AppTheme {
       textTheme: GoogleFonts.outfitTextTheme(const TextTheme(
         displayLarge: TextStyle(
             fontSize: 40,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w900, // Black
             color: AppColors.brandDark,
-            letterSpacing: -0.5),
+            letterSpacing: -1.0),
         headlineMedium: TextStyle(
             fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: AppColors.brandDark),
-        bodyLarge: TextStyle(fontSize: 18, color: Colors.black87),
+            fontWeight: FontWeight.w800, // ExtraBold
+            color: AppColors.brandDark,
+            letterSpacing: -0.5),
+        bodyLarge: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: AppColors.brandDark,
+            height: 1.5),
         labelLarge: TextStyle(
-            fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1.0),
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5), // For buttons
       )),
 
       // Global Button Styling
@@ -34,11 +41,11 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandGreen,
           foregroundColor: Colors.white,
-          elevation: 4,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+          elevation: 0, // We use custom shadows elsewhere or rely on Material 3
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
         ),
       ),
 

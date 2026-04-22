@@ -27,6 +27,7 @@ void main() {
       gender: 'Male',
       sitio: 'Purok 1',
       dateOfBirth: DateTime(1990, 1, 1),
+      username: 'h260001',
     );
 
     test('push() ignores records with blocked IDs', () async {

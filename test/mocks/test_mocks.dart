@@ -41,6 +41,7 @@ void main() {
     pinCode: '',
     gender: '',
     dateOfBirth: DateTime(1900, 1, 1),
+    username: 'fallback',
   ));
 }
 

@@ -44,7 +44,8 @@ class PdfReportService {
                 phoneNumber: '',
                 pinCode: '',
                 dateOfBirth: DateTime.now(),
-                gender: ''));
+                gender: '',
+                username: 'unknown'));
         highRisk.add({'user': user, 'vitals': vitals});
       }
     });

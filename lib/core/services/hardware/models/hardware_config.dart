@@ -56,7 +56,7 @@ class HardwareConfig {
     return HardwareConfig(
       system: SystemSettings(),
       hub: DeviceSettings(
-          name: "Default Hub", baudRate: 115200, portOverride: "/dev/ttyAMA0"),
+          name: "Default Hub", baudRate: 115200),
       oximeter: DeviceSettings(name: "Default Oximeter", baudRate: 19200),
       bloodPressure: DeviceSettings(name: "Default BP", baudRate: 9600),
     );

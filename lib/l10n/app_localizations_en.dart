@@ -9,7 +9,13 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Kiosk Health';
+  String get appTitle => 'San Agustin Kanluran Health';
+
+  @override
+  String get barangayHeader => 'Barangay San Agustin Health';
+
+  @override
+  String get whatsNew => 'What\'s New';
 
   @override
   String get welcome => 'Welcome';
@@ -78,13 +84,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTitle => 'System Settings';
 
   @override
-  String get kioskAccess => 'Kiosk Access';
+  String get kioskAccess => 'Kiosk Login';
 
   @override
-  String get securePatientLogin => 'Secure Patient Login';
+  String get kioskLogin => 'Kiosk Login';
 
   @override
-  String get findYourAccount => '1. Find Your Account';
+  String get securePatientLogin => 'Secure User Login';
+
+  @override
+  String get findYourAccount => '1. Type Your Account';
+
+  @override
+  String get typeYourAccount => '1. Type Your Account';
 
   @override
   String get enterPassword => '2. Enter Password';
@@ -106,7 +118,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accessRecord => 'ACCESS RECORD';
 
   @override
-  String get searchName => 'Type Name...';
+  String get searchName => 'Username';
 
   @override
   String get phoneNumber => 'Phone Number';
@@ -115,10 +127,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get incorrectCredentials => 'Incorrect Credentials';
 
   @override
-  String get patientRegistration => 'New Patient Registration';
+  String get patientRegistration => 'New User Registration';
 
   @override
-  String get patientInfoForm => 'Patient Information Form';
+  String get patientInfoForm => 'User Information Form';
 
   @override
   String get demographics => 'Demographics';
@@ -127,7 +139,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contact => 'Contact';
 
   @override
-  String get createPatientRecord => 'Create Patient Record';
+  String get createPatientRecord => 'Create User Record';
 
   @override
   String get firstName => 'First Name';
@@ -152,4 +164,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneLengthError => 'Must be 11 digits';
+
+  @override
+  String get iamResident => 'I am a Resident';
+
+  @override
+  String get iamVisitor => 'I am a Visitor';
+
+  @override
+  String get residentDesc =>
+      'Log in with your Patient ID or Name to access your records.';
+
+  @override
+  String get visitorDesc =>
+      'Non-residents can use the kiosk by providing their full name.';
+
+  @override
+  String get fullName => 'Full Name';
+
+  @override
+  String get btnGoBack => 'Go Back';
+
+  @override
+  String get enterFullName => 'Enter Your Full Name';
+
+  @override
+  String get placeFingerToLogin => 'Place finger on scanner to login';
+
+  @override
+  String get residentLogin => 'Resident Login';
+
+  @override
+  String get fingerprintReady => 'BIOMETRIC READY';
 }

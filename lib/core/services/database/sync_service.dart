@@ -8,6 +8,7 @@ import 'sync/vitals_sync_handler.dart';
 import 'sync/system_sync_handler.dart';
 import 'sync/chat_sync_handler.dart';
 import 'sync/log_sync_handler.dart';
+import 'sync/visitor_sync_handler.dart';
 import '../system/file_storage_service.dart';
 import 'database_helper.dart';
 import '../../../features/auth/models/user_model.dart';
@@ -23,6 +24,7 @@ class SyncService with WidgetsBindingObserver {
     SystemSyncHandler? sHandler,
     ChatSyncHandler? cHandler,
     LogSyncHandler? lHandler,
+    VisitorSyncHandler? vLogHandler,
   }) {
     // In unit tests, we may provide all handlers to bypass Supabase initialization
     if (pHandler != null &&
@@ -35,6 +37,7 @@ class SyncService with WidgetsBindingObserver {
       systemHandler = sHandler;
       chatHandler = cHandler;
       logHandler = lHandler;
+      visitorHandler = vLogHandler ?? VisitorSyncHandler(Supabase.instance.client);
     } else {
       final client = Supabase.instance.client;
       patientHandler = pHandler ?? PatientSyncHandler(client);
@@ -42,6 +45,7 @@ class SyncService with WidgetsBindingObserver {
       systemHandler = sHandler ?? SystemSyncHandler(client);
       chatHandler = cHandler ?? ChatSyncHandler(client);
       logHandler = lHandler ?? LogSyncHandler(client);
+      visitorHandler = VisitorSyncHandler(client);
     }
   }
 
@@ -74,6 +78,7 @@ class SyncService with WidgetsBindingObserver {
   late final SystemSyncHandler systemHandler;
   late final ChatSyncHandler chatHandler;
   late final LogSyncHandler logHandler;
+  late final VisitorSyncHandler visitorHandler;
 
   bool _isSyncing = false;
   Completer<void>? _syncMutex;
@@ -299,6 +304,8 @@ class SyncService with WidgetsBindingObserver {
         vitalsHandler.push(),
         if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
+        visitorHandler.pushUnsyncedVisitors(),
+        visitorHandler.pushUnsyncedVitals(),
         // Only push logs if we have a valid session (Proper fix for 42501 RLS noise)
         if (Supabase.instance.client.auth.currentSession != null)
           logHandler.push(),
@@ -379,8 +386,8 @@ class SyncService with WidgetsBindingObserver {
       patientHandler.authenticatePatient(phone, pin);
   Future<List<User>> fetchDependents(String parentId) =>
       patientHandler.fetchDependents(parentId);
-  Future<List<Map<String, dynamic>>> findPatient(String name, String phone) =>
-      patientHandler.findPatient(name, phone);
+  Future<List<Map<String, dynamic>>> findPatient(String username, String phone) =>
+      patientHandler.findPatient(username, phone);
 
   // --- DELEGATION: VITALS ---
   Future<void> createVitalSign(VitalSigns vital) =>

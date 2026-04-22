@@ -27,8 +27,9 @@ void main() {
       sitio: 'Villa 1',
       phoneNumber: '09111222333',
       pinCode: '000000',
-      gender: 'Female',
-      dateOfBirth: DateTime(1995, 5, 5),
+      gender: 'Male',
+      dateOfBirth: DateTime(1990, 1, 1),
+      username: 'h260001',
     );
 
     when(() => mockAuth.currentUser).thenReturn(testUser);

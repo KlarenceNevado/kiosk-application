@@ -10,6 +10,7 @@ import 'drivers/null_sensor_service.dart';
 import 'models/hardware_config.dart';
 import '../system/power_manager_service.dart';
 import '../security/notification_service.dart';
+import 'drivers/fingerprint_service.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 
 class SensorManager {
@@ -38,12 +39,12 @@ class SensorManager {
 
   bool isPhysicallyConnected(SensorType type) => !isRealHardware || (_physicalStatus[type] ?? false);
   
-  bool get isRealHardware => false; // FORCED MOCK FOR THESIS
+  bool get isRealHardware => !kIsWeb && (Platform.isLinux || Platform.isAndroid || Platform.isWindows); // Auto-detect real hardware on supported platforms
 
   void _initSensors() {
-    const bool isRealHardware = false; // FORCED MOCK FOR THESIS
+    final bool realHardware = isRealHardware;
 
-    if (isRealHardware) {
+    if (realHardware) {
       debugPrint(
           "🛠️ [SensorManager] Initializing REAL hardware with Dynamic Port Discovery.");
       _discoverAndAssignPorts();
@@ -122,9 +123,9 @@ class SensorManager {
     debugPrint("📂 Available Ports: $availablePorts");
 
     // DYNAMIC PORT DISCOVERY (No hardcoding)
-    String? foundHubPort = config.hub.portOverride;
-    String? foundOxiPort = config.oximeter.portOverride;
-    String? foundBpPort = config.bloodPressure.portOverride;
+    String? foundHubPort = _isValidPortForPlatform(config.hub.portOverride) ? config.hub.portOverride : null;
+    String? foundOxiPort = _isValidPortForPlatform(config.oximeter.portOverride) ? config.oximeter.portOverride : null;
+    String? foundBpPort = _isValidPortForPlatform(config.bloodPressure.portOverride) ? config.bloodPressure.portOverride : null;
 
     // Auto-detect HID for the CONTEC 08A which mounts as hidraw on Linux
     if (Platform.isLinux && foundBpPort == null) {
@@ -230,13 +231,16 @@ class SensorManager {
         config.bloodPressure.portOverride ??
         (Platform.isWindows ? 'COM4' : finalOxi);
 
+    final String finalFingerprint = (Platform.isWindows ? 'COM5' : '/dev/ttyUSB2');
+
     debugPrint(
-        "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp");
+        "✅ [SensorManager] Mapping: Hub=$finalHub, Oxi=$finalOxi, BP=$finalBp, Fingerprint=$finalFingerprint");
 
     _portMapping[SensorType.weight] = finalHub;
     _portMapping[SensorType.thermometer] = finalHub;
     _portMapping[SensorType.oximeter] = finalOxi;
     _portMapping[SensorType.bloodPressure] = finalBp;
+    _portMapping[SensorType.fingerprint] = finalFingerprint;
 
     // ESP32 HUB (USB0)
     final hubService = SensorHubService(
@@ -274,6 +278,12 @@ class SensorManager {
 
     // Explicitly map battery to the Hub service which provides the telemetry
     _sensors[SensorType.battery] = _sensors[SensorType.weight]!;
+
+    // FINGERPRINT (USB2)
+    _sensors[SensorType.fingerprint] = FingerprintService(
+      portName: finalFingerprint,
+      baudRate: 57600,
+    );
 
     // Initial physical status update
     _physicalStatusController.add(Map.from(_physicalStatus));
@@ -354,7 +364,7 @@ class SensorManager {
         }
 
         matched = await comp.future.timeout(
-          const Duration(milliseconds: 800), 
+          const Duration(milliseconds: 1500), // Increased timeout for slower sensors
           onTimeout: () => false
         );
         
@@ -374,6 +384,7 @@ class SensorManager {
   ISensorService get thermometerSensor => getSensor(SensorType.thermometer);
   ISensorService get bpSensor => getSensor(SensorType.bloodPressure);
   ISensorService get batterySensor => getSensor(SensorType.battery);
+  ISensorService get fingerprintSensor => getSensor(SensorType.fingerprint);
 
   Future<void> startAll() async {
     for (var s in _sensors.values) {
@@ -424,6 +435,14 @@ class SensorManager {
   void updateBatteryVoltage(double voltage) {
     debugPrint("🔋 [SensorManager] Manual Battery Override: $voltage V");
     PowerManagerService().updateBatteryStatus(voltage);
+  }
+
+  bool _isValidPortForPlatform(String? port) {
+    if (port == null || port.isEmpty) return false;
+    if (Platform.isWindows) {
+      return port.toUpperCase().startsWith('COM');
+    }
+    return port.startsWith('/dev/');
   }
 
   void dispose() {

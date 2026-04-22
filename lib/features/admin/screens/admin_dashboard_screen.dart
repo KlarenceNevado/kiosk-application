@@ -397,9 +397,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 lastName: '',
                 sitio: '',
                 phoneNumber: '',
-                pinCode: '123456',
+                pinCode: '',
                 dateOfBirth: DateTime.now(),
-                gender: ''));
+                gender: '',
+                username: 'unknown'));
 
         rows.add([
           record.id,
@@ -1508,7 +1509,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           phoneNumber: '',
                           pinCode: '123456',
                           dateOfBirth: DateTime.now(),
-                          gender: ''));
+                          gender: '',
+                          username: 'unknown'));
 
                   return Row(children: [
                     Container(

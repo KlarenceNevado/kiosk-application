@@ -190,20 +190,45 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
     }
   }
 
-  /// Login by Name + Phone (for Kiosk-style login on web)
   @override
-  Future<String?> login(String firstName, String phoneNumber) async {
+  Future<void> loginAsVisitor(String fullName) async {
+    _isLoading = true;
+    notifyListeners();
+
+    final visitorUser = User(
+      id: "VIS-${DateTime.now().millisecondsSinceEpoch}",
+      firstName: fullName,
+      middleInitial: "",
+      lastName: "",
+      sitio: "Non-Resident",
+      phoneNumber: "00000000000",
+      pinCode: "",
+      dateOfBirth: DateTime.now(),
+      gender: "Unknown",
+      username: "visitor",
+      role: "visitor",
+    );
+
+    _currentUser = visitorUser;
+    _users = [visitorUser];
+    
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Login by Username + Phone (for Kiosk-style login on web)
+  @override
+  Future<String?> login(String username, String phoneNumber) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 1. Search by name (Names are PLAIN TEXT in Supabase)
-      // We search by first_name as a starting point
+      // 1. Search by Username (Usernames are PLAIN TEXT in Supabase)
       final response = await _supabase
           .from('patients')
           .select()
-          .ilike('first_name', '%$firstName%')
-          .limit(20);
+          .ilike('username', username.trim())
+          .limit(5);
 
       final List<dynamic> data = response as List;
 
@@ -248,7 +273,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       _isLoading = false;
       notifyListeners();
-      return "Patient and Phone combination not found. Please verify your details.";
+      return "Username and Phone combination not found. Please verify your details.";
     } catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -317,6 +342,11 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   @override
   Future<String?> loginWithId(String userId) async =>
       "QR Login is only available at the Kiosk.";
+  @override
+  Future<String?> loginWithFingerprint(int fingerprintId) async {
+    return "Biometric login is only available on the Kiosk terminal.";
+  }
+
   List<User> getUnsyncedUsers() => [];
   Future<void> markUserAsSynced(String userId) async {}
 

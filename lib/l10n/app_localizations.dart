@@ -101,8 +101,20 @@ abstract class AppLocalizations {
   /// App Title
   ///
   /// In en, this message translates to:
-  /// **'Kiosk Health'**
+  /// **'San Agustin Kanluran Health'**
   String get appTitle;
+
+  /// Header for Login Screen
+  ///
+  /// In en, this message translates to:
+  /// **'Barangay San Agustin Health'**
+  String get barangayHeader;
+
+  /// Header for announcements section
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New'**
+  String get whatsNew;
 
   /// Welcome text
   ///
@@ -239,20 +251,32 @@ abstract class AppLocalizations {
   /// No description provided for @kioskAccess.
   ///
   /// In en, this message translates to:
-  /// **'Kiosk Access'**
+  /// **'Kiosk Login'**
   String get kioskAccess;
+
+  /// No description provided for @kioskLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Kiosk Login'**
+  String get kioskLogin;
 
   /// No description provided for @securePatientLogin.
   ///
   /// In en, this message translates to:
-  /// **'Secure Patient Login'**
+  /// **'Secure User Login'**
   String get securePatientLogin;
 
   /// No description provided for @findYourAccount.
   ///
   /// In en, this message translates to:
-  /// **'1. Find Your Account'**
+  /// **'1. Type Your Account'**
   String get findYourAccount;
+
+  /// No description provided for @typeYourAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'1. Type Your Account'**
+  String get typeYourAccount;
 
   /// No description provided for @enterPassword.
   ///
@@ -293,7 +317,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchName.
   ///
   /// In en, this message translates to:
-  /// **'Type Name...'**
+  /// **'Username'**
   String get searchName;
 
   /// No description provided for @phoneNumber.
@@ -311,13 +335,13 @@ abstract class AppLocalizations {
   /// No description provided for @patientRegistration.
   ///
   /// In en, this message translates to:
-  /// **'New Patient Registration'**
+  /// **'New User Registration'**
   String get patientRegistration;
 
   /// No description provided for @patientInfoForm.
   ///
   /// In en, this message translates to:
-  /// **'Patient Information Form'**
+  /// **'User Information Form'**
   String get patientInfoForm;
 
   /// No description provided for @demographics.
@@ -335,7 +359,7 @@ abstract class AppLocalizations {
   /// No description provided for @createPatientRecord.
   ///
   /// In en, this message translates to:
-  /// **'Create Patient Record'**
+  /// **'Create User Record'**
   String get createPatientRecord;
 
   /// No description provided for @firstName.
@@ -385,6 +409,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Must be 11 digits'**
   String get phoneLengthError;
+
+  /// No description provided for @iamResident.
+  ///
+  /// In en, this message translates to:
+  /// **'I am a Resident'**
+  String get iamResident;
+
+  /// No description provided for @iamVisitor.
+  ///
+  /// In en, this message translates to:
+  /// **'I am a Visitor'**
+  String get iamVisitor;
+
+  /// No description provided for @residentDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in with your Patient ID or Name to access your records.'**
+  String get residentDesc;
+
+  /// No description provided for @visitorDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Non-residents can use the kiosk by providing their full name.'**
+  String get visitorDesc;
+
+  /// No description provided for @fullName.
+  ///
+  /// In en, this message translates to:
+  /// **'Full Name'**
+  String get fullName;
+
+  /// No description provided for @btnGoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go Back'**
+  String get btnGoBack;
+
+  /// No description provided for @enterFullName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Your Full Name'**
+  String get enterFullName;
+
+  /// No description provided for @placeFingerToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Place finger on scanner to login'**
+  String get placeFingerToLogin;
+
+  /// No description provided for @residentLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Resident Login'**
+  String get residentLogin;
+
+  /// No description provided for @fingerprintReady.
+  ///
+  /// In en, this message translates to:
+  /// **'BIOMETRIC READY'**
+  String get fingerprintReady;
 }
 
 class _AppLocalizationsDelegate

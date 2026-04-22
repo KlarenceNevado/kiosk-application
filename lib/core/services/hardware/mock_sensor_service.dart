@@ -95,6 +95,12 @@ class MockSensorService implements ISensorService {
         case SensorType.height:
           value = 165.0 + _random.nextInt(10);
           break;
+        case SensorType.fingerprint:
+          // Simulate a match after 2 seconds
+          if (ticks == 8) {
+            value = {'type': 'fingerprint_match', 'id': 1};
+          }
+          break;
       }
 
       _dataController.add(value);

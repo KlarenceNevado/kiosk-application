@@ -20,9 +20,11 @@ abstract class IAuthRepository extends ChangeNotifier {
   Future<void> toggleUserStatus(User user, bool isActive);
 
   // Login Flows
-  Future<String?> login(String firstName, String phoneNumber);
+  Future<String?> login(String username, String phoneNumber);
   Future<String?> loginWithId(String userId);
   Future<String?> loginPatientDevice(String phone, String pin);
+  Future<void> loginAsVisitor(String fullName);
+  Future<String?> loginWithFingerprint(int fingerprintId);
   Future<void> logout();
   void resetSessionTimer();
 

@@ -22,6 +22,8 @@ class SensorHubService implements ISensorService {
   SensorStatus _status = SensorStatus.disconnected;
   SerialPort? _port;
   SerialPortReader? _reader;
+  DateTime? _lastDataReceived;
+  Timer? _watchdogTimer;
 
   SensorHubService({
     required this.type,
@@ -63,6 +65,7 @@ class SensorHubService implements ISensorService {
 
       _port!.config = SerialPortConfig()..baudRate = baudRate;
       _updateStatus(SensorStatus.reading);
+      _startWatchdog();
 
       _reader = SerialPortReader(_port!);
       _reader!.stream.listen(_handleRawData);
@@ -73,6 +76,7 @@ class SensorHubService implements ISensorService {
 
   @override
   void stopReading() {
+    _watchdogTimer?.cancel();
     _reader?.close();
     _port?.close();
     _port = null;
@@ -87,17 +91,20 @@ class SensorHubService implements ISensorService {
   String _stringBuffer = "";
 
   void _handleRawData(Uint8List bytes) {
-    _rawController.add(bytes); // Pulse raw data immediately
+    _lastDataReceived = DateTime.now(); // Watchdog handshake
+    _rawController.add(bytes); 
+    
+    if (kDebugMode) {
+      debugPrint("📥 [SensorHubService] Incoming: ${bytes.length} bytes");
+    }
+
     try {
-      // Use utf8.decoder as per directive
       final String decoded = utf8.decode(bytes);
       _stringBuffer += decoded;
       
-      // Look for full lines
       if (_stringBuffer.contains('\n')) {
         final List<String> lines = const LineSplitter().convert(_stringBuffer);
         
-        // If the buffer doesn't end with a newline, the last line is incomplete
         if (!_stringBuffer.endsWith('\n')) {
           _stringBuffer = lines.removeLast();
         } else {
@@ -110,7 +117,6 @@ class SensorHubService implements ISensorService {
       }
     } catch (e) {
       debugPrint("⚠️ [SensorHubService] UTF8 Decode Error: $e");
-      // On error, clear buffer to avoid junk buildup
       _stringBuffer = "";
     }
   }
@@ -187,6 +193,33 @@ class SensorHubService implements ISensorService {
     } catch (e) {
       debugPrint("⚠️ [SensorHubService] Parse Error on line '$line': $e");
     }
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _lastDataReceived = DateTime.now();
+    _watchdogTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_status != SensorStatus.reading) {
+        timer.cancel();
+        return;
+      }
+
+      final lastSeen = _lastDataReceived;
+      if (lastSeen != null) {
+        final idleTime = DateTime.now().difference(lastSeen).inSeconds;
+        if (idleTime > 10) {
+          debugPrint("⚠️ [HubWatchdog] No data from ESP32 Hub for 10s. Reconnecting...");
+          _reconnect();
+        }
+      }
+    });
+  }
+
+  void _reconnect() async {
+    _reader?.close();
+    _port?.close();
+    await Future.delayed(const Duration(seconds: 1));
+    startReading();
   }
 
   /// Sends a handshake/status query to the hub
