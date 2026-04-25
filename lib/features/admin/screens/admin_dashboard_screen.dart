@@ -14,7 +14,6 @@ import '../../user_history/domain/i_history_repository.dart';
 import '../data/admin_repository.dart';
 import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
-import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/services/database/sync_service.dart';
 import '../../../core/services/system/sync_event_bus.dart';
 import '../../chat/domain/i_chat_repository.dart';
@@ -30,10 +29,10 @@ import 'tabs/admin_chat_tab.dart';
 import 'tabs/admin_hardware_tab.dart';
 import '../widgets/admin_dashboard_skeleton.dart';
 
-// NEW WIDGETS
 import '../widgets/admin_analytics_card.dart';
 import '../widgets/high_risk_residents_card.dart';
-import '../widgets/admin_resident_profile_sidebar.dart';
+import '../widgets/admin_metric_card.dart';
+import '../widgets/admin_recent_activity.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -446,209 +445,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return completer.future;
   }
 
-  void _confirmDeleteUser(User user) {
-    showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: const Text("Delete Resident"),
-              content: Text(
-                  "Are you sure you want to permanently delete ${user.fullName}?"),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text("CANCEL")),
-                TextButton(
-                  onPressed: () {
-                    context.read<IAuthRepository>().deleteUser(user.id);
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text("Resident deleted."),
-                      backgroundColor: Colors.red,
-                    ));
-                  },
-                  child:
-                      const Text("DELETE", style: TextStyle(color: Colors.red)),
-                ),
-              ],
-            ));
-  }
-
-  final List<String> _allSitios = [
-    "Sitio Ayala",
-    "Sitio Mahabang Buhangin",
-    "Sitio Sampalucan",
-    "Sitio Hulo",
-    "Sitio Labak",
-    "Sitio Macaraigan",
-    "Sitio Gabihan",
-  ];
-
-  void _editUser(User user) {
-    if (!mounted) return;
-
-    final nameController = TextEditingController(text: user.firstName);
-    final lastController = TextEditingController(text: user.lastName);
-    final miController = TextEditingController(text: user.middleInitial);
-    final phoneController = TextEditingController(text: user.phoneNumber);
-    String selectedSitio = user.sitio;
-    String selectedRole = user.role.toLowerCase();
-    TextEditingController activeCtrl = nameController;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(builder: (context, setSheetState) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.9,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text("Edit Resident",
-                    style:
-                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx)),
-              ]),
-              const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _buildSheetField("First Name", nameController, activeCtrl,
-                          (c) => setSheetState(() => activeCtrl = c)),
-                      const SizedBox(height: 12),
-                      _buildSheetField("Last Name", lastController, activeCtrl,
-                          (c) => setSheetState(() => activeCtrl = c)),
-                      const SizedBox(height: 12),
-                      _buildSheetField(
-                          "Middle Initial",
-                          miController,
-                          activeCtrl,
-                          (c) => setSheetState(() => activeCtrl = c),
-                          maxLength: 2),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: _allSitios.contains(selectedSitio)
-                            ? selectedSitio
-                            : _allSitios[0],
-                        items: _allSitios
-                            .map((s) =>
-                                DropdownMenuItem(value: s, child: Text(s)))
-                            .toList(),
-                        onChanged: (val) =>
-                            setSheetState(() => selectedSitio = val!),
-                        decoration: const InputDecoration(
-                            labelText: "Sitio", border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSheetField("Phone", phoneController, activeCtrl,
-                          (c) => setSheetState(() => activeCtrl = c),
-                          type: KeyboardType.numeric, maxLength: 11),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedRole,
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'patient',
-                              child: Row(children: [
-                                Icon(Icons.person, size: 18),
-                                SizedBox(width: 8),
-                                Text("Resident")
-                              ])),
-                          DropdownMenuItem(
-                              value: 'bhw',
-                              child: Row(children: [
-                                Icon(Icons.medical_services,
-                                    size: 18, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text("Health Worker (BHW)")
-                              ])),
-                          DropdownMenuItem(
-                              value: 'admin',
-                              child: Row(children: [
-                                Icon(Icons.admin_panel_settings,
-                                    size: 18, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text("Administrator")
-                              ])),
-                        ],
-                        onChanged: (val) =>
-                            setSheetState(() => selectedRole = val!),
-                        decoration: const InputDecoration(
-                            labelText: "Account Role",
-                            border: OutlineInputBorder()),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    final updatedUser = user.copyWith(
-                        firstName: nameController.text,
-                        lastName: lastController.text,
-                        middleInitial: miController.text,
-                        sitio: selectedSitio,
-                        phoneNumber: phoneController.text,
-                        role: selectedRole,
-                        pinCode: '123456');
-
-                    context.read<IAuthRepository>().updateUser(updatedUser);
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("User updated.")));
-                  },
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandGreen),
-                  child: const Text("Save Changes",
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildSheetField(String label, TextEditingController controller,
-      TextEditingController active, Function(TextEditingController) onFocus,
-      {KeyboardType type = KeyboardType.text, int? maxLength}) {
-    final bool showVirtualKeyboard = AppEnvironment().shouldShowVirtualKeyboard;
-    final isFocused = controller == active;
-    return TextField(
-      controller: controller,
-      readOnly: showVirtualKeyboard, // Enable native typing on desktop
-      onTap: () {
-        onFocus(controller);
-        if (!showVirtualKeyboard) {
-          // No explicit focus node passed here, but standard tapping works on desktop.
-          // We just need to ensure onFocus is called for the UI highlights.
-        }
-      },
-      maxLength: maxLength,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: isFocused
-            ? AppColors.brandGreen.withValues(alpha: 0.1)
-            : Colors.grey[50],
-        border: const OutlineInputBorder(),
-        focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: AppColors.brandGreen, width: 2)),
-        counterText: "",
-      ),
-    );
-  }
 
   Future<void> _clearDatabase() async {
     if (AdminSecurityService().currentRole != AdminRole.superAdmin) {
@@ -1103,13 +899,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // --- SHARED DASHBOARD CONTENT ---
-  String _searchQuery = "";
-
-  String _getOverallHealthStatus(VitalSigns? record, User? user) {
-    if (record == null || user == null) return "N/A";
-    return HealthThresholds.isCritical(user, record) ? "Abnormal" : "Normal";
-  }
 
   Widget _buildDashboardBody({required bool isMobile}) {
     final authRepo = context.watch<IAuthRepository>();
@@ -1117,11 +906,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     context.watch<AdminRepository>(); // Watch for threshold changes
 
     final allUsers = authRepo.users;
-    final filteredUsers = allUsers
-        .where((u) =>
-            u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()))
-        .toList();
-
     final records = historyRepo.records;
 
     final todayRecords = records
@@ -1147,35 +931,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ? Column(
                   children: [
                     Row(children: [
-                      _buildMetricCard("Total Residents", "${allUsers.length}",
-                          Icons.people, Colors.blue, isMobile),
+                      AdminMetricCard(title: "Total Residents", value: "${allUsers.length}",
+                          icon: Icons.people, color: Colors.blue, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Total Residents")),
                       const SizedBox(width: 16),
-                      _buildMetricCard("Checks Today", "${todayRecords.length}",
-                          Icons.today, AppColors.brandGreen, isMobile),
+                      AdminMetricCard(title: "Checks Today", value: "${todayRecords.length}",
+                          icon: Icons.today, color: AppColors.brandGreen, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Checks Today")),
                     ]),
                     const SizedBox(height: 16),
                     Row(children: [
-                      _buildMetricCard("Alerts", "$alertsCount",
-                          Icons.warning_amber_rounded, Colors.orange, isMobile),
+                      AdminMetricCard(title: "Alerts", value: "$alertsCount",
+                          icon: Icons.warning_amber_rounded, color: Colors.orange, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Alerts")),
                       const SizedBox(width: 16),
-                      _buildMetricCard("Status", _networkStatus, Icons.wifi,
-                          _networkColor, isMobile),
+                      AdminMetricCard(title: "Status", value: _networkStatus, icon: Icons.wifi,
+                          color: _networkColor, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Status")),
                     ]),
                   ],
                 )
               : Row(
                   children: [
-                    _buildMetricCard("Total Residents", "${allUsers.length}",
-                        Icons.people, Colors.blue, isMobile),
+                    AdminMetricCard(title: "Total Residents", value: "${allUsers.length}",
+                        icon: Icons.people, color: Colors.blue, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Total Residents")),
                     const SizedBox(width: 16),
-                    _buildMetricCard("Checks Today", "${todayRecords.length}",
-                        Icons.today, AppColors.brandGreen, isMobile),
+                    AdminMetricCard(title: "Checks Today", value: "${todayRecords.length}",
+                        icon: Icons.today, color: AppColors.brandGreen, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Checks Today")),
                     const SizedBox(width: 16),
-                    _buildMetricCard("Alerts", "$alertsCount",
-                        Icons.warning_amber_rounded, Colors.orange, isMobile),
+                    AdminMetricCard(title: "Alerts", value: "$alertsCount",
+                        icon: Icons.warning_amber_rounded, color: Colors.orange, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Alerts")),
                     const SizedBox(width: 16),
-                    _buildMetricCard("Status", _networkStatus, Icons.wifi,
-                        _networkColor, isMobile),
+                    AdminMetricCard(title: "Status", value: _networkStatus, icon: Icons.wifi,
+                        color: _networkColor, isMobile: isMobile, onAction: (val) => _handleCardAction(val, "Status")),
                   ],
                 ),
           const SizedBox(height: 32),
@@ -1186,22 +970,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(height: 32),
             HighRiskResidentsCard(users: allUsers, records: records),
             const SizedBox(height: 32),
-            _buildResidentTable(filteredUsers, records),
-            const SizedBox(height: 32),
-            _buildRecentActivity(records),
+            AdminRecentActivity(records: records),
           ] else ...[
             // DESKTOP: Balanced Two-Column Layout
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Left Side: Trends and Resident Registry
+                // Left Side: Trends and High Level Analytics
                 Expanded(
                   flex: 5,
                   child: Column(
                     children: [
                       AdminAnalyticsCard(records: records, users: allUsers),
-                      const SizedBox(height: 32),
-                      _buildResidentTable(filteredUsers, records),
                     ],
                   ),
                 ),
@@ -1213,7 +993,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       RepaintBoundary(child: HighRiskResidentsCard(users: allUsers, records: records)),
                       const SizedBox(height: 32),
-                      RepaintBoundary(child: _buildRecentActivity(records)),
+                      RepaintBoundary(child: AdminRecentActivity(records: records)),
                     ],
                   ),
                 ),
@@ -1225,431 +1005,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildMetricCard(
-      String title, String value, IconData icon, Color color, bool isMobile) {
-    return Expanded(
-      child: Container(
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4))
-            ]),
-        child: Column(
-          children: [
-            // Colored accent strip
-            Container(
-              height: 4,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(icon, color: color, size: 22),
-                      ),
-                      if (!isMobile)
-                        PopupMenuButton<String>(
-                          icon: Icon(Icons.more_horiz,
-                              color: Colors.grey.shade400, size: 20),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          itemBuilder: (context) => [
-                            if (title == "Total Residents")
-                              const PopupMenuItem(
-                                  value: 'users',
-                                  child: Row(children: [
-                                    Icon(Icons.people, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("View Resident Registry")
-                                  ])),
-                            if (title == "Checks Today")
-                              const PopupMenuItem(
-                                  value: 'validation',
-                                  child: Row(children: [
-                                    Icon(Icons.fact_check, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("Open Validation Tab")
-                                  ])),
-                            if (title == "Alerts")
-                              const PopupMenuItem(
-                                  value: 'alerts',
-                                  child: Row(children: [
-                                    Icon(Icons.warning_amber, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("View All Alerts")
-                                  ])),
-                            if (title == "Status")
-                              const PopupMenuItem(
-                                  value: 'refresh',
-                                  child: Row(children: [
-                                    Icon(Icons.refresh, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("Refresh Connection")
-                                  ])),
-                          ],
-                          onSelected: (val) {
-                            switch (val) {
-                              case 'users':
-                                context.push(AppRoutes.adminUsers);
-                                break;
-                              case 'validation':
-                                setState(() => _selectedIndex = 2);
-                                break;
-                              case 'alerts':
-                                setState(() => _selectedIndex = 1);
-                                break;
-                              case 'refresh':
-                                _handleManualRefresh();
-                                break;
-                            }
-                          },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(value,
-                      style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.brandDark)),
-                  const SizedBox(height: 4),
-                  Text(title,
-                      style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _handleCardAction(String val, String title) {
+    switch (val) {
+      case 'users':
+        context.push(AppRoutes.adminUsers);
+        break;
+      case 'validation':
+        setState(() => _selectedIndex = 2);
+        break;
+      case 'alerts':
+        setState(() => _selectedIndex = 1);
+        break;
+      case 'refresh':
+        _handleManualRefresh();
+        break;
+    }
   }
 
-  Widget _buildResidentTable(List<User> users, List<VitalSigns> records) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)
-          ]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Resident Registry",
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 200),
-                      child: SizedBox(
-                        height: 40,
-                        child: TextField(
-                          onChanged: (val) =>
-                              setState(() => _searchQuery = val),
-                          decoration: InputDecoration(
-                            hintText: "Search residents...",
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            contentPadding: EdgeInsets.zero,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 24),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
-              dividerThickness: 0.5,
-              columns: const [
-                DataColumn(
-                    label: Text("Name",
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text("Phone / ID",
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text("Last Status",
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text("Account",
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text("Actions",
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: users.take(10).map((user) {
-                // Find latest record for user
-                final userRecords =
-                    records.where((r) => r.userId == user.id).toList();
-                userRecords.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-                final latest =
-                    userRecords.isNotEmpty ? userRecords.first : null;
-
-                return DataRow(
-                    color: WidgetStateProperty.resolveWith<Color?>(
-                        (Set<WidgetState> states) {
-                      if (user.isActive == false) return Colors.grey[100];
-                      return null;
-                    }),
-                    cells: [
-                      DataCell(Row(children: [
-                        CircleAvatar(
-                            radius: 16,
-                            backgroundColor:
-                                AppColors.brandGreen.withValues(alpha: 0.1),
-                            child: const Icon(Icons.person,
-                                size: 18, color: AppColors.brandGreen)),
-                        const SizedBox(width: 12),
-                        Text(user.fullName,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                      ])),
-                      DataCell(Text(user.phoneNumber,
-                          style: const TextStyle(color: Colors.grey))),
-                      DataCell(latest != null
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color:
-                                    _getOverallHealthStatus(latest, user) == "Normal"
-                                        ? Colors.green.withValues(alpha: 0.1)
-                                        : Colors.red.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(_getOverallHealthStatus(latest, user),
-                                  style: TextStyle(
-                                      color: _getOverallHealthStatus(latest, user) ==
-                                              "Normal"
-                                          ? Colors.green[700]
-                                          : Colors.red[800],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold)),
-                            )
-                          : const Text("No records",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12))),
-                      DataCell(Row(
-                        children: [
-                          Switch(
-                            value: user.isActive == true,
-                            activeThumbColor: AppColors.brandGreen,
-                            onChanged: (val) {
-                              context
-                                  .read<IAuthRepository>()
-                                  .toggleUserStatus(user, val);
-                            },
-                          ),
-                          Text(user.isActive == true ? "Active" : "Archived",
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: user.isActive == true
-                                      ? AppColors.brandGreen
-                                      : Colors.grey)),
-                        ],
-                      )),
-                      DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                            icon: const Icon(Icons.analytics,
-                                size: 20, color: AppColors.brandDark),
-                            onPressed: () =>
-                                _showResidentProfile(user, records)),
-                        if (AdminSecurityService().currentRole ==
-                            AdminRole.superAdmin) ...[
-                          IconButton(
-                              icon: const Icon(Icons.edit,
-                                  size: 20, color: Colors.blue),
-                              onPressed: () async {
-                                if (await _verifyAdminAccess()) {
-                                  _editUser(user);
-                                }
-                              }),
-                          IconButton(
-                              icon: const Icon(Icons.delete,
-                                  size: 20, color: Colors.red),
-                              onPressed: () async {
-                                if (await _verifyAdminAccess()) {
-                                  _confirmDeleteUser(user);
-                                }
-                              }),
-                        ],
-                      ]))
-                    ]);
-              }).toList(),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  void _showResidentProfile(User user, List<VitalSigns> allRecords) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: "Profile",
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            elevation: 16,
-            child: AdminResidentProfileSidebar(
-              resident: user,
-              residentRecords:
-                  allRecords.where((r) => r.userId == user.id).toList(),
-              onMessagePressed: () {
-                setState(() => _selectedIndex = 4); // Inbox is now index 4
-              },
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        return SlideTransition(
-          position: Tween(begin: const Offset(1, 0), end: const Offset(0, 0))
-              .animate(
-                  CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic)),
-          child: child,
-        );
-      },
-    );
-  }
-
-  Widget _buildRecentActivity(List<VitalSigns> records) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)
-          ]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Recent Activity",
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark)),
-              Icon(Icons.history, color: Colors.grey)
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (records.isEmpty)
-            const Text("No recent activity.",
-                style: TextStyle(color: Colors.grey))
-          else
-            ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: records.length > 10 ? 10 : records.length,
-                separatorBuilder: (context, index) => const Divider(height: 32),
-                itemBuilder: (context, index) {
-                  final record = records[index];
-                  // Lookup user for this record
-                  final user = context.read<IAuthRepository>().users.firstWhere(
-                      (u) => u.id == record.userId,
-                      orElse: () => User(
-                          id: '',
-                          firstName: 'Unknown',
-                          middleInitial: '',
-                          lastName: '',
-                          sitio: '',
-                          phoneNumber: '',
-                          pinCode: '123456',
-                          dateOfBirth: DateTime.now(),
-                          gender: '',
-                          username: 'unknown'));
-
-                  return Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          shape: BoxShape.circle),
-                      child: const Icon(Icons.monitor_heart,
-                          color: Colors.blue, size: 20),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text("${user.firstName} completed a check",
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text(
-                              "${record.timestamp.day}/${record.timestamp.month}/${record.timestamp.year} at ${record.timestamp.hour}:${record.timestamp.minute.toString().padLeft(2, '0')}",
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 12)),
-                        ])),
-                    SizedBox(
-                      width: 70,
-                      child: Text(
-                        _getOverallHealthStatus(record, user),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: _getOverallHealthStatus(record, user) == "Normal"
-                                ? AppColors.brandGreen
-                                : Colors.red),
-                      ),
-                    )
-                  ]);
-                })
-        ],
-      ),
-    );
-  }
 }

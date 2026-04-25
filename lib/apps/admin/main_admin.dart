@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+// Added for RendererBinding
 import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
 import 'package:kiosk_application/core/services/system/app_environment.dart';
 
-// CONFIG
+// ... existing imports ...
 import 'package:kiosk_application/core/config/routes.dart';
 import 'package:kiosk_application/core/config/theme.dart';
-
-// DATA & LOGIC
 import 'package:kiosk_application/features/auth/data/auth_repository.dart';
 import 'package:kiosk_application/features/user_history/data/history_repository.dart';
 import 'package:kiosk_application/core/services/hardware/sensor_manager.dart';
@@ -15,9 +14,7 @@ import 'package:kiosk_application/features/health_check/logic/health_wizard_prov
 import 'package:kiosk_application/features/admin/data/admin_repository.dart';
 import 'package:kiosk_application/features/patient/data/mobile_navigation_provider.dart';
 import 'package:kiosk_application/features/chat/data/chat_repository.dart';
-
 import 'package:kiosk_application/core/providers/language_provider.dart';
-
 import 'package:kiosk_application/core/services/system/initialization_service.dart';
 import 'package:kiosk_application/features/auth/domain/i_auth_repository.dart';
 import 'package:kiosk_application/features/user_history/domain/i_history_repository.dart';
@@ -32,25 +29,30 @@ void main() async {
   await InitializationService().initialize();
 
   runApp(
-    MultiProvider(
-      providers: [
-        Provider(create: (_) => SensorManager()),
-        ChangeNotifierProvider<IAuthRepository>(
-            create: (_) => LocalAuthRepository(), lazy: false),
-        ChangeNotifierProvider<IHistoryRepository>(
-            create: (_) => LocalHistoryRepository()),
-        ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
-        ChangeNotifierProvider<IChatRepository>(
-            create: (_) => LocalChatRepository()),
-        ChangeNotifierProvider(
-          create: (context) => HealthWizardProvider(
-            context.read<SensorManager>(),
+    // ExcludeSemantics at the absolute root is the most robust way to 
+    // prevent Flutter from sending any UI updates to the Windows 
+    // Accessibility Bridge (AXTree).
+    ExcludeSemantics(
+      child: MultiProvider(
+        providers: [
+          Provider(create: (_) => SensorManager()),
+          ChangeNotifierProvider<IAuthRepository>(
+              create: (_) => LocalAuthRepository(), lazy: false),
+          ChangeNotifierProvider<IHistoryRepository>(
+              create: (_) => LocalHistoryRepository()),
+          ChangeNotifierProvider(create: (_) => AdminRepository()..init()),
+          ChangeNotifierProvider(create: (_) => LanguageProvider()),
+          ChangeNotifierProvider(create: (_) => MobileNavigationProvider()),
+          ChangeNotifierProvider<IChatRepository>(
+              create: (_) => LocalChatRepository()),
+          ChangeNotifierProvider(
+            create: (context) => HealthWizardProvider(
+              context.read<SensorManager>(),
+            ),
           ),
-        ),
-      ],
-      child: const AdminDesktopApp(),
+        ],
+        child: const AdminDesktopApp(),
+      ),
     ),
   );
 }
@@ -60,19 +62,13 @@ class AdminDesktopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ExcludeSemantics disables the Windows accessibility bridge entirely,
-    // which is the root cause of "Failed to update ui::AXTree" errors.
-    // This admin app is a private health management tool and does not
-    // require screen reader support.
-    return ExcludeSemantics(
-      child: MaterialApp.router(
-        title: 'Admin Desktop',
-        theme: AppTheme.lightTheme,
-        // FIXED: Uses adminRouter to start at Admin Login
-        routerConfig: adminRouter,
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: const FluidScrollBehavior(),
-      ),
+    return MaterialApp.router(
+      title: 'Admin Desktop',
+      theme: AppTheme.lightTheme,
+      // FIXED: Uses adminRouter to start at Admin Login
+      routerConfig: adminRouter,
+      debugShowCheckedModeBanner: false,
+      scrollBehavior: const FluidScrollBehavior(),
     );
   }
 }
