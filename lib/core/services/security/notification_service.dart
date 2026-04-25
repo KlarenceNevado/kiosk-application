@@ -176,9 +176,9 @@ class NotificationService {
     if (androidPlugin != null) {
       const List<AndroidNotificationChannel> channels = [
         AndroidNotificationChannel(
-          'patient_alerts_channel',
-          'Patient Alerts',
-          description: 'Emergency and status alerts for patients',
+          'resident_alerts_channel',
+          'Resident Alerts',
+          description: 'Emergency and status alerts for residents',
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
@@ -287,9 +287,9 @@ class NotificationService {
 
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'patient_alerts_channel',
-      'Patient Alerts',
-      channelDescription: 'Emergency and status alerts for patients',
+      'resident_alerts_channel',
+      'Resident Alerts',
+      channelDescription: 'Emergency and status alerts for residents',
       importance: Importance.max,
       priority: Priority.max, // URGENT
       showWhen: true,

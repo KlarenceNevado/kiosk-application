@@ -12,6 +12,7 @@ import '../system/power_manager_service.dart';
 import '../security/notification_service.dart';
 import 'drivers/fingerprint_service.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
+import '../system/app_environment.dart';
 
 class SensorManager {
   static final SensorManager _instance = SensorManager._internal();
@@ -39,7 +40,10 @@ class SensorManager {
 
   bool isPhysicallyConnected(SensorType type) => !isRealHardware || (_physicalStatus[type] ?? false);
   
-  bool get isRealHardware => !kIsWeb && (Platform.isLinux || Platform.isAndroid || Platform.isWindows); // Auto-detect real hardware on supported platforms
+  bool get isRealHardware =>
+      !kIsWeb &&
+      (Platform.isLinux || Platform.isAndroid || Platform.isWindows) &&
+      AppEnvironment().hasHardwareAccess; // ONLY initialize real hardware in Kiosk mode
 
   void _initSensors() {
     final bool realHardware = isRealHardware;
@@ -48,11 +52,16 @@ class SensorManager {
       debugPrint(
           "🛠️ [SensorManager] Initializing REAL hardware with Dynamic Port Discovery.");
       _discoverAndAssignPorts();
-    } else {
+    } else if (AppEnvironment().mode == AppMode.kiosk || AppEnvironment().useSimulation) {
       debugPrint(
           "🧪 [SensorManager] Initializing MOCK hardware for development.");
       for (var type in SensorType.values) {
         _sensors[type] = MockSensorService(type);
+      }
+    } else {
+      debugPrint("🔇 [SensorManager] Hardware disabled for ${AppEnvironment().mode}. Using NULL services.");
+      for (var type in SensorType.values) {
+        _sensors[type] = NullSensorService(type);
       }
     }
 

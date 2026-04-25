@@ -98,7 +98,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   }
 
   @override
-  Future<List<User>> searchPatients(String query) async {
+  Future<List<User>> searchResidents(String query) async {
     if (query.isEmpty) return [];
 
     try {
@@ -118,7 +118,7 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   /// Mobile Companion Login (Phone + PIN) — Cloud only
   @override
-  Future<String?> loginPatientDevice(String phone, String pin) async {
+  Future<String?> loginResidentDevice(String phone, String pin) async {
     _isLoading = true;
     notifyListeners();
 
@@ -357,7 +357,24 @@ class WebAuthRepository extends ChangeNotifier implements IAuthRepository {
   Future<bool> setPinCode(String newPin) async => false;
 
   @override
-  Future<bool> verifyPatientPin(String enteredPin) async => false;
+  Future<bool> verifyResidentPin(String enteredPin) async => false;
+
+  @override
+  Future<void> assignHealthWorker({
+    required String residentId,
+    required String bhwId,
+    required String bhwName,
+  }) async {
+    try {
+      await _supabase
+          .from('patients')
+          .update({
+            'assigned_bhw_id': bhwId,
+            'assigned_bhw_name': bhwName,
+          })
+          .eq('id', residentId);
+    } catch (_) {}
+  }
 
   @override
   User? getUserById(String uid) {

@@ -23,7 +23,7 @@ import 'package:kiosk_application/features/chat/domain/i_chat_repository.dart';
 import 'package:kiosk_application/core/domain/i_system_repository.dart';
 import 'package:kiosk_application/core/repositories/web_system_repository.dart';
 
-/// Web PWA entry point for the Patient Mobile app.
+/// Web PWA entry point for the Resident Mobile app.
 /// Uses web-safe repositories and initialization to avoid all native dependencies.
 void main() {
   runZonedGuarded(() async {
@@ -48,7 +48,7 @@ void main() {
               create: (_) => WebChatRepository()),
           Provider<ISystemRepository>(create: (_) => WebSystemRepository()),
         ],
-        child: const PatientWebApp(),
+        child: const ResidentWebApp(),
       ),
     );
   }, (error, stack) {
@@ -57,15 +57,15 @@ void main() {
   });
 }
 
-class PatientWebApp extends StatelessWidget {
-  const PatientWebApp({super.key});
+class ResidentWebApp extends StatelessWidget {
+  const ResidentWebApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Isla Verde Patient Companion',
+      title: 'Isla Verde Resident Companion',
       theme: PatientAppTheme.lightTheme,
-      routerConfig: webPatientRouter,
+      routerConfig: webResidentRouter,
       debugShowCheckedModeBanner: false,
     );
   }

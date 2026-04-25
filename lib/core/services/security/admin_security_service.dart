@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
+import '../../../features/auth/models/user_model.dart';
 
 enum AdminRole { superAdmin, staffAdmin, none }
 
@@ -22,6 +23,7 @@ class AdminSecurityService {
   static const String _keyLockoutUntil = 'secure_admin_lockout_until';
 
   AdminRole currentRole = AdminRole.none;
+  User? activeStaff;
 
   /// Gets a unique hardware fingerprint for this machine to bind the PIN
   String _getHardwareFingerprint() {
@@ -75,39 +77,72 @@ class AdminSecurityService {
     return digest.toString();
   }
 
-  /// Checks if the provided PIN matches the stored secure PIN
+  /// Checks if the provided PIN matches the stored secure PIN or any registered staff PIN
   /// Returns the role associated with the PIN, or AdminRole.none if invalid
-  Future<AdminRole> verifyPin(String inputPin) async {
+  Future<AdminRole> verifyPin(String inputPin, {String? userId}) async {
     final prefs = await SharedPreferences.getInstance();
     final String? storedSuperHash = prefs.getString(_keyAdminPin);
     final String? storedStaffHash = prefs.getString(_keyStaffAdminPin);
 
-    // If no Super Admin PIN is configured, something is wrong
-    if (storedSuperHash == null) {
-      debugPrint("Security Error: No Admin PIN Configured.");
-      return AdminRole.none;
+    // 1. MASTER SUPER ADMIN CHECK (Highest Priority)
+    if (storedSuperHash != null) {
+      final superSalt = await _getOrGenerateSalt();
+      final inputSuperHash = _hashPin(inputPin, superSalt);
+      if (_compareHashes(inputSuperHash, storedSuperHash)) {
+        currentRole = AdminRole.superAdmin;
+        activeStaff = User.empty().copyWith(firstName: "Super", lastName: "Admin", role: "admin");
+        return AdminRole.superAdmin;
+      }
     }
 
-    final superSalt = await _getOrGenerateSalt();
-    final inputSuperHash = _hashPin(inputPin, superSalt);
+    // 2. SPECIFIC USER CHECK (If userId provided)
+    if (userId != null) {
+      final db = await DatabaseHelper.instance.database;
+      final maps = await db.query('residents', where: 'id = ?', whereArgs: [userId]);
+      if (maps.isNotEmpty) {
+        final user = User.fromMap(maps.first);
+        if (user.role == 'admin' || user.role == 'bhw') {
+          // Verify PIN (Legacy or Hash)
+          bool isValid = false;
+          if (user.pinHash != null && user.pinSalt != null) {
+            final hashedInput = _hashPin(inputPin, user.pinSalt!);
+            isValid = _compareHashes(hashedInput, user.pinHash!);
+          } else {
+            isValid = user.pinCode == inputPin;
+          }
 
-    bool isSuperAdmin = _compareHashes(inputSuperHash, storedSuperHash);
-
-    if (isSuperAdmin) {
-      currentRole = AdminRole.superAdmin;
-      return AdminRole.superAdmin;
+          if (isValid) {
+            activeStaff = user;
+            currentRole = user.role == 'admin' ? AdminRole.superAdmin : AdminRole.staffAdmin;
+            return currentRole;
+          }
+        }
+      }
     }
 
-    // Checking Staff Admin
+    // 3. LEGACY/GLOBAL STAFF PIN CHECK (Fallback)
     if (storedStaffHash != null) {
-      final staffSalt = prefs.getString(_keyStaffAdminSalt) ??
-          superSalt; // fallback if missing
+      final staffSalt = prefs.getString(_keyStaffAdminSalt) ?? await _getOrGenerateSalt();
       final inputStaffHash = _hashPin(inputPin, staffSalt);
-      bool isStaffAdmin = _compareHashes(inputStaffHash, storedStaffHash);
-
-      if (isStaffAdmin) {
+      if (_compareHashes(inputStaffHash, storedStaffHash)) {
         currentRole = AdminRole.staffAdmin;
+        activeStaff = User.empty().copyWith(firstName: "General", lastName: "BHW", role: "bhw");
         return AdminRole.staffAdmin;
+      }
+    }
+
+    // 4. ANY MATCHING STAFF PIN (If no userId provided, search for first match)
+    if (userId == null) {
+      final db = await DatabaseHelper.instance.database;
+      final maps = await db.query('residents', 
+        where: 'role IN ("admin", "bhw") AND pinCode = ?', 
+        whereArgs: [inputPin]);
+      
+      if (maps.isNotEmpty) {
+        final user = User.fromMap(maps.first);
+        activeStaff = user;
+        currentRole = user.role == 'admin' ? AdminRole.superAdmin : AdminRole.staffAdmin;
+        return currentRole;
       }
     }
 
@@ -219,6 +254,7 @@ class AdminSecurityService {
         await prefs.remove(_keyStaffAdminPin);
         await prefs.remove(_keyStaffAdminSalt);
         currentRole = AdminRole.none;
+        activeStaff = null;
         // Delete the key after use for security
         await resetFile.delete();
 

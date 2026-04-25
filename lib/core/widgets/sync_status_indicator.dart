@@ -71,49 +71,51 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
           builder: (context, snapshot) {
             final lastSync = snapshot.data;
 
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: (widget.color ?? Colors.black).withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: (widget.color ?? Colors.black).withValues(alpha: 0.1),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FadeTransition(
-                    opacity: isOnline ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          if (isOnline)
-                            BoxShadow(
-                              color: statusColor.withValues(alpha: 0.4),
-                              blurRadius: 4,
-                              spreadRadius: 2,
-                            ),
-                        ],
-                      ),
-                    ),
+            return RepaintBoundary(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (widget.color ?? Colors.black).withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: (widget.color ?? Colors.black).withValues(alpha: 0.1),
                   ),
-                  if (widget.showLabel) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatLastSync(lastSync),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: (widget.color ?? Colors.black).withValues(alpha: 0.7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FadeTransition(
+                      opacity: isOnline ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            if (isOnline)
+                              BoxShadow(
+                                color: statusColor.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                spreadRadius: 2,
+                              ),
+                          ],
+                        ),
                       ),
                     ),
+                    if (widget.showLabel) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatLastSync(lastSync),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: (widget.color ?? Colors.black).withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             );
           },

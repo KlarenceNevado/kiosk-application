@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'connection_manager.dart';
-import 'sync/patient_sync_handler.dart';
+import 'sync/resident_sync_handler.dart';
 import 'sync/vitals_sync_handler.dart';
 import 'sync/system_sync_handler.dart';
 import 'sync/chat_sync_handler.dart';
@@ -19,7 +19,7 @@ import 'package:kiosk_application/core/services/security/security_logger.dart';
 
 class SyncService with WidgetsBindingObserver {
   SyncService._internal({
-    PatientSyncHandler? pHandler,
+    ResidentSyncHandler? pHandler,
     VitalsSyncHandler? vHandler,
     SystemSyncHandler? sHandler,
     ChatSyncHandler? cHandler,
@@ -32,7 +32,7 @@ class SyncService with WidgetsBindingObserver {
         sHandler != null &&
         cHandler != null &&
         lHandler != null) {
-      patientHandler = pHandler;
+      residentHandler = pHandler;
       vitalsHandler = vHandler;
       systemHandler = sHandler;
       chatHandler = cHandler;
@@ -40,7 +40,7 @@ class SyncService with WidgetsBindingObserver {
       visitorHandler = vLogHandler ?? VisitorSyncHandler(Supabase.instance.client);
     } else {
       final client = Supabase.instance.client;
-      patientHandler = pHandler ?? PatientSyncHandler(client);
+      residentHandler = pHandler ?? ResidentSyncHandler(client);
       vitalsHandler = vHandler ?? VitalsSyncHandler(client);
       systemHandler = sHandler ?? SystemSyncHandler(client);
       chatHandler = cHandler ?? ChatSyncHandler(client);
@@ -57,7 +57,7 @@ class SyncService with WidgetsBindingObserver {
 
   @visibleForTesting
   static SyncService createMocked({
-    required PatientSyncHandler p,
+    required ResidentSyncHandler p,
     required VitalsSyncHandler v,
     required SystemSyncHandler s,
     required ChatSyncHandler c,
@@ -73,7 +73,7 @@ class SyncService with WidgetsBindingObserver {
   static SyncService? _instance;
   factory SyncService() => _instance ??= SyncService._internal();
 
-  late final PatientSyncHandler patientHandler;
+  late final ResidentSyncHandler residentHandler;
   late final VitalsSyncHandler vitalsHandler;
   late final SystemSyncHandler systemHandler;
   late final ChatSyncHandler chatHandler;
@@ -81,6 +81,7 @@ class SyncService with WidgetsBindingObserver {
   late final VisitorSyncHandler visitorHandler;
 
   bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
   Completer<void>? _syncMutex;
   String? _userId;
 
@@ -91,6 +92,9 @@ class SyncService with WidgetsBindingObserver {
 
   final _syncStatusController = StreamController<DateTime?>.broadcast();
   Stream<DateTime?> get lastSyncStream => _syncStatusController.stream;
+
+  final _syncingController = StreamController<bool>.broadcast();
+  Stream<bool> get syncingStream => _syncingController.stream;
 
   // --- PUBLIC STREAMS (Delegated) ---
   Stream<List<Map<String, dynamic>>> get announcementStream =>
@@ -105,7 +109,7 @@ class SyncService with WidgetsBindingObserver {
       systemHandler.scheduleStream;
   Stream<List<Map<String, dynamic>>> get alertStream =>
       systemHandler.alertStream;
-  Stream<void> get patientStream => patientHandler.stream;
+  Stream<void> get residentStream => residentHandler.stream;
   Stream<void> get vitalsStream => vitalsHandler.stream;
 
   final List<Future<void> Function()> _syncCallbacks = [];
@@ -133,7 +137,7 @@ class SyncService with WidgetsBindingObserver {
     // Subscriptions
     final activeId = _getCurrentUserId();
     systemHandler.subscribeAll();
-    patientHandler.subscribe((_) => patientHandler.pull());
+    residentHandler.subscribe((_) => residentHandler.pull());
     vitalsHandler.subscribe((_) => vitalsHandler.pull());
 
     chatHandler.subscribe(activeId);
@@ -205,7 +209,7 @@ class SyncService with WidgetsBindingObserver {
     SecurityLogger.info("Starting EAGER FULL SYNC for user ID: $userId");
     await _withSyncMutex(() async {
       try {
-        await patientHandler.pull();
+        await residentHandler.pull();
         await systemHandler.pull();
         await vitalsHandler.pull();
         await chatHandler.pull(userId);
@@ -226,18 +230,13 @@ class SyncService with WidgetsBindingObserver {
     SecurityLogger.info("🚀 Starting FORCE PUSH ALL for system unification...");
     await _withSyncMutex(() async {
       try {
-        // 1. Fetch all local patients
         final patients = await DatabaseHelper.instance.getPatients();
-        for (final p in patients) {
-          await patientHandler.createPatient(p);
-        }
-
-        // 2. Fetch all local vitals
         final vitals = await DatabaseHelper.instance.getAllRecords();
-        for (final v in vitals) {
-          // We use _upsertVitalSign which is private, let's make a public one or use create
-          await vitalsHandler.createVitalSign(v);
-        }
+
+        await Future.wait([
+          ...patients.map((p) => residentHandler.createResident(p)),
+          ...vitals.map((v) => vitalsHandler.createVitalSign(v)),
+        ]);
 
         debugPrint("✅ SyncService: Force Push All complete.");
       } catch (e) {
@@ -251,7 +250,7 @@ class SyncService with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _attemptSync();
       systemHandler.subscribeAll();
-      patientHandler.subscribe((_) => patientHandler.pull());
+      residentHandler.subscribe((_) => residentHandler.pull());
       vitalsHandler.subscribe((_) => vitalsHandler.pull());
     }
   }
@@ -259,7 +258,7 @@ class SyncService with WidgetsBindingObserver {
   void stopListening() {
     WidgetsBinding.instance.removeObserver(this);
     systemHandler.unsubscribeAll();
-    patientHandler.unsubscribe();
+    residentHandler.unsubscribe();
     vitalsHandler.unsubscribe();
   }
 
@@ -293,6 +292,7 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> _syncPendingRecords() async {
     _isSyncing = true;
+    _syncingController.add(true);
     try {
       for (final callback in _syncCallbacks) {
         await callback();
@@ -300,7 +300,7 @@ class SyncService with WidgetsBindingObserver {
 
       // Parallel Push: Only Admin pushes system tables
       await Future.wait([
-        patientHandler.push(),
+        residentHandler.push(),
         vitalsHandler.push(),
         if (AppEnvironment().isDesktopAdmin) systemHandler.push(),
         chatHandler.push(),
@@ -314,7 +314,7 @@ class SyncService with WidgetsBindingObserver {
       // Parallel Pull
       final activeId = _getCurrentUserId();
       await Future.wait([
-        patientHandler.pull(),
+        residentHandler.pull(),
         vitalsHandler.pull(),
         systemHandler.pull(),
         chatHandler.pull(activeId),
@@ -326,6 +326,7 @@ class SyncService with WidgetsBindingObserver {
       _syncStatusController.add(_lastSyncTime);
     } finally {
       _isSyncing = false;
+      _syncingController.add(false);
     }
   }
 
@@ -375,28 +376,28 @@ class SyncService with WidgetsBindingObserver {
     }
   }
 
-  // --- DELEGATION: PATIENTS ---
-  Future<User?> createPatient(User user) => patientHandler.createPatient(user);
-  Future<bool> updatePatient(User user) => patientHandler.updatePatient(user);
-  Future<bool> deletePatient(String userId) =>
-      patientHandler.deletePatient(userId);
-  Future<List<User>> searchPatients(String query) =>
-      patientHandler.searchPatients(query);
-  Future<User?> authenticatePatient(String phone, String pin) =>
-      patientHandler.authenticatePatient(phone, pin);
+  // --- DELEGATION: RESIDENTS ---
+  Future<User?> createResident(User user) => residentHandler.createResident(user);
+  Future<bool> updateResident(User user) => residentHandler.updateResident(user);
+  Future<bool> deleteResident(String userId) =>
+      residentHandler.deleteResident(userId);
+  Future<List<User>> searchResidents(String query) =>
+      residentHandler.searchResidents(query);
+  Future<User?> authenticateResident(String phone, String pin) =>
+      residentHandler.authenticateResident(phone, pin);
   Future<List<User>> fetchDependents(String parentId) =>
-      patientHandler.fetchDependents(parentId);
-  Future<List<Map<String, dynamic>>> findPatient(String username, String phone) =>
-      patientHandler.findPatient(username, phone);
+      residentHandler.fetchDependents(parentId);
+  Future<List<Map<String, dynamic>>> findResident(String username, String phone) =>
+      residentHandler.findResident(username, phone);
 
   // --- DELEGATION: VITALS ---
   Future<void> createVitalSign(VitalSigns vital) =>
       vitalsHandler.createVitalSign(vital);
   Future<void> updateVitalSign(VitalSigns vital) =>
       vitalsHandler.updateVitalSign(vital);
-  Future<List<VitalSigns>> fetchPatientVitalsLocal(String userId) =>
+  Future<List<VitalSigns>> fetchResidentVitalsLocal(String userId) =>
       vitalsHandler.fetchPatientVitalsLocal(userId);
-  Future<List<VitalSigns>> fetchPatientVitals(String userId) =>
+  Future<List<VitalSigns>> fetchResidentVitals(String userId) =>
       vitalsHandler.fetchPatientVitals(userId);
   Future<void> syncFamilyVitals(List<String> ids) =>
       vitalsHandler.syncFamilyVitals(ids);
@@ -479,12 +480,17 @@ class SyncService with WidgetsBindingObserver {
       {bool triggerStream = true}) async {
     await _withSyncMutex(() async {
       await Future.wait(
-          [patientHandler.pull(), vitalsHandler.pull(), systemHandler.pull()]);
+          [residentHandler.pull(), vitalsHandler.pull(), systemHandler.pull()]);
       if (authRepo != null) {
         await authRepo.refreshUsers();
       }
       if (historyRepo != null) {
         await historyRepo.loadAllHistory();
+      }
+
+      if (triggerStream) {
+        _lastSyncTime = DateTime.now();
+        _syncStatusController.add(_lastSyncTime);
       }
     });
   }

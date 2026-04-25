@@ -7,14 +7,14 @@ import '../../auth/domain/i_auth_repository.dart';
 import '../domain/i_chat_repository.dart';
 import '../models/chat_message.dart';
 
-class PatientChatScreen extends StatefulWidget {
-  const PatientChatScreen({super.key});
+class ResidentChatScreen extends StatefulWidget {
+  const ResidentChatScreen({super.key});
 
   @override
-  State<PatientChatScreen> createState() => _PatientChatScreenState();
+  State<ResidentChatScreen> createState() => _ResidentChatScreenState();
 }
 
-class _PatientChatScreenState extends State<PatientChatScreen> {
+class _ResidentChatScreenState extends State<ResidentChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String? _replyingToId;
@@ -27,7 +27,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<IAuthRepository>().currentUser;
       if (user != null) {
-        // In the patient app, we're always chatting with the admin (system)
+        // In the resident app, we're always chatting with the admin (system)
         final chatRepo = context.read<IChatRepository>();
         chatRepo.initChat(user.id, 'admin');
 
@@ -571,7 +571,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> {
   }
 
   void _showForwardPicker(ChatMessage msg) {
-    // For patients, they can forward to 'admin' (their only contact currently)
+    // For residents, they can forward to 'admin' (their only contact currently)
     // or maybe common family members? For now, let's keep it simple or allow forwarding back to admin.
     showDialog(
       context: context,

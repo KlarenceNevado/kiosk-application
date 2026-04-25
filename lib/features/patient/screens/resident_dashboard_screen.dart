@@ -12,14 +12,14 @@ import '../../../core/services/database/connection_manager.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 import 'dart:math' as math;
 
-class PatientDashboardScreen extends StatefulWidget {
-  const PatientDashboardScreen({super.key});
+class ResidentDashboardScreen extends StatefulWidget {
+  const ResidentDashboardScreen({super.key});
 
   @override
-  State<PatientDashboardScreen> createState() => _PatientDashboardScreenState();
+  State<ResidentDashboardScreen> createState() => _ResidentDashboardScreenState();
 }
 
-class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
+class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   bool _isLoading = true;
   List<VitalSigns> _vitals = [];
   String _errorMessage = '';
@@ -149,7 +149,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               Text(
-                                "Welcome, ${user?.firstName ?? 'Patient'}",
+                                "Welcome, ${user?.firstName ?? 'Resident'}",
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 26,

@@ -31,9 +31,9 @@ import '../../features/admin/screens/admin_diagnostics_screen.dart';
 import '../../features/health_check/screens/hardware_diagnostic_screen.dart';
 
 
-// --- PATIENT MOBILE APP ---
-import '../../features/patient/screens/patient_dashboard_screen.dart';
-import '../../features/patient/screens/patient_nav_shell.dart';
+// --- RESIDENT MOBILE APP ---
+import '../../features/patient/screens/resident_dashboard_screen.dart';
+import '../../features/patient/screens/resident_nav_shell.dart';
 import '../../features/mobile/screens/mobile_login_screen.dart';
 import '../../features/mobile/screens/mobile_splash_screen.dart';
 import '../../features/health_check/screens/public_results_screen.dart';
@@ -73,10 +73,10 @@ List<GoRoute> _sharedRoutes = [
   _fluidRoute(AppRoutes.adminDiagnostics, const AdminDiagnosticsScreen()),
   _fluidRoute(AppRoutes.adminHardware, const HardwareDiagnosticScreen()),
 
-  _fluidRoute(AppRoutes.patientSplash, const MobileSplashScreen()),
-  _fluidRoute(AppRoutes.patientLogin, const MobileLoginScreen()),
-  _fluidRoute(AppRoutes.patientDashboard, const PatientDashboardScreen()),
-  _fluidRoute(AppRoutes.patientHome, const PatientNavShell()),
+  _fluidRoute(AppRoutes.residentSplash, const MobileSplashScreen()),
+  _fluidRoute(AppRoutes.residentLogin, const MobileLoginScreen()),
+  _fluidRoute(AppRoutes.residentDashboard, const ResidentDashboardScreen()),
+  _fluidRoute(AppRoutes.residentHome, const ResidentNavShell()),
   _fluidRoute(AppRoutes.publicResult, (context, state) {
     final id = state.pathParameters['id'] ?? '';
     return PublicResultsScreen(recordId: id);
@@ -130,8 +130,8 @@ final GoRouter adminRouter = GoRouter(
   routes: _sharedRoutes,
 );
 
-// 3. PATIENT MOBILE ROUTER (Starts at Splash Screen)
-final GoRouter patientRouter = GoRouter(
-  initialLocation: AppRoutes.patientSplash,
+// 3. RESIDENT MOBILE ROUTER (Starts at Splash Screen)
+final GoRouter residentRouter = GoRouter(
+  initialLocation: AppRoutes.residentSplash,
   routes: _sharedRoutes,
 );

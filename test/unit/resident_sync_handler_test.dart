@@ -1,22 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
-import 'package:kiosk_application/core/services/database/sync/patient_sync_handler.dart';
+import 'package:kiosk_application/core/services/database/sync/resident_sync_handler.dart';
 import 'package:kiosk_application/features/auth/models/user_model.dart';
 import '../mocks/test_mocks.dart';
 
 void main() {
-  late PatientSyncHandler handler;
+  late ResidentSyncHandler handler;
   late MockSupabaseClient mockSupabase;
   late MockDatabaseHelper mockDb;
 
   setUp(() {
     mockSupabase = MockSupabaseClient();
     mockDb = MockDatabaseHelper();
-    handler = PatientSyncHandler(mockSupabase, mockDb);
+    handler = ResidentSyncHandler(mockSupabase, mockDb);
   });
 
-  group('PatientSyncHandler Unit Tests', () {
+  group('ResidentSyncHandler Unit Tests', () {
     final testUser = User(
       id: 'uuid-1234',
       firstName: 'John',
@@ -44,7 +44,7 @@ void main() {
       verifyNever(() => mockSupabase.from('patients'));
     });
 
-    test('push() successfully upserts unsynced patient', () async {
+    test('push() successfully upserts unsynced resident', () async {
       // Setup
       when(() => mockDb.getBlockedRecords('patients'))
           .thenAnswer((_) async => []);
@@ -80,13 +80,13 @@ void main() {
           .called(1);
     });
 
-    test('createPatient() handles legacy local_ IDs by skipping cloud push',
+    test('createResident() handles legacy local_ IDs by skipping cloud push',
         () async {
       final legacyUser = testUser.copyWith(id: 'local_123');
 
       when(() => mockDb.insertPatient(any())).thenAnswer((_) async => 1);
 
-      final result = await handler.createPatient(legacyUser);
+      final result = await handler.createResident(legacyUser);
 
       expect(result?.isSynced, isTrue);
       verifyNever(() => mockSupabase.from('patients'));

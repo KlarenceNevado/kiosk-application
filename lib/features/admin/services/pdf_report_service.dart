@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -5,197 +6,149 @@ import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 
 class PdfReportService {
-  static Future<void> generateAndPrintMonthlyReport({
+  // DEPRECATED: Standard Monthly Report removed as per user request for formal letter format.
+  // Use generateOfficialLGUReport instead.
+
+  static Future<void> generateOfficialLGUReport({
     required List<User> users,
     required List<VitalSigns> records,
+    required DateTime startDate,
+    required DateTime endDate,
+    String? sitio,
+    String? gender,
   }) async {
     final pdf = pw.Document();
+    final df = DateFormat('MMMM dd, yyyy');
+    
+    final filtered = records.where((r) {
+      final inDate = r.phtTimestamp.isAfter(startDate.subtract(const Duration(seconds: 1))) && 
+                     r.phtTimestamp.isBefore(endDate.add(const Duration(days: 1)));
+      
+      final user = users.firstWhere((u) => u.id == r.userId, orElse: () => User.empty());
+      
+      final sitioMatch = sitio == null || sitio == "ALL SITIOS" || user.sitio == sitio;
+      final genderMatch = gender == null || gender == "ALL GENDERS" || user.gender.toUpperCase() == gender.toUpperCase();
+      
+      return inDate && sitioMatch && genderMatch;
+    }).toList();
 
-    // 1. Calculate Summary Stats
-    final thisMonth = DateTime.now().month;
-    final thisYear = DateTime.now().year;
+    int highRiskCount = filtered.where((r) => r.systolicBP > 140 || r.oxygen < 92).length;
 
-    final currentMonthRecords = records
-        .where((r) =>
-            r.phtTimestamp.month == thisMonth &&
-            r.phtTimestamp.year == thisYear)
-        .toList();
-
-    int totalScreenings = currentMonthRecords.length;
-
-    // Find High Risk Patients
-    final Map<String, VitalSigns> userLatestRecord = {};
-    for (var r in currentMonthRecords) {
-      if (!userLatestRecord.containsKey(r.userId)) {
-        userLatestRecord[r.userId] = r;
-      }
-    }
-
-    List<Map<String, dynamic>> highRisk = [];
-    userLatestRecord.forEach((userId, vitals) {
-      if (vitals.systolicBP > 140 || vitals.oxygen < 92) {
-        final user = users.firstWhere((u) => u.id == userId,
-            orElse: () => User(
-                id: '',
-                firstName: 'Unknown',
-                middleInitial: '',
-                lastName: '',
-                sitio: '',
-                phoneNumber: '',
-                pinCode: '',
-                dateOfBirth: DateTime.now(),
-                gender: '',
-                username: 'unknown'));
-        highRisk.add({'user': user, 'vitals': vitals});
-      }
-    });
-
-    // Sort by most critical BP
-    highRisk.sort((a, b) => (b['vitals'] as VitalSigns)
-        .systolicBP
-        .compareTo((a['vitals'] as VitalSigns).systolicBP));
-    final topHighRisk = highRisk.take(10).toList();
-
-    // 2. Build PDF Document Stack
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
+        margin: const pw.EdgeInsets.all(48),
         build: (pw.Context context) {
           return [
-            _buildHeader(thisMonth, thisYear),
+            // Letterhead
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text("REPUBLIC OF THE PHILIPPINES", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text("PROVINCE OF BATANGAS", style: const pw.TextStyle(fontSize: 10)),
+                pw.Text("CITY HEALTH OFFICE - ISLA VERDE DISTRICT", style: const pw.TextStyle(fontSize: 10)),
+                pw.SizedBox(height: 4),
+                pw.Text("OFFICE OF THE BARANGAY HEALTH WORKER", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(thickness: 1),
+              ]
+            ),
             pw.SizedBox(height: 24),
-            _buildSummaryRow(users.length, totalScreenings, highRisk.length),
-            pw.SizedBox(height: 32),
-            pw.Text("Top High-Risk Individuals (Needs Attention)",
-                style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.red800)),
+            
+            // Letter Meta
+            pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text("Date: ${df.format(DateTime.now())}")),
+            pw.SizedBox(height: 24),
+            
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text("THE CITY HEALTH OFFICER", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text("City Health Main Office"),
+                pw.Text("Batangas City, Philippines"),
+              ]
+            ),
+            pw.SizedBox(height: 24),
+            
+            pw.Text("SUBJECT: BARANGAY HEALTH SITUATION REPORT (${df.format(startDate)} TO ${df.format(endDate)})", 
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
+            pw.SizedBox(height: 24),
+            
+            pw.Text("Dear Sir/Madam:"),
             pw.SizedBox(height: 12),
-            _buildHighRiskTable(topHighRisk),
-            pw.SizedBox(height: 32),
-            pw.Text("Monthly Activity Log",
-                style:
-                    pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.Paragraph(
+              text: "Respectfully submitting herewith the comprehensive health screening report for Barangay Isla Verde (${sitio ?? "All Sitios"}) for the period of ${df.format(startDate)} to ${df.format(endDate)}. This data was captured via the Automated Kiosk System and has been verified by the assigned Barangay Health Workers (BHWs).",
+            ),
+            
             pw.SizedBox(height: 12),
-            _buildActivityTable(users, currentMonthRecords.take(20).toList()),
-            pw.SizedBox(height: 20),
-            pw.Align(
-                alignment: pw.Alignment.center,
-                child: pw.Text("--- End of Report ---",
-                    style: const pw.TextStyle(color: PdfColors.grey)))
+            pw.Text("SUMMARY OF CLINICAL FINDINGS:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            pw.Bullet(text: "Total Residents Screened: ${filtered.length}"),
+            pw.Bullet(text: "High-Risk Hypertensive/Hypoxic Cases Identified: $highRiskCount"),
+            pw.Bullet(text: "Target Demographic: General Population"),
+            
+            pw.SizedBox(height: 24),
+            pw.Text("DETAILED CLINICAL LOG:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            _buildOfficialTable(users, filtered),
+            
+            pw.SizedBox(height: 40),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("Prepared by:", style: pw.TextStyle(fontStyle: pw.FontStyle.italic)),
+                    pw.SizedBox(height: 20),
+                    pw.Container(
+                      width: 150, 
+                      decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide()))
+                    ),
+                    pw.Text("Barangay Health Worker", style: const pw.TextStyle(fontSize: 10)),
+                  ]
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("Noted by:", style: pw.TextStyle(fontStyle: pw.FontStyle.italic)),
+                    pw.SizedBox(height: 20),
+                    pw.Container(
+                      width: 150, 
+                      decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide()))
+                    ),
+                    pw.Text("Barangay Chairperson", style: const pw.TextStyle(fontSize: 10)),
+                  ]
+                ),
+              ]
+            ),
           ];
         },
       ),
     );
 
-    // 3. Initiate Print / Save Dialog via OS
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Barangay_Health_Report_${thisYear}_$thisMonth.pdf',
+      name: 'LGU_Official_Report_${DateFormat('yyyyMMdd').format(startDate)}.pdf',
     );
   }
 
-  static pw.Widget _buildHeader(int month, int year) {
-    return pw
-        .Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-      pw.Text("Barangay Health & Wellness",
-          style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue900)),
-      pw.SizedBox(height: 4),
-      pw.Text("Automated System Analytics Report",
-          style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
-      pw.SizedBox(height: 8),
-      pw.Text("Generated for: Month $month, $year",
-          style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
-      pw.Divider(thickness: 2, color: PdfColors.blueGrey100),
-    ]);
-  }
-
-  static pw.Widget _buildSummaryRow(
-      int totalPatients, int monthScreenings, int totalHighRisk) {
-    return pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          _buildStatBox(
-              "Total Registered", "$totalPatients", PdfColors.blue800),
-          _buildStatBox(
-              "Screenings This Month", "$monthScreenings", PdfColors.green800),
-          _buildStatBox("High-Risk Alerts", "$totalHighRisk", PdfColors.red800),
-        ]);
-  }
-
-  static pw.Widget _buildStatBox(String label, String value, PdfColor color) {
-    return pw.Container(
-        width: 130,
-        padding: const pw.EdgeInsets.all(12),
-        decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: color, width: 2),
-            borderRadius: pw.BorderRadius.circular(8)),
-        child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Text(value,
-                  style: pw.TextStyle(
-                      fontSize: 24,
-                      fontWeight: pw.FontWeight.bold,
-                      color: color)),
-              pw.SizedBox(height: 4),
-              pw.Text(label,
-                  style: const pw.TextStyle(fontSize: 10),
-                  textAlign: pw.TextAlign.center)
-            ]));
-  }
-
-  static pw.Widget _buildHighRiskTable(List<Map<String, dynamic>> highRisk) {
-    if (highRisk.isEmpty) {
-      return pw.Container(
-          padding: const pw.EdgeInsets.all(12),
-          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-          child: pw.Text("No high-risk patients detected this month."));
-    }
-
+  static pw.Widget _buildOfficialTable(List<User> users, List<VitalSigns> records) {
     return pw.TableHelper.fromTextArray(
-        context: null,
-        headerDecoration: const pw.BoxDecoration(color: PdfColors.red100),
-        headerHeight: 30,
-        cellHeight: 30,
-        cellAlignments: {
-          0: pw.Alignment.centerLeft,
-          1: pw.Alignment.center,
-          2: pw.Alignment.center,
-          3: pw.Alignment.center,
-        },
-        headers: ["Patient Name", "Phone", "BP (Sys/Dia)", "SpO2"],
-        data: highRisk.map((h) {
-          final user = h['user'] as User;
-          final v = h['vitals'] as VitalSigns;
-          return [
-            user.fullName,
-            user.phoneNumber,
-            "${v.systolicBP}/${v.diastolicBP}",
-            "${v.oxygen}%"
-          ];
-        }).toList());
-  }
-
-  static pw.Widget _buildActivityTable(
-      List<User> users, List<VitalSigns> records) {
-    return pw.TableHelper.fromTextArray(
-        context: null,
-        headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-        headers: ["Date", "Time", "Patient ID", "Heart Rate", "BMI Category"],
-        data: records.map((r) {
-          return [
-            "${r.phtTimestamp.year}-${r.phtTimestamp.month.toString().padLeft(2, '0')}-${r.phtTimestamp.day.toString().padLeft(2, '0')}",
-            "${r.phtTimestamp.hour.toString().padLeft(2, '0')}:${r.phtTimestamp.minute.toString().padLeft(2, '0')}",
-            r.userId.length > 8 ? r.userId.substring(0, 8) : r.userId,
-            "${r.heartRate} bpm",
-            r.bmiCategory ?? "N/A"
-          ];
-        }).toList());
+      context: null,
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+      cellStyle: const pw.TextStyle(fontSize: 8),
+      headers: ["DATE", "RESIDENT NAME", "SITIO", "BP (SYS/DIA)", "HR", "TEMP", "O2%"],
+      data: records.map((r) {
+        final user = users.firstWhere((u) => u.id == r.userId, orElse: () => User.empty());
+        return [
+          DateFormat('MM/dd/yy').format(r.phtTimestamp),
+          user.fullName.toUpperCase(),
+          user.sitio.toUpperCase(),
+          "${r.systolicBP}/${r.diastolicBP}",
+          "${r.heartRate}",
+          "${r.temperature}",
+          "${r.oxygen}%"
+        ];
+      }).toList(),
+    );
   }
 }

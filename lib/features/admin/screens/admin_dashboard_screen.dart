@@ -17,21 +17,23 @@ import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/services/database/sync_service.dart';
 import '../../../core/services/system/sync_event_bus.dart';
+import '../../chat/domain/i_chat_repository.dart';
+import '../../../core/utils/health_thresholds.dart';
 
 // NEW TABS
 import 'tabs/admin_validation_tab.dart';
-import 'tabs/admin_announcements_tab.dart';
+import 'tabs/admin_triage_tab.dart';
+import 'tabs/admin_broadcast_tab.dart';
 import 'tabs/admin_scheduling_tab.dart';
-import 'tabs/admin_alerts_tab.dart';
 import 'tabs/admin_reports_tab.dart';
 import 'tabs/admin_chat_tab.dart';
 import 'tabs/admin_hardware_tab.dart';
-import '../../../core/services/system/export_service.dart';
+import '../widgets/admin_dashboard_skeleton.dart';
 
 // NEW WIDGETS
 import '../widgets/admin_analytics_card.dart';
-import '../widgets/high_risk_patients_card.dart';
-import '../widgets/admin_patient_profile_sidebar.dart';
+import '../widgets/high_risk_residents_card.dart';
+import '../widgets/admin_resident_profile_sidebar.dart';
 import '../../../core/widgets/sync_status_indicator.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -49,12 +51,45 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // SYSTEM STATUS
   String _networkStatus = "Checking...";
   Color _networkColor = Colors.grey;
+  bool _isInitializing = true;
 
   // TAB STATE
   int _selectedIndex = 0;
 
+  Future<void> _initSystem() async {
+    final authRepo = context.read<IAuthRepository>();
+    final historyRepo = context.read<IHistoryRepository>();
+    final adminRepo = context.read<AdminRepository>();
+
+    // 1. Parallel Load Local Data (Instant)
+    await Future.wait([
+      adminRepo.init(),
+      authRepo.refreshUsers(),
+      historyRepo.loadAllHistory(),
+    ]);
+
+    // 2. Start Cloud Sync in background
+    final syncFuture = SyncService().forceDownSyncAndRefresh(authRepo, historyRepo);
+
+    // If local data is empty, we MUST wait for the sync to complete
+    if (authRepo.users.isEmpty || historyRepo.records.isEmpty) {
+      debugPrint("🛰️ Dashboard: Local DB empty, waiting for initial sync...");
+      await syncFuture;
+    } else {
+      debugPrint("🚀 Dashboard: Local data found, finishing init immediately.");
+      // Fire and forget the sync in background
+      unawaited(syncFuture);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+      });
+    }
+  }
+
   // SYNC STREAM SUBSCRIPTIONS
-  StreamSubscription? _patientSyncSub;
+  StreamSubscription? _residentSyncSub;
   StreamSubscription? _vitalSyncSub;
   StreamSubscription? _alertSyncSub;
   StreamSubscription? _announcementSyncSub;
@@ -64,13 +99,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.initState();
     _startInactivityTimer();
     _checkSystemHealth();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final authRepo = context.read<IAuthRepository>();
-      final historyRepo = context.read<IHistoryRepository>();
-
-      // Force a manual cloud sweep as soon as the Admin Desktop starts up
-      await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo);
+    
+    // Use postFrameCallback to avoid "setState() called during build" error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initSystem();
     });
 
     _setupSyncListeners();
@@ -79,10 +111,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _setupSyncListeners() {
     final bus = SyncEventBus.instance;
 
-    // 1. Patient Changes
-    _patientSyncSub = bus.patientStream.listen((_) {
+    // 1. Resident Changes
+    _residentSyncSub = bus.residentStream.listen((_) {
       if (mounted) {
-        debugPrint("🔄 Dashboard: Patient data synced, refreshing UI.");
+        debugPrint("📡 Dashboard: Resident data synced, refreshing UI.");
         context.read<IAuthRepository>().refreshUsers();
       }
     });
@@ -122,7 +154,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   void dispose() {
-    _patientSyncSub?.cancel();
+    _residentSyncSub?.cancel();
     _vitalSyncSub?.cancel();
     _alertSyncSub?.cancel();
     _announcementSyncSub?.cancel();
@@ -144,6 +176,62 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _resetInactivityTimer() {
     _startInactivityTimer();
+  }
+
+  Future<void> _handleManualRefresh() async {
+    if (mounted) {
+      setState(() {
+        _isInitializing = true;
+      });
+    }
+
+    try {
+      final authRepo = context.read<IAuthRepository>();
+      final historyRepo = context.read<IHistoryRepository>();
+
+      // 1. Check Connectivity First
+      await _checkSystemHealth();
+
+      // 2. Trigger Full Sync and local refresh
+      await SyncService().forceDownSyncAndRefresh(authRepo, historyRepo);
+
+      // 3. Small settle delay for UX
+      await Future.delayed(const Duration(milliseconds: 500));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("Refresh failed: $e"),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+      
+      // Show success message AFTER UI has returned to normal state
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "System connectivity and data refreshed successfully.",
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.brandGreen,
+          behavior: SnackBarBehavior.floating,
+          width: 400,
+        ));
+      }
+    }
   }
 
   Future<void> _checkSystemHealth() async {
@@ -358,99 +446,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return completer.future;
   }
 
-  Future<void> _exportToCSV() async {
-    try {
-      final historyRepo = context.read<IHistoryRepository>();
-      final authRepo = context.read<IAuthRepository>();
-      final records = historyRepo.records;
-
-      if (records.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("No records to export."),
-            backgroundColor: Colors.orange));
-        return;
-      }
-
-      List<List<dynamic>> rows = [];
-      rows.add([
-        "Record ID",
-        "Patient Name",
-        "Phone Number",
-        "Date",
-        "Time",
-        "Heart Rate",
-        "Systolic BP",
-        "Diastolic BP",
-        "Oxygen",
-        "Temperature",
-        "BMI",
-        "BMI Category"
-      ]);
-
-      for (var record in records) {
-        final user = authRepo.users.firstWhere((u) => u.id == record.userId,
-            orElse: () => User(
-                id: '',
-                firstName: 'Unknown',
-                middleInitial: '',
-                lastName: '',
-                sitio: '',
-                phoneNumber: '',
-                pinCode: '',
-                dateOfBirth: DateTime.now(),
-                gender: '',
-                username: 'unknown'));
-
-        rows.add([
-          record.id,
-          user.fullName,
-          user.phoneNumber,
-          "${record.timestamp.year}-${record.timestamp.month.toString().padLeft(2, '0')}-${record.timestamp.day.toString().padLeft(2, '0')}",
-          "${record.timestamp.hour.toString().padLeft(2, '0')}:${record.timestamp.minute.toString().padLeft(2, '0')}",
-          record.heartRate,
-          record.systolicBP,
-          record.diastolicBP,
-          record.oxygen,
-          record.temperature,
-          record.bmi ?? '',
-          record.bmiCategory ?? ''
-        ]);
-      }
-
-      // PHASE 3: Use ExportService for AES-256 Encrypted Export (.csv.aes)
-      final fileName = 'kiosk_export_${DateTime.now().millisecondsSinceEpoch}';
-      final file = await ExportService().exportToEncryptedCsv(
-        fileName: fileName,
-        rows: rows,
-        actionLabel: 'All Vital Records',
-        userId: authRepo.currentUser?.id,
-      );
-
-      if (!mounted) return;
-      if (file != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Encrypted export saved to: ${file.path}"),
-          backgroundColor: AppColors.brandGreen,
-          duration: const Duration(seconds: 5),
-        ));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Export failed. Check logs."),
-            backgroundColor: Colors.red));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-    }
-  }
-
   void _confirmDeleteUser(User user) {
     showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-              title: const Text("Delete Patient"),
+              title: const Text("Delete Resident"),
               content: Text(
                   "Are you sure you want to permanently delete ${user.fullName}?"),
               actions: [
@@ -462,7 +462,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     context.read<IAuthRepository>().deleteUser(user.id);
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text("Patient deleted."),
+                      content: Text("Resident deleted."),
                       backgroundColor: Colors.red,
                     ));
                   },
@@ -491,6 +491,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final miController = TextEditingController(text: user.middleInitial);
     final phoneController = TextEditingController(text: user.phoneNumber);
     String selectedSitio = user.sitio;
+    String selectedRole = user.role.toLowerCase();
     TextEditingController activeCtrl = nameController;
 
     showModalBottomSheet(
@@ -506,7 +507,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Column(
             children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text("Edit Patient",
+                const Text("Edit Resident",
                     style:
                         TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 IconButton(
@@ -548,6 +549,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       _buildSheetField("Phone", phoneController, activeCtrl,
                           (c) => setSheetState(() => activeCtrl = c),
                           type: KeyboardType.numeric, maxLength: 11),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedRole,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'patient',
+                              child: Row(children: [
+                                Icon(Icons.person, size: 18),
+                                SizedBox(width: 8),
+                                Text("Resident")
+                              ])),
+                          DropdownMenuItem(
+                              value: 'bhw',
+                              child: Row(children: [
+                                Icon(Icons.medical_services,
+                                    size: 18, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text("Health Worker (BHW)")
+                              ])),
+                          DropdownMenuItem(
+                              value: 'admin',
+                              child: Row(children: [
+                                Icon(Icons.admin_panel_settings,
+                                    size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text("Administrator")
+                              ])),
+                        ],
+                        onChanged: (val) =>
+                            setSheetState(() => selectedRole = val!),
+                        decoration: const InputDecoration(
+                            labelText: "Account Role",
+                            border: OutlineInputBorder()),
+                      ),
                     ],
                   ),
                 ),
@@ -563,6 +598,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         middleInitial: miController.text,
                         sitio: selectedSitio,
                         phoneNumber: phoneController.text,
+                        role: selectedRole,
                         pinCode: '123456');
 
                     context.read<IAuthRepository>().updateUser(updatedUser);
@@ -645,6 +681,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           // Breakpoint for Mobile vs Desktop
           bool isDesktop = constraints.maxWidth > 900;
 
+          if (_isInitializing) {
+            return const AdminDashboardSkeleton();
+          }
+
           if (isDesktop) {
             return _buildDesktopLayout();
           } else {
@@ -671,11 +711,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 const Icon(Icons.admin_panel_settings,
                     color: Colors.white, size: 64),
                 const SizedBox(height: 16),
-                const Text("BHW ADMIN",
-                    style: TextStyle(
+                Text(AdminSecurityService().activeStaff?.fullName ?? "BHW ADMIN",
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.bold)),
+                if (AdminSecurityService().activeStaff != null)
+                  Text(AdminSecurityService().activeStaff!.role.toUpperCase(),
+                    style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1)),
                 const SizedBox(height: 8),
                 Container(
                   padding:
@@ -711,13 +758,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         // HMIS Modules
                         _buildSidebarItem("Overview", Icons.dashboard, 0),
                         _buildSidebarItem(
-                            "Validation", Icons.check_circle_outline, 1),
-                        _buildSidebarItem("Announcements", Icons.campaign, 2),
+                            "Triage: Attention", Icons.priority_high_rounded, 1),
                         _buildSidebarItem(
-                            "Inbox", Icons.chat_bubble_outline, 3),
-                        _buildSidebarItem("Schedules", Icons.calendar_month, 4),
+                            "Validation", Icons.check_circle_outline, 2),
                         _buildSidebarItem(
-                            "Alerts", Icons.warning_amber_rounded, 5),
+                            "Broadcast Center", Icons.campaign, 3),
+                        _buildSidebarItem(
+                            "Resident Support", Icons.chat_bubble_outline, 4),
+                        _buildSidebarItem("Schedules", Icons.calendar_month, 5),
                         _buildSidebarItem("Reports", Icons.receipt_long, 6),
                         if (AppEnvironment().hasHardwareAccess)
                           _buildSidebarItem("Hardware Control",
@@ -750,7 +798,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     color: Colors.redAccent, onTap: () async {
                   await context.read<IAuthRepository>().logout();
                   if (mounted) {
-                    // Kiosk Admin goes back to Patient Login, Desktop Admin stays in Admin Login
+                    // Kiosk Admin goes back to Resident Login, Desktop Admin stays in Admin Login
                     if (AppEnvironment().isKiosk) {
                       context.go(AppRoutes.login);
                     } else {
@@ -772,12 +820,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 backgroundColor: Colors.white,
                 elevation: 0,
                 actions: [
-                  const SyncStatusIndicator(),
+                  const RepaintBoundary(child: SyncStatusIndicator()),
                   const SizedBox(width: 8),
                   IconButton(
                       icon: const Icon(Icons.refresh, color: Colors.black),
-                      onPressed: () =>
-                          context.read<IHistoryRepository>().loadAllHistory()),
+                      onPressed: _handleManualRefresh),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, color: Colors.black),
                     onSelected: (value) {
@@ -815,15 +862,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 0:
         return "Dashboard Overview";
       case 1:
-        return "Validation & Follow-up";
+        return "Triage: Immediate Attention";
       case 2:
-        return "Announcements Management";
+        return "Validation & Follow-up";
       case 3:
-        return "Patient Support Inbox";
+        return "Broadcast & Alert Center";
       case 4:
-        return "Health Activity Scheduling";
+        return "Resident Support Center";
       case 5:
-        return "Official Alert System";
+        return "Health Activity Scheduling";
       case 6:
         return "Barangay Health Reports";
       case 7:
@@ -838,15 +885,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 0:
         return _buildDashboardBody(isMobile: isMobile);
       case 1:
-        return const AdminValidationTab();
+        return const AdminTriageTab();
       case 2:
-        return const AdminAnnouncementsTab();
+        return const AdminValidationTab();
       case 3:
-        return const AdminChatTab();
+        return const AdminBroadcastTab();
       case 4:
-        return const AdminSchedulingTab();
+        return const AdminChatTab();
       case 5:
-        return const AdminAlertsTab();
+        return const AdminSchedulingTab();
       case 6:
         return const AdminReportsTab();
       case 7:
@@ -883,6 +930,44 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               isSelected ? FontWeight.bold : FontWeight.normal,
                           fontSize: 14)),
                 ),
+                if (index == 4) // Inbox
+                  Consumer<IChatRepository>(
+                    builder: (context, chatRepo, _) {
+                      final count = chatRepo.getUnreadCount(null);
+                      if (count == 0) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                            color: Colors.red, shape: BoxShape.circle),
+                        child: Text("$count",
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      );
+                    },
+                  ),
+                if (index == 1) // Triage
+                  Consumer2<IHistoryRepository, IAuthRepository>(
+                    builder: (context, historyRepo, authRepo, _) {
+                      final count = historyRepo.records.where((r) {
+                        final users = authRepo.users.where((u) => u.id == r.userId);
+                        if (users.isEmpty) return false;
+                        return HealthThresholds.isCritical(users.first, r);
+                      }).length;
+                      if (count == 0) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                            color: Colors.orange, shape: BoxShape.circle),
+                        child: Text("$count",
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      );
+                    },
+                  ),
               ],
             ),
           ),
@@ -926,8 +1011,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text("Admin Mobile",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(_getAppBarTitle(),
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: AppColors.brandDark,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -944,20 +1029,60 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             ListTile(
                 leading: const Icon(Icons.dashboard),
-                title: const Text("Dashboard"),
-                onTap: () => Navigator.pop(context)),
+                title: const Text("Overview"),
+                onTap: () {
+                  setState(() => _selectedIndex = 0);
+                  Navigator.pop(context);
+                }),
+            ListTile(
+                leading: const Icon(Icons.priority_high_rounded, color: Colors.orange),
+                title: const Text("Triage: Attention"),
+                onTap: () {
+                  setState(() => _selectedIndex = 1);
+                  Navigator.pop(context);
+                }),
+            ListTile(
+                leading: const Icon(Icons.check_circle_outline),
+                title: const Text("Validation"),
+                onTap: () {
+                  setState(() => _selectedIndex = 2);
+                  Navigator.pop(context);
+                }),
+            ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Resident Support"),
+                    Consumer<IChatRepository>(
+                      builder: (context, chatRepo, _) {
+                        final count = chatRepo.getUnreadCount(null);
+                        if (count == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          child: Text("$count", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                onTap: () {
+                  setState(() => _selectedIndex = 4);
+                  Navigator.pop(context);
+                }),
+            ListTile(
+                leading: const Icon(Icons.campaign),
+                title: const Text("Broadcast Center"),
+                onTap: () {
+                  setState(() => _selectedIndex = 3);
+                  Navigator.pop(context);
+                }),
+            const Divider(),
             ListTile(
                 leading: const Icon(Icons.people),
-                title: const Text("User Database"),
+                title: const Text("Resident Database"),
                 onTap: () => context.push(AppRoutes.adminUsers)),
-            ListTile(
-                leading: const Icon(Icons.security),
-                title: const Text("Security Logs"),
-                onTap: () => context.push(AppRoutes.adminLogs)),
-            ListTile(
-                leading: const Icon(Icons.info),
-                title: const Text("System Info"),
-                onTap: () => context.push(AppRoutes.adminSystemInfo)),
             ListTile(
                 leading: const Icon(Icons.settings),
                 title: const Text("Admin Settings"),
@@ -974,30 +1099,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
       ),
-      body: _buildDashboardBody(isMobile: true),
+      body: _buildBodyContent(isMobile: true),
     );
   }
 
   // --- SHARED DASHBOARD CONTENT ---
   String _searchQuery = "";
 
-  String _getOverallHealthStatus(VitalSigns? record) {
-    if (record == null) return "N/A";
-
-    final adminRepo = context.read<AdminRepository>();
-
-    bool isHypertensive =
-        record.systolicBP > adminRepo.sysHigh || record.diastolicBP > 90;
-    bool isHypotic = record.systolicBP < adminRepo.sysLow;
-    bool isHypoxic = record.oxygen < 92;
-    bool isFever = record.temperature > 37.8;
-    bool isAbnormalHR =
-        record.heartRate > adminRepo.hrHigh || record.heartRate < 60;
-
-    if (isHypertensive || isHypotic || isHypoxic || isFever || isAbnormalHR) {
-      return "Abnormal";
-    }
-    return "Normal";
+  String _getOverallHealthStatus(VitalSigns? record, User? user) {
+    if (record == null || user == null) return "N/A";
+    return HealthThresholds.isCritical(user, record) ? "Abnormal" : "Normal";
   }
 
   Widget _buildDashboardBody({required bool isMobile}) {
@@ -1020,12 +1131,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             r.timestamp.year == DateTime.now().year)
         .toList();
 
-    final alertsCount = records
-        .where((r) =>
-            r.bmiCategory == "Underweight" ||
-            r.bmiCategory == "Obese" ||
-            r.bmiCategory == "Overweight")
-        .length;
+    final alertsCount = records.where((r) {
+      final user = allUsers.cast<User?>().firstWhere((u) => u?.id == r.userId, orElse: () => null);
+      if (user == null) return false;
+      return HealthThresholds.isCritical(user, r);
+    }).length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1037,7 +1147,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ? Column(
                   children: [
                     Row(children: [
-                      _buildMetricCard("Total Patients", "${allUsers.length}",
+                      _buildMetricCard("Total Residents", "${allUsers.length}",
                           Icons.people, Colors.blue, isMobile),
                       const SizedBox(width: 16),
                       _buildMetricCard("Checks Today", "${todayRecords.length}",
@@ -1055,7 +1165,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 )
               : Row(
                   children: [
-                    _buildMetricCard("Total Patients", "${allUsers.length}",
+                    _buildMetricCard("Total Residents", "${allUsers.length}",
                         Icons.people, Colors.blue, isMobile),
                     const SizedBox(width: 16),
                     _buildMetricCard("Checks Today", "${todayRecords.length}",
@@ -1072,11 +1182,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
           // MAIN CONTENT AREA
           if (isMobile) ...[
-            AdminAnalyticsCard(records: records),
+            AdminAnalyticsCard(records: records, users: allUsers),
             const SizedBox(height: 32),
-            HighRiskPatientsCard(users: allUsers, records: records),
+            HighRiskResidentsCard(users: allUsers, records: records),
             const SizedBox(height: 32),
-            _buildPatientTable(filteredUsers, records),
+            _buildResidentTable(filteredUsers, records),
             const SizedBox(height: 32),
             _buildRecentActivity(records),
           ] else ...[
@@ -1084,14 +1194,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Left Side: Trends and Patient Registry
+                // Left Side: Trends and Resident Registry
                 Expanded(
                   flex: 5,
                   child: Column(
                     children: [
-                      AdminAnalyticsCard(records: records),
+                      AdminAnalyticsCard(records: records, users: allUsers),
                       const SizedBox(height: 32),
-                      _buildPatientTable(filteredUsers, records),
+                      _buildResidentTable(filteredUsers, records),
                     ],
                   ),
                 ),
@@ -1101,9 +1211,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   flex: 2,
                   child: Column(
                     children: [
-                      HighRiskPatientsCard(users: allUsers, records: records),
+                      RepaintBoundary(child: HighRiskResidentsCard(users: allUsers, records: records)),
                       const SizedBox(height: 32),
-                      _buildRecentActivity(records),
+                      RepaintBoundary(child: _buildRecentActivity(records)),
                     ],
                   ),
                 ),
@@ -1164,13 +1274,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                           itemBuilder: (context) => [
-                            if (title == "Total Patients")
+                            if (title == "Total Residents")
                               const PopupMenuItem(
                                   value: 'users',
                                   child: Row(children: [
                                     Icon(Icons.people, size: 18),
                                     SizedBox(width: 8),
-                                    Text("View Patient Registry")
+                                    Text("View Resident Registry")
                                   ])),
                             if (title == "Checks Today")
                               const PopupMenuItem(
@@ -1203,13 +1313,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 context.push(AppRoutes.adminUsers);
                                 break;
                               case 'validation':
-                                setState(() => _selectedIndex = 1);
+                                setState(() => _selectedIndex = 2);
                                 break;
                               case 'alerts':
-                                setState(() => _selectedIndex = 4);
+                                setState(() => _selectedIndex = 1);
                                 break;
                               case 'refresh':
-                                _checkSystemHealth();
+                                _handleManualRefresh();
                                 break;
                             }
                           },
@@ -1237,7 +1347,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildPatientTable(List<User> users, List<VitalSigns> records) {
+  Widget _buildResidentTable(List<User> users, List<VitalSigns> records) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1253,7 +1363,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Patient Registry",
+              const Text("Resident Registry",
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -1270,7 +1380,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           onChanged: (val) =>
                               setState(() => _searchQuery = val),
                           decoration: InputDecoration(
-                            hintText: "Search patients...",
+                            hintText: "Search residents...",
                             prefixIcon: const Icon(Icons.search, size: 20),
                             contentPadding: EdgeInsets.zero,
                             border: OutlineInputBorder(
@@ -1282,17 +1392,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _exportToCSV,
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text("Export"),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandGreen,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8))),
-                    )
                   ],
                 ),
               )
@@ -1356,14 +1455,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color:
-                                    _getOverallHealthStatus(latest) == "Normal"
+                                    _getOverallHealthStatus(latest, user) == "Normal"
                                         ? Colors.green.withValues(alpha: 0.1)
                                         : Colors.red.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(_getOverallHealthStatus(latest),
+                              child: Text(_getOverallHealthStatus(latest, user),
                                   style: TextStyle(
-                                      color: _getOverallHealthStatus(latest) ==
+                                      color: _getOverallHealthStatus(latest, user) ==
                                               "Normal"
                                           ? Colors.green[700]
                                           : Colors.red[800],
@@ -1398,7 +1497,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             icon: const Icon(Icons.analytics,
                                 size: 20, color: AppColors.brandDark),
                             onPressed: () =>
-                                _showPatientProfile(user, records)),
+                                _showResidentProfile(user, records)),
                         if (AdminSecurityService().currentRole ==
                             AdminRole.superAdmin) ...[
                           IconButton(
@@ -1428,7 +1527,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  void _showPatientProfile(User user, List<VitalSigns> allRecords) {
+  void _showResidentProfile(User user, List<VitalSigns> allRecords) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -1439,12 +1538,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           alignment: Alignment.centerRight,
           child: Material(
             elevation: 16,
-            child: AdminPatientProfileSidebar(
-              patient: user,
-              patientRecords:
+            child: AdminResidentProfileSidebar(
+              resident: user,
+              residentRecords:
                   allRecords.where((r) => r.userId == user.id).toList(),
               onMessagePressed: () {
-                setState(() => _selectedIndex = 3);
+                setState(() => _selectedIndex = 4); // Inbox is now index 4
               },
             ),
           ),
@@ -1534,12 +1633,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               style: const TextStyle(
                                   color: Colors.grey, fontSize: 12)),
                         ])),
-                    Text(_getOverallHealthStatus(record),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        _getOverallHealthStatus(record, user),
+                        textAlign: TextAlign.right,
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: _getOverallHealthStatus(record) == "Normal"
+                            fontSize: 13,
+                            color: _getOverallHealthStatus(record, user) == "Normal"
                                 ? AppColors.brandGreen
-                                : Colors.red))
+                                : Colors.red),
+                      ),
+                    )
                   ]);
                 })
         ],

@@ -15,7 +15,7 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   final Map<String, bool> _onlineStatus = {};
   RealtimeChannel? _chatChannel;
   RealtimeChannel? _presenceChannel;
-  User? _selectedPatient;
+  User? _selectedResident;
   int _retryCount = 0;
   Timer? _retryTimer;
   Timer? _pollingTimer;
@@ -28,15 +28,32 @@ class WebChatRepository extends ChangeNotifier implements IChatRepository {
   @override
   Map<String, bool> get onlineStatus => Map.unmodifiable(_onlineStatus);
   @override
-  User? get selectedPatient => _selectedPatient;
+  User? get selectedResident => _selectedResident;
 
   @override
-  void setSelectedPatient(User? patient) {
-    _selectedPatient = patient;
-    if (patient != null) {
-      initChat('admin', patient.id);
+  void setSelectedResident(User? resident) {
+    _selectedResident = resident;
+    if (resident != null) {
+      markAsRead(resident.id);
+      initChat('admin', resident.id);
     }
     notifyListeners();
+  }
+
+  @override
+  int getUnreadCount(String? userId) {
+    // Basic implementation for Web if needed
+    return 0; 
+  }
+
+  @override
+  DateTime? getLatestMessageTime(String userId) {
+    return null;
+  }
+
+  @override
+  void markAsRead(String otherUserId) {
+    // Implementation for Web if needed
   }
 
   /// Initialize real-time listener for a specific chat between two users

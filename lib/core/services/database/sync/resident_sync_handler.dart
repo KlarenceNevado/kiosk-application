@@ -8,13 +8,13 @@ import 'sync_handler.dart';
 import '../../../../features/auth/models/user_model.dart';
 import '../../system/sync_event_bus.dart';
 
-class PatientSyncHandler extends SyncHandler {
+class ResidentSyncHandler extends SyncHandler {
   RealtimeChannel? _channel;
   final _changeController = StreamController<void>.broadcast();
 
   Stream<void> get stream => _changeController.stream;
 
-  PatientSyncHandler(super.supabase, [super.db]);
+  ResidentSyncHandler(super.supabase, [super.db]);
 
   @override
   Future<void> push() async {
@@ -32,7 +32,7 @@ class PatientSyncHandler extends SyncHandler {
         }
 
         try {
-          final updatedUser = await createPatient(user);
+          final updatedUser = await createResident(user);
           if (updatedUser != null && updatedUser.isSynced) {
             syncedIds.add(updatedUser.id);
             await dbHelper.clearSyncMetadata('patients', updatedUser.id);
@@ -57,7 +57,7 @@ class PatientSyncHandler extends SyncHandler {
         _changeController.add(null);
       }
     } catch (e) {
-      debugPrint("❌ PatientSyncHandler: Push Error: $e");
+      debugPrint("❌ ResidentSyncHandler: Push Error: $e");
     }
   }
 
@@ -102,10 +102,10 @@ class PatientSyncHandler extends SyncHandler {
       if (latestTimestamp != null) {
         await _updateLastSync(latestTimestamp);
         _changeController.add(null);
-        SyncEventBus.instance.triggerPatientUpdate();
+        SyncEventBus.instance.triggerResidentUpdate();
       }
     } catch (e) {
-      debugPrint("❌ PatientSyncHandler: Pull Error: $e");
+      debugPrint("❌ ResidentSyncHandler: Pull Error: $e");
     }
   }
 
@@ -122,7 +122,7 @@ class PatientSyncHandler extends SyncHandler {
           callback: (payload) {
             onData(payload);
             _changeController.add(null);
-            SyncEventBus.instance.triggerPatientUpdate();
+            SyncEventBus.instance.triggerResidentUpdate();
           },
         )
         .subscribe();
@@ -135,7 +135,7 @@ class PatientSyncHandler extends SyncHandler {
 
   // --- CRUD HELPERS ---
 
-  Future<User?> createPatient(User user) async {
+  Future<User?> createResident(User user) async {
     final String birthDate = user.dateOfBirth.toIso8601String().split('T')[0];
 
     final Map<String, dynamic> supabaseData = {
@@ -151,6 +151,8 @@ class PatientSyncHandler extends SyncHandler {
       'pin_hash': user.pinHash,
       'pin_salt': user.pinSalt,
       'username': user.username,
+      'assigned_bhw_id': user.assignedBhwId,
+      'assigned_bhw_name': user.assignedBhwName,
       'updated_at': DateTime.now().toIso8601String(),
     };
 
@@ -171,7 +173,7 @@ class PatientSyncHandler extends SyncHandler {
           user.copyWith(isSynced: true, updatedAt: DateTime.now());
       await dbHelper.insertPatient(syncedUser);
       SecurityLogger.info(
-          "Sync: Successfully pushed patient ${user.id} to Supabase.");
+          "Sync: Successfully pushed resident ${user.id} to Supabase.");
       return syncedUser;
     } catch (e) {
       if (e.toString().contains('PGRST204') ||
@@ -182,7 +184,7 @@ class PatientSyncHandler extends SyncHandler {
             "👉 ACTION REQUIRED: Run the security hardening SQL script in Supabase Editor.");
       } else {
         SecurityLogger.error(
-            "Sync: Failed to push patient ${user.id} to Supabase: $e");
+            "Sync: Failed to push resident ${user.id} to Supabase: $e");
       }
 
       final offlineUser = user.copyWith(isSynced: false);
@@ -191,7 +193,7 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-  Future<bool> updatePatient(User user) async {
+  Future<bool> updateResident(User user) async {
     final String birthDate = user.dateOfBirth.toIso8601String().split('T')[0];
     try {
       final Map<String, dynamic> supabaseData = {
@@ -206,6 +208,8 @@ class PatientSyncHandler extends SyncHandler {
         'pin_hash': user.pinHash,
         'pin_salt': user.pinSalt,
         'username': user.username,
+        'assigned_bhw_id': user.assignedBhwId,
+        'assigned_bhw_name': user.assignedBhwName,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
@@ -218,7 +222,7 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-  Future<bool> deletePatient(String userId) async {
+  Future<bool> deleteResident(String userId) async {
     try {
       await dbHelper.deletePatient(userId);
       return true;
@@ -227,7 +231,7 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-  Future<List<User>> searchPatients(String query) async {
+  Future<List<User>> searchResidents(String query) async {
     if (query.isEmpty) {
       return [];
     }
@@ -261,7 +265,7 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-  Future<User?> authenticatePatient(String phone, String pin) async {
+  Future<User?> authenticateResident(String phone, String pin) async {
     try {
       // NOTE: We cannot use .eq('phone_number') due to randomized IVs.
       // Strategy: Fetch a recent batch and scan locally (Decryption happens in memory).
@@ -290,7 +294,7 @@ class PatientSyncHandler extends SyncHandler {
       }
       return null;
     } catch (e) {
-      debugPrint("❌ authenticatePatient Error: $e");
+      debugPrint("❌ authenticateResident Error: $e");
       return null;
     }
   }
@@ -305,7 +309,7 @@ class PatientSyncHandler extends SyncHandler {
     }
   }
 
-  Future<List<Map<String, dynamic>>> findPatient(
+  Future<List<Map<String, dynamic>>> findResident(
       String identifier, String phoneNumber) async {
     try {
       // 1. Try Primary Search (Username)
@@ -334,7 +338,7 @@ class PatientSyncHandler extends SyncHandler {
 
       return _filterByPhone(nameResults, phoneNumber);
     } catch (e) {
-      debugPrint("❌ findPatient (Cloud) Error: $e");
+      debugPrint("❌ findResident (Cloud) Error: $e");
       return [];
     }
   }
@@ -397,6 +401,8 @@ class PatientSyncHandler extends SyncHandler {
     'pin_salt',
     'username',
     'fingerprint_id',
+    'assigned_bhw_id',
+    'assigned_bhw_name',
   };
 
   Map<String, dynamic> _prepareRowForSqlite(Map<String, dynamic> row) {

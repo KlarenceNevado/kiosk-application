@@ -158,4 +158,16 @@ class VitalSigns {
       isSynced: isSynced ?? this.isSynced,
     );
   }
+
+  /// Automated triage check based on admin thresholds
+  bool isCritical(double sysHigh, double sysLow, double hrHigh) {
+    if (status != 'pending') return false;
+
+    return systolicBP >= sysHigh ||
+        systolicBP <= sysLow ||
+        heartRate >= hrHigh ||
+        bmiCategory == "Obese" ||
+        oxygen < 95 ||
+        temperature >= 38;
+  }
 }

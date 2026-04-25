@@ -15,7 +15,7 @@ class SyncEventBus {
   final _alertController = StreamController<void>.broadcast();
   final _newAlertController =
       StreamController<Map<String, dynamic>>.broadcast();
-  final _patientController = StreamController<void>.broadcast();
+  final _residentController = StreamController<void>.broadcast();
   final _scheduleController = StreamController<void>.broadcast();
 
   // Public streams for Native UI to listen to
@@ -25,7 +25,7 @@ class SyncEventBus {
       _newAnnouncementController.stream;
   Stream<void> get alertStream => _alertController.stream;
   Stream<Map<String, dynamic>> get newAlertStream => _newAlertController.stream;
-  Stream<void> get patientStream => _patientController.stream;
+  Stream<void> get residentStream => _residentController.stream;
   Stream<void> get scheduleStream => _scheduleController.stream;
 
   // Triggers fired silently by Native Background Sync or Web Realtime channels
@@ -36,7 +36,7 @@ class SyncEventBus {
   void triggerAlertUpdate() => _alertController.add(null);
   void triggerNewAlert(Map<String, dynamic> data) =>
       _newAlertController.add(data);
-  void triggerPatientUpdate() => _patientController.add(null);
+  void triggerResidentUpdate() => _residentController.add(null);
   void triggerScheduleUpdate() => _scheduleController.add(null);
 
   void dispose() {
@@ -45,7 +45,7 @@ class SyncEventBus {
     _newAnnouncementController.close();
     _alertController.close();
     _newAlertController.close();
-    _patientController.close();
+    _residentController.close();
     _scheduleController.close();
   }
 }

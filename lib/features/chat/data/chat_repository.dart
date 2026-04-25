@@ -16,28 +16,114 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
   final Map<String, bool> _onlineStatus = {};
   RealtimeChannel? _chatChannel;
   RealtimeChannel? _presenceChannel;
-  User? _selectedPatient;
+  User? _selectedResident;
+  int _totalUnreadCount = 0;
+  final Map<String, int> _unreadCounts = {};
+  final Map<String, DateTime> _latestMessageTimes = {};
+
+  LocalChatRepository() {
+    _refreshUnreadCounts();
+  }
 
   @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   @override
   Map<String, bool> get onlineStatus => Map.unmodifiable(_onlineStatus);
   @override
-  User? get selectedPatient => _selectedPatient;
+  User? get selectedResident => _selectedResident;
 
   @override
-  void setSelectedPatient(User? patient) {
-    _selectedPatient = patient;
-    if (patient != null) {
-      initChat('admin', patient.id);
+  void setSelectedResident(User? resident) {
+    _selectedResident = resident;
+    if (resident != null) {
+      markAsRead(resident.id);
+      initChat('admin', resident.id);
     }
     notifyListeners();
+  }
+
+  @override
+  int getUnreadCount(String? userId) {
+    if (userId == null) return _totalUnreadCount;
+    return _unreadCounts[userId] ?? 0;
+  }
+
+  @override
+  DateTime? getLatestMessageTime(String userId) {
+    return _latestMessageTimes[userId];
+  }
+
+  @override
+  Future<void> markAsRead(String otherUserId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'chat_messages',
+        {'is_read': 1},
+        where: 'sender_id = ? AND receiver_id = ? AND is_read = 0',
+        whereArgs: [otherUserId, 'admin'],
+      );
+
+      // Also update in-memory messages if this is the active chat
+      if (_selectedResident?.id == otherUserId) {
+        for (int i = 0; i < _messages.length; i++) {
+          if (_messages[i].senderId == otherUserId && !_messages[i].isRead) {
+            _messages[i] = _messages[i].copyWith(isRead: true);
+          }
+        }
+      }
+
+      await _refreshUnreadCounts();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("❌ Error marking as read: $e");
+    }
+  }
+
+  Future<void> _refreshUnreadCounts() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      
+      // Total unread
+      final totalResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM chat_messages WHERE receiver_id = 'admin' AND is_read = 0");
+      _totalUnreadCount = Sqflite.firstIntValue(totalResult) ?? 0;
+
+      // Per-user unread
+      final perUserResult = await db.rawQuery(
+          "SELECT sender_id, COUNT(*) as count FROM chat_messages WHERE receiver_id = 'admin' AND is_read = 0 GROUP BY sender_id");
+      
+      _unreadCounts.clear();
+      for (var row in perUserResult) {
+        final senderId = row['sender_id'] as String;
+        final count = row['count'] as int;
+        _unreadCounts[senderId] = count;
+      }
+
+      // Latest message times for sorting
+      final latestResult = await db.rawQuery(
+          "SELECT patient_id, MAX(timestamp) as last_time FROM chat_messages GROUP BY patient_id");
+      
+      _latestMessageTimes.clear();
+      for (var row in latestResult) {
+        final residentId = row['patient_id'] as String?;
+        final lastTime = row['last_time'] as String?;
+        if (residentId != null && lastTime != null) {
+          _latestMessageTimes[residentId] = DateTime.parse(lastTime);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("❌ Error refreshing unread counts: $e");
+    }
   }
 
   /// Initialize real-time listener for a specific chat between two users
   @override
   void initChat(String currentUserId, String otherUserId) {
     _messages.clear();
+    _refreshUnreadCounts(); // Load badges on startup
     _loadLocalMessages(currentUserId, otherUserId);
     _syncDownCloudMessages(currentUserId, otherUserId);
     _setupRealtime(currentUserId, otherUserId);
@@ -179,6 +265,9 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
 
     if (isRelevant) {
       _handleIncomingMessage(msg);
+    } else if (msg.receiverId == currentUserId) {
+      // New message for another user, just update badges
+      _refreshUnreadCounts();
     }
   }
 
@@ -220,6 +309,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
     }
 
     _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    _refreshUnreadCounts(); // Update latest message times for sorting
     notifyListeners();
 
     // Persist locally
@@ -231,6 +321,16 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
+    if (msg.receiverId == 'admin' && !msg.isRead) {
+      if (_selectedResident?.id == msg.senderId) {
+        markAsRead(msg.senderId);
+      } else {
+        await _refreshUnreadCounts();
+      }
+    } else {
+      // Refresh to update latest message times for sorting even if already read or sent by me
+      await _refreshUnreadCounts();
+    }
     notifyListeners();
   }
 
@@ -244,6 +344,7 @@ class LocalChatRepository extends ChangeNotifier implements IChatRepository {
       _messages[index] = message;
     }
     _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    _refreshUnreadCounts(); // Update latest message times for sorting
     notifyListeners();
 
     try {

@@ -12,7 +12,6 @@ import '../../models/system_log_model.dart';
 import '../../services/security/encryption_service.dart';
 import '../system/app_environment.dart';
 import 'migration_service.dart';
-import 'sync_service.dart';
 import 'dao/patient_dao.dart';
 import 'dao/vitals_dao.dart';
 import 'dao/system_dao.dart';
@@ -117,7 +116,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 24, // BUMPED TO 24 FOR BIOMETRIC LOGIN
+      version: 26, // BUMPED TO 26 FOR BHW ASSIGNMENTS
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -128,9 +127,10 @@ class DatabaseHelper {
       await migrationService.runMigrations(db);
       await migrationService.performSanityCheck(db);
 
-      // --- TRIGGER BULK CLOUD SYNC ---
-      // Force a push to update the newly assigned usernames to Supabase
-      unawaited(SyncService().forcePushAll());
+      // --- TRIGGER BACKGROUND CLOUD SYNC ---
+      // We rely on the SyncService background loop which starts automatically in Tier 2.
+      // Do NOT call forcePushAll() or triggerSync() here as Supabase may not be initialized yet.
+      // SyncService().triggerSync();
     } else {
       debugPrint(
           "📂 [DatabaseHelper] Background Isolate: Skipping migrations & sanity checks.");
@@ -168,7 +168,9 @@ class DatabaseHelper {
       pin_hash TEXT,
       pin_salt TEXT,
       username TEXT,
-      fingerprint_id INTEGER
+      fingerprint_id INTEGER,
+      assigned_bhw_id TEXT,
+      assigned_bhw_name TEXT
     )
     ''');
 
@@ -334,6 +336,7 @@ class DatabaseHelper {
       is_forwarded INTEGER DEFAULT 0,
       is_deleted INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
+      is_read INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT "1970-01-01T00:00:00Z",
       is_synced INTEGER NOT NULL DEFAULT 0
@@ -574,7 +577,7 @@ class DatabaseHelper {
           final generatedUsername = 'h$yearSuffix$sequence';
           await db.update(
             'patients',
-            {'username': generatedUsername},
+            {'username': generatedUsername, 'is_synced': 0},
             where: 'id = ?',
             whereArgs: [id],
           );
@@ -592,6 +595,25 @@ class DatabaseHelper {
         debugPrint("🚀 Database Upgraded to Version 24 (Biometrics Active)");
       } catch (e) {
         debugPrint("⚠️ Database Upgrade (v24) - column may already exist: $e");
+      }
+    }
+
+    if (oldVersion < 25) {
+      try {
+        await db.execute('ALTER TABLE chat_messages ADD COLUMN is_read INTEGER DEFAULT 0');
+        debugPrint("🚀 Database Upgraded to Version 25 (Chat Read Receipts)");
+      } catch (e) {
+        debugPrint("⚠️ Database Upgrade (v25) - column may already exist: $e");
+      }
+    }
+
+    if (oldVersion < 26) {
+      try {
+        await db.execute('ALTER TABLE patients ADD COLUMN assigned_bhw_id TEXT');
+        await db.execute('ALTER TABLE patients ADD COLUMN assigned_bhw_name TEXT');
+        debugPrint("🚀 Database Upgraded to Version 26 (BHW Assignments Active)");
+      } catch (e) {
+        debugPrint("⚠️ Database Upgrade (v26) - columns may already exist: $e");
       }
     }
   }
@@ -895,6 +917,8 @@ class DatabaseHelper {
       'pin_salt': map['pin_salt'] ?? map['pinSalt'],
       'username': map['username'],
       'fingerprint_id': map['fingerprint_id'],
+      'assigned_bhw_id': map['assigned_bhw_id'] ?? map['assignedBhwId'],
+      'assigned_bhw_name': map['assigned_bhw_name'] ?? map['assignedBhwName'],
     };
 
     await db.insert('patients', encryptedMap,
@@ -914,6 +938,8 @@ class DatabaseHelper {
       decrypted['pin_salt'] = json['pin_salt'];
       decrypted['deviceToken'] = json['device_token'];
       decrypted['fingerprint_id'] = json['fingerprint_id'];
+      decrypted['assignedBhwId'] = json['assigned_bhw_id'];
+      decrypted['assignedBhwName'] = json['assigned_bhw_name'];
       // Ensure model mapping works with snake_case from DB
       return User.fromMap(decrypted);
     }).toList();
@@ -931,6 +957,8 @@ class DatabaseHelper {
       decrypted['pin_salt'] = maps.first['pin_salt'];
       decrypted['deviceToken'] = maps.first['device_token'];
       decrypted['fingerprint_id'] = maps.first['fingerprint_id'];
+      decrypted['assignedBhwId'] = maps.first['assigned_bhw_id'];
+      decrypted['assignedBhwName'] = maps.first['assigned_bhw_name'];
       return User.fromMap(decrypted);
     }
     return null;
@@ -967,6 +995,8 @@ class DatabaseHelper {
       'pin_salt': map['pin_salt'] ?? map['pinSalt'],
       'username': map['username'],
       'fingerprint_id': map['fingerprint_id'],
+      'assigned_bhw_id': map['assigned_bhw_id'] ?? map['assignedBhwId'],
+      'assigned_bhw_name': map['assigned_bhw_name'] ?? map['assignedBhwName'],
     };
     await db.update('patients', encryptedMap,
         where: 'id = ?', whereArgs: [user.id]);

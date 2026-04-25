@@ -24,7 +24,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   List<User> _users = [];
   bool _isLoading = false;
   bool _isRefreshing = false; // NEW: Prevent concurrent refreshes
-  StreamSubscription? _patientSyncSub;
+  StreamSubscription? _residentSyncSub;
   Timer? _refreshDebounce;
 
   // NEW: SECURITY HARDENING
@@ -52,7 +52,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     _loadUsers();
 
     // Listen for cloud changes and refresh local list (Debounced to avoid lag)
-    _patientSyncSub = SyncEventBus.instance.patientStream.listen((_) {
+    _residentSyncSub = SyncEventBus.instance.residentStream.listen((_) {
       _refreshDebounce?.cancel();
       _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
         debugPrint(
@@ -61,6 +61,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       });
     });
   }
+
 
   Future<void> _loadUsers() async {
     if (_isRefreshing) return;
@@ -216,7 +217,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         userId: "ADMIN");
 
     // Trigger Cloud Sync
-    SyncService().updatePatient(updatedUser);
+    SyncService().updateResident(updatedUser);
     notifyListeners();
   }
 
@@ -230,7 +231,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         userId: "ADMIN");
 
     // Trigger Cloud Sync
-    SyncService().deletePatient(userId);
+    SyncService().deleteResident(userId);
     notifyListeners();
   }
 
@@ -249,7 +250,30 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         userId: "ADMIN");
 
     // Trigger Cloud Sync
-    SyncService().updatePatient(updatedUser);
+    SyncService().updateResident(updatedUser);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> assignHealthWorker({required String residentId, required String bhwId, required String bhwName}) async {
+    final user = _users.firstWhere((u) => u.id == residentId);
+    final updatedUser = user.copyWith(
+      assignedBhwId: bhwId,
+      assignedBhwName: bhwName,
+      updatedAt: DateTime.now(),
+    );
+
+    await DatabaseHelper.instance.updatePatient(updatedUser);
+    _users = await DatabaseHelper.instance.getPatients();
+
+    SecurityLogger.info("Admin assigned BHW $bhwName to resident", pii: user.fullName);
+    
+    DatabaseHelper.instance.logSecurityEvent(
+        "BHW_ASSIGNMENT", "Admin assigned BHW $bhwName to resident ${user.fullName}",
+        userId: "ADMIN");
+
+    // Trigger Cloud Sync
+    SyncService().updateResident(updatedUser);
     notifyListeners();
   }
 
@@ -273,12 +297,25 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
         debugPrint("👋 Returning Visitor Detected: $fullName (ID: $visitorId)");
       } else {
         // 3. Create NEW Visitor for the HIWALAY table
-        visitorId = "visitor-${const Uuid().v4()}";
+        final now = DateTime.now();
+        final yearStr = now.year.toString().substring(2);
+        final monthStr = now.month.toString().padLeft(2, '0');
+        
+        // Count visitors created this month to generate sequential ID
+        final db = await DatabaseHelper.instance.database;
+        final countResult = await db.rawQuery(
+            "SELECT COUNT(*) as count FROM visitors WHERE created_at LIKE '${now.year}-$monthStr-%'"
+        );
+        final int currentCount = (countResult.first['count'] as int?) ?? 0;
+        final sequenceStr = (currentCount + 1).toString().padLeft(7, '0');
+        
+        visitorId = "hv$yearStr$monthStr$sequenceStr";
+        
         await DatabaseHelper.instance.insertVisitor({
           'id': visitorId,
           'first_name': firstName,
           'last_name': lastName,
-          'created_at': DateTime.now().toIso8601String(),
+          'created_at': now.toIso8601String(),
           'is_synced': 0,
         });
         debugPrint("🆕 New Visitor Registered: $fullName (ID: $visitorId)");
@@ -363,7 +400,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
       // 2. Cloud Fallback (Critical for new accounts not yet pulled)
       final cloudMatches =
-          await SyncService().findPatient(username, phoneNumber);
+          await SyncService().findResident(username, phoneNumber);
       if (cloudMatches.isNotEmpty) {
         final cloudUser = User.fromMap(cloudMatches.first);
         await DatabaseHelper.instance.insertPatient(cloudUser);
@@ -442,6 +479,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
       logout();
     });
   }
+
 
   Future<bool> _isLockedOut() async {
     if (_lockoutUntil != null) {
@@ -545,7 +583,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
 
   // --- MOBILE COMPANION APP LOGIN ---
   @override
-  Future<String?> loginPatientDevice(String phone, String pin) async {
+  Future<String?> loginResidentDevice(String phone, String pin) async {
     if (await _isLockedOut()) {
       return "Security Lock: Too many failed attempts. Please try again in $_lockoutMinutes minutes.";
     }
@@ -556,7 +594,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
     try {
       // 1. Authenticate via Cloud (Supabase)
       // Standard auth (handles initial handshake)
-      final cloudUser = await SyncService().authenticatePatient(phone, pin);
+      final cloudUser = await SyncService().authenticateResident(phone, pin);
 
       if (cloudUser != null) {
         // SECONDARY SECURITY: Zero-Knowledge Match Check
@@ -706,7 +744,7 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   Future<bool> setPinCode(String newPin) async => false;
 
   @override
-  Future<bool> verifyPatientPin(String enteredPin) async => false;
+  Future<bool> verifyResidentPin(String enteredPin) async => false;
 
   @override
   User? getUserById(String uid) {
@@ -718,14 +756,14 @@ class LocalAuthRepository extends ChangeNotifier implements IAuthRepository {
   }
 
   @override
-  Future<List<User>> searchPatients(String query) async {
-    return await SyncService().searchPatients(query);
+  Future<List<User>> searchResidents(String query) async {
+    return await SyncService().searchResidents(query);
   }
 
   @override
   void dispose() {
     _refreshDebounce?.cancel();
-    _patientSyncSub?.cancel();
+    _residentSyncSub?.cancel();
     super.dispose();
   }
 }

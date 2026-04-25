@@ -16,7 +16,7 @@ import 'package:intl/intl.dart';
 import '../../../core/services/system/app_environment.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
-import '../widgets/admin_patient_profile_sidebar.dart';
+import '../widgets/admin_resident_profile_sidebar.dart';
 
 enum SortOption { nameAsc, nameDesc, newest, oldest }
 
@@ -146,7 +146,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
   void _togglePiiVisibility() async {
     if (!_isPiiVisible) {
       await DatabaseHelper.instance.logSecurityEvent(
-          "PII_REVEAL", "Admin revealed patient list PII.",
+          "PII_REVEAL", "Admin revealed resident list PII.",
           severity: "HIGH", userId: "ADMIN");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -364,7 +364,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                   }
                 });
               }
-            : () => _showPatientProfile(user, historyRepo.records),
+            : () => _showResidentProfile(user, historyRepo.records),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -476,12 +476,12 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                 Icon(Icons.history_edu, color: Colors.grey.shade600, size: 20),
             onPressed: () {
               final historyRepo = context.read<IHistoryRepository>();
-              _showPatientProfile(user, historyRepo.records);
+              _showResidentProfile(user, historyRepo.records);
             },
           ),
         ),
         Tooltip(
-          message: "Edit Patient",
+          message: "Edit Resident",
           child: IconButton(
             icon: const Icon(Icons.edit_note_rounded,
                 color: Colors.blue, size: 22),
@@ -698,7 +698,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
     );
   }
 
-  void _showPatientProfile(User user, List<VitalSigns> allRecords) {
+  void _showResidentProfile(User user, List<VitalSigns> allRecords) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -715,9 +715,9 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
               elevation: 16,
               child: SizedBox(
                 width: 450,
-                child: AdminPatientProfileSidebar(
-                  patient: user,
-                  patientRecords: allRecords,
+                child: AdminResidentProfileSidebar(
+                  resident: user,
+                  residentRecords: allRecords,
                 ),
               ),
             ),
@@ -745,6 +745,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
     final miController = TextEditingController(text: user.middleInitial);
     final phoneController = TextEditingController(text: user.phoneNumber);
     String selectedSitio = user.sitio;
+    String selectedRole = user.role.toLowerCase();
 
     showModalBottomSheet(
       context: context,
@@ -759,7 +760,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
           child: Column(
             children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text("Edit Patient",
+                const Text("Edit Resident",
                     style:
                         TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 IconButton(
@@ -798,6 +799,40 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                       _buildSheetField(
                           "Phone", phoneController, _phoneFocusNode,
                           keyboardType: TextInputType.phone, maxLength: 11),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedRole,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'patient',
+                              child: Row(children: [
+                                Icon(Icons.person, size: 18),
+                                SizedBox(width: 8),
+                                Text("Resident")
+                              ])),
+                          DropdownMenuItem(
+                              value: 'bhw',
+                              child: Row(children: [
+                                Icon(Icons.medical_services,
+                                    size: 18, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text("Health Worker (BHW)")
+                              ])),
+                          DropdownMenuItem(
+                              value: 'admin',
+                              child: Row(children: [
+                                Icon(Icons.admin_panel_settings,
+                                    size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text("Administrator")
+                              ])),
+                        ],
+                        onChanged: (val) =>
+                            setSheetState(() => selectedRole = val!),
+                        decoration: const InputDecoration(
+                            labelText: "Account Role",
+                            border: OutlineInputBorder()),
+                      ),
                     ],
                   ),
                 ),
@@ -822,6 +857,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                       middleInitial: miController.text.trim(),
                       sitio: selectedSitio,
                       phoneNumber: phoneController.text.trim(),
+                      role: selectedRole,
                     );
                     await context
                         .read<IAuthRepository>()
@@ -832,7 +868,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
                     }
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text("Patient updated successfully"),
+                          content: Text("Resident updated successfully"),
                           backgroundColor: AppColors.brandGreen));
                     }
                   },
@@ -997,7 +1033,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen>
           Icon(Icons.person_search_rounded,
               size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          Text("No matching patients found.",
+          Text("No matching residents found.",
               style: TextStyle(
                   color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
         ],

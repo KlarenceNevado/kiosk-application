@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MigrationService {
   static final MigrationService _instance = MigrationService._internal();
@@ -107,7 +108,16 @@ class MigrationService {
 
   /// Perform a deep sanity check for critical columns that might be missing across versions
   Future<void> performSanityCheck(Database db) async {
-    debugPrint("📂 [MigrationService] Starting structural sanity check...");
+    final prefs = await SharedPreferences.getInstance();
+    final currentDbVersion = await db.getVersion();
+    final lastCheckVersion = prefs.getInt('last_sanity_check_version') ?? 0;
+
+    if (lastCheckVersion >= currentDbVersion) {
+      debugPrint("📂 [MigrationService] Sanity check already performed for v$currentDbVersion. Skipping heavy repairs.");
+      return;
+    }
+
+    debugPrint("📂 [MigrationService] Starting structural sanity check (v$currentDbVersion)...");
 
     await db.transaction((txn) async {
       final tables = [
@@ -361,6 +371,8 @@ class MigrationService {
     await _reconstructPatientsTable(db);
     await _reconstructVitalsTable(db);
 
+    // Update the last check version to prevent re-running
+    await prefs.setInt('last_sanity_check_version', currentDbVersion);
     debugPrint("✅ [MigrationService] structural sanity check complete.");
   }
 

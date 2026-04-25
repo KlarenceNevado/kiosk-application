@@ -62,14 +62,17 @@ class InitializationService {
     await HardwareConfig.load();
     await ConfigService().loadSettings();
 
-    // 4. Security & Diagnostics
+    // 4. Security & Database Pre-Init (Ensures SQLite is ready for DAOs)
     ErrorHandler.init();
     await EncryptionService().init();
+    await DatabaseHelper.instance.database; // Trigger non-blocking init/migration
     await LogManagerService().initialize();
 
     // 5. Diagnostics & Maintenance
     LogManagerService().startLogMaintenance();
-    HardwareWatchdogService().start();
+    if (AppEnvironment().hasHardwareAccess) {
+      HardwareWatchdogService().start();
+    }
 
     // 6. Minimal UI Config (Colors/Layout)
     _configureUI(mode);
@@ -87,7 +90,12 @@ class InitializationService {
     _initFirebaseAsync();
 
     // 2. Supabase (Slow - Network dependent)
-    _initSupabaseBackground();
+    // We await this in Tier 2 so that SyncService doesn't crash on uninitialized client
+    try {
+      await _initSupabase();
+    } catch (e) {
+      debugPrint("⚠️ [InitializationService] Supabase Initialization failed: $e");
+    }
 
     // 3. Window Configuration (Hardware dependent)
     if (AppEnvironment().isDesktopAdmin ||
@@ -139,13 +147,6 @@ class InitializationService {
         debugPrint("⚠️ [InitializationService] Firebase Init Error: $e");
       }
     }());
-  }
-
-  /// Non-blocking Supabase initialization
-  void _initSupabaseBackground() {
-    unawaited(_initSupabase().catchError((e) {
-      debugPrint("⚠️ [InitializationService] Deferred Supabase Error: $e");
-    }));
   }
 
   /// Non-blocking Desktop Window configuration

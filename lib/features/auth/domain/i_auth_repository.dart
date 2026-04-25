@@ -13,16 +13,17 @@ abstract class IAuthRepository extends ChangeNotifier {
   Future<void> refreshUsers();
 
   // Registration & User Management
-  Future<List<User>> searchPatients(String query);
+  Future<List<User>> searchResidents(String query);
   Future<String?> registerUser(User newUser);
   Future<void> updateUser(User updatedUser);
   Future<void> deleteUser(String userId);
   Future<void> toggleUserStatus(User user, bool isActive);
+  Future<void> assignHealthWorker({required String residentId, required String bhwId, required String bhwName});
 
   // Login Flows
   Future<String?> login(String username, String phoneNumber);
   Future<String?> loginWithId(String userId);
-  Future<String?> loginPatientDevice(String phone, String pin);
+  Future<String?> loginResidentDevice(String phone, String pin);
   Future<void> loginAsVisitor(String fullName);
   Future<String?> loginWithFingerprint(int fingerprintId);
   Future<void> logout();
@@ -32,7 +33,7 @@ abstract class IAuthRepository extends ChangeNotifier {
   Future<bool> verifyAdminAccess(String pin) async =>
       false; // Default implementations to avoid massive refactoring overhead
   Future<bool> setPinCode(String newPin) async => false;
-  Future<bool> verifyPatientPin(String enteredPin) async => false;
+  Future<bool> verifyResidentPin(String enteredPin) async => false;
 
   // Family/Dependent Links
   List<User> getLinkedAccounts();

@@ -190,7 +190,7 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
                                 ],
                               ),
                               content: const Text(
-                                  "This will send a sticky red alert to EVERY registered patient's mobile app instantly. Are you sure?"),
+                                  "This will send a sticky red alert to EVERY registered resident's mobile app instantly. Are you sure?"),
                               actions: [
                                 TextButton(
                                     onPressed: () => Navigator.pop(ctx, false),

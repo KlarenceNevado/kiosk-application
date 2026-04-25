@@ -45,7 +45,7 @@ void main() {
               create: (_) => LocalChatRepository()),
           Provider<ISystemRepository>(create: (_) => LocalSystemRepository()),
         ],
-        child: const PatientMobileApp(),
+        child: const ResidentMobileApp(),
       ),
     );
   }, (error, stack) {
@@ -54,15 +54,15 @@ void main() {
   });
 }
 
-class PatientMobileApp extends StatelessWidget {
-  const PatientMobileApp({super.key});
+class ResidentMobileApp extends StatelessWidget {
+  const ResidentMobileApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Isla Verde Patient Companion',
+      title: 'Isla Verde Resident Companion',
       theme: PatientAppTheme.lightTheme,
-      routerConfig: patientRouter,
+      routerConfig: residentRouter,
       debugShowCheckedModeBanner: false,
     );
   }

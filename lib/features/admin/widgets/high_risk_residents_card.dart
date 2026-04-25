@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../auth/models/user_model.dart';
 import '../../health_check/models/vital_signs_model.dart';
 import '../../../core/constants/app_colors.dart';
-import '../logic/broadcast_alert_service.dart';
+import '../../chat/domain/i_chat_repository.dart';
+import '../../chat/models/chat_message.dart';
+import '../../../core/utils/health_thresholds.dart';
 
-class HighRiskPatientsCard extends StatelessWidget {
+class HighRiskResidentsCard extends StatelessWidget {
   final List<User> users;
   final List<VitalSigns> records;
 
-  const HighRiskPatientsCard({
+  const HighRiskResidentsCard({
     super.key,
     required this.users,
     required this.records,
@@ -29,7 +32,7 @@ class HighRiskPatientsCard extends StatelessWidget {
       }
     }
 
-    // 2. Filter for high risk (Systolic > 140 OR SpO2 < 90)
+    // 2. Filter for high risk
     final List<Map<String, dynamic>> highRiskProfiles = [];
 
     for (var user in users) {
@@ -39,12 +42,8 @@ class HighRiskPatientsCard extends StatelessWidget {
       if (userRecords.isEmpty) continue;
 
       final latest = userRecords.first;
-      bool isHypertensive = latest.systolicBP > 140;
-      bool isHypoxic = latest.oxygen < 90;
-
-      final List<String> reasons = [];
-      if (isHypertensive) reasons.add("High BP (${latest.systolicBP}/${latest.diastolicBP})");
-      if (isHypoxic) reasons.add("Low O2 (${latest.oxygen}%)");
+      
+      final List<String> reasons = HealthThresholds.evaluate(user, latest);
 
       // TREND ANALYSIS: Check last 3 records
       if (userRecords.length >= 3) {
@@ -95,7 +94,7 @@ class HighRiskPatientsCard extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: AppColors.brandDark)),
-                  Text("All screened patients are within normal thresholds.",
+                  Text("All screened residents are within normal thresholds.",
                       style: TextStyle(color: Colors.grey, fontSize: 11)),
                 ],
               ),
@@ -207,15 +206,41 @@ class HighRiskPatientsCard extends StatelessWidget {
                 ),
                 trailing: TextButton.icon(
                   onPressed: () async {
-                    final success = await BroadcastAlertService().sendPersonalAlert(
-                      user: user,
-                      message: "Critical Health Alert: Please visit the Barangay Health Center for a checkup regarding your recent vital trends.",
+                    final chatRepo = context.read<IChatRepository>();
+                    final msg = ChatMessage(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      senderId: 'admin',
+                      receiverId: user.id,
+                      content: "Critical Health Alert: Please visit the Barangay Health Center for a checkup regarding your recent vital trends. Anomalies found: ${reasons.join(', ')}",
+                      timestamp: DateTime.now(),
+                      updatedAt: DateTime.now(),
                     );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(success ? "Alert sent to ${user.firstName}." : "Failed to send alert."),
-                        backgroundColor: success ? AppColors.brandGreen : Colors.red,
-                      ));
+                    try {
+                      await chatRepo.sendMessage(msg);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  "Alert sent to ${user.firstName} via Chat.",
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppColors.brandGreen,
+                        ));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text("Failed to send alert via Chat."),
+                          backgroundColor: Colors.red,
+                        ));
+                      }
                     }
                   },
                   icon: const Icon(Icons.campaign, size: 18),

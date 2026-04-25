@@ -16,7 +16,7 @@ class AdminChatTab extends StatefulWidget {
 }
 
 class _AdminChatTabState extends State<AdminChatTab> {
-  User? _internalSelectedPatient;
+  User? _internalSelectedResident; // Keep for fallback but preferred via repository
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String? _replyingToId;
@@ -65,7 +65,8 @@ class _AdminChatTabState extends State<AdminChatTab> {
 
   @override
   Widget build(BuildContext context) {
-    final patients = context
+    final chatRepo = context.watch<IChatRepository>();
+    final residents = context
         .watch<IAuthRepository>()
         .users
         .where((u) => u.parentId == null)
@@ -73,13 +74,20 @@ class _AdminChatTabState extends State<AdminChatTab> {
             u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             u.phoneNumber.contains(_searchQuery))
         .toList();
-    final chatRepo = context.watch<IChatRepository>();
-    final User? activePatient =
-        chatRepo.selectedPatient ?? _internalSelectedPatient;
+
+    // SORT BY LATEST MESSAGE
+    residents.sort((a, b) {
+      final timeA = chatRepo.getLatestMessageTime(a.id) ?? DateTime(1970);
+      final timeB = chatRepo.getLatestMessageTime(b.id) ?? DateTime(1970);
+      return timeB.compareTo(timeA);
+    });
+
+    final User? activeResident =
+        chatRepo.selectedResident ?? _internalSelectedResident;
 
     return Row(
       children: [
-        // PATIENT LIST SIDEBAR
+        // RESIDENT LIST SIDEBAR
         Container(
           width: 320,
           decoration: BoxDecoration(
@@ -97,7 +105,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: "Search patients...",
+                    hintText: "Search residents...",
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
                     fillColor: Colors.grey.shade50,
@@ -111,12 +119,12 @@ class _AdminChatTabState extends State<AdminChatTab> {
               const Divider(height: 1),
               Expanded(
                 child: ListView.separated(
-                  itemCount: patients.length,
+                  itemCount: residents.length,
                   separatorBuilder: (context, index) =>
                       const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final patient = patients[index];
-                    final isSelected = activePatient?.id == patient.id;
+                    final resident = residents[index];
+                    final isSelected = activeResident?.id == resident.id;
 
                     return ListTile(
                       selected: isSelected,
@@ -129,24 +137,58 @@ class _AdminChatTabState extends State<AdminChatTab> {
                         child: Icon(Icons.person,
                             color: isSelected ? Colors.white : Colors.grey),
                       ),
-                      title: Text(patient.fullName,
+                      title: Text(resident.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal)),
-                      subtitle: Text(patient.phoneNumber,
-                          style: const TextStyle(fontSize: 12)),
-                      trailing: isSelected
-                          ? const Icon(Icons.chevron_right,
-                              color: AppColors.brandGreen)
-                          : null,
+                      subtitle: Row(
+                        children: [
+                          Expanded(
+                            child: Text(resident.phoneNumber,
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                          if (chatRepo.getLatestMessageTime(resident.id) != null)
+                            Text(
+                              DateFormat('h:mm a').format(chatRepo
+                                  .getLatestMessageTime(resident.id)!
+                                  .toLocal()),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade500),
+                            ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (chatRepo.getUnreadCount(resident.id) > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Text(
+                                "${chatRepo.getUnreadCount(resident.id)}",
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          const SizedBox(width: 4),
+                          if (isSelected)
+                            const Icon(Icons.chevron_right,
+                                color: AppColors.brandGreen),
+                        ],
+                      ),
                       onTap: () {
-                        chatRepo.setSelectedPatient(null);
+                        chatRepo.setSelectedResident(resident);
                         setState(() {
-                          _internalSelectedPatient = patient;
                           _replyingToId = null;
                         });
-                        chatRepo.initChat('admin', patient.id);
                       },
                     );
                   },
@@ -158,11 +200,11 @@ class _AdminChatTabState extends State<AdminChatTab> {
 
         // CHAT WINDOW
         Expanded(
-          child: activePatient == null
+          child: activeResident == null
               ? _buildUnselectedState()
               : Column(
                   children: [
-                    _buildChatHeader(activePatient),
+                    _buildChatHeader(activeResident),
                     Expanded(
                       child: Stack(
                         children: [
@@ -242,7 +284,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                 size: 80, color: AppColors.brandGreen),
           ),
           const SizedBox(height: 24),
-          const Text("Select a patient to start chatting",
+          const Text("Select a resident to start chatting",
               style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -255,7 +297,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
     );
   }
 
-  Widget _buildChatHeader(User activePatient) {
+  Widget _buildChatHeader(User activeResident) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
@@ -275,7 +317,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(activePatient.fullName,
+              Text(activeResident.fullName,
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold)),
               Row(
@@ -284,7 +326,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                       radius: 4,
                       backgroundColor: context
                                   .watch<IChatRepository>()
-                                  .onlineStatus[activePatient.id] ==
+                                  .onlineStatus[activeResident.id] ==
                               true
                           ? AppColors.brandGreen
                           : Colors.grey),
@@ -292,7 +334,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
                   Text(
                       context
                                   .watch<IChatRepository>()
-                                  .onlineStatus[activePatient.id] ==
+                                  .onlineStatus[activeResident.id] ==
                               true
                           ? "Online"
                           : "Offline",
@@ -453,7 +495,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Replying to patient",
+                const Text("Replying to resident",
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -524,9 +566,9 @@ class _AdminChatTabState extends State<AdminChatTab> {
   }
 
   void _sendMessage() {
-    final activePatient = context.read<IChatRepository>().selectedPatient ??
-        _internalSelectedPatient;
-    if (_messageController.text.trim().isEmpty || activePatient == null) {
+    final activeResident = context.read<IChatRepository>().selectedResident ??
+        _internalSelectedResident;
+    if (_messageController.text.trim().isEmpty || activeResident == null) {
       return;
     }
 
@@ -534,7 +576,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
     final message = ChatMessage(
       id: const Uuid().v4(),
       senderId: 'admin',
-      receiverId: activePatient.id,
+      receiverId: activeResident.id,
       content: _messageController.text.trim(),
       timestamp: DateTime.now(),
       replyTo: _replyingToId,
@@ -676,7 +718,7 @@ class _AdminChatTabState extends State<AdminChatTab> {
   }
 
   void _showForwardPicker(ChatMessage msg) {
-    final patients = context
+    final residents = context
         .read<IAuthRepository>()
         .users
         .where((u) => u.parentId == null)
@@ -699,20 +741,20 @@ class _AdminChatTabState extends State<AdminChatTab> {
               ),
               Expanded(
                 child: ListView.builder(
-                  itemCount: patients.length,
+                  itemCount: residents.length,
                   itemBuilder: (context, index) {
-                    final p = patients[index];
+                    final resident = residents[index];
                     return ListTile(
                       leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text(p.fullName),
+                      title: Text(resident.fullName),
                       onTap: () {
                         context
                             .read<IChatRepository>()
-                            .forwardMessage(msg, p.id);
+                            .forwardMessage(msg, resident.id);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                             content:
-                                Text("Message forwarded to ${p.fullName}")));
+                                Text("Message forwarded to ${resident.fullName}")));
                       },
                     );
                   },

@@ -7,16 +7,16 @@ import 'package:provider/provider.dart';
 import '../../auth/domain/i_auth_repository.dart';
 import '../../../../core/services/database/connection_manager.dart';
 
-class PatientAnnouncementsScreen extends StatefulWidget {
-  const PatientAnnouncementsScreen({super.key});
+class ResidentAnnouncementsScreen extends StatefulWidget {
+  const ResidentAnnouncementsScreen({super.key});
 
   @override
-  State<PatientAnnouncementsScreen> createState() =>
-      _PatientAnnouncementsScreenState();
+  State<ResidentAnnouncementsScreen> createState() =>
+      _ResidentAnnouncementsScreenState();
 }
 
-class _PatientAnnouncementsScreenState
-    extends State<PatientAnnouncementsScreen> {
+class _ResidentAnnouncementsScreenState
+    extends State<ResidentAnnouncementsScreen> {
   List<Map<String, dynamic>>? _initialData;
   bool _isInitialLoading = true;
 

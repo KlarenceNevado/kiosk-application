@@ -72,7 +72,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       try {
         final authRepo = Provider.of<IAuthRepository>(context, listen: false);
-        final results = await authRepo.searchPatients(query);
+        final results = await authRepo.searchResidents(query);
         if (mounted) {
           setState(() {
             _filteredUsers = results;
@@ -123,7 +123,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
       }
 
       if (mounted) {
-        context.go(AppRoutes.patientHome);
+        context.go(AppRoutes.residentHome);
       }
     } catch (e) {
       if (mounted) {
@@ -223,7 +223,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                   const SizedBox(height: 32),
 
                   Text(
-                    "Patient Portal",
+                    "Resident Portal",
                     textAlign: TextAlign.center,
                     style: AppTextStyles.h1.copyWith(fontSize: 32),
                   ),

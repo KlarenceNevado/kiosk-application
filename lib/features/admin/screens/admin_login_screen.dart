@@ -8,6 +8,9 @@ import '../../../core/services/security/admin_security_service.dart';
 import '../../../core/services/system/app_environment.dart';
 import '../../../core/widgets/virtual_keyboard.dart';
 import '../../../core/mixins/virtual_keyboard_mixin.dart';
+import '../../auth/domain/i_auth_repository.dart';
+import '../../auth/models/user_model.dart';
+import 'package:provider/provider.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -28,6 +31,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
   int _remainingSeconds = 0;
   Timer? _lockoutTimer;
   bool _isSetupMode = false;
+  User? _selectedStaff;
+  List<User> _staffList = [];
 
   static const String _duressPin = "000000";
 
@@ -51,10 +56,18 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
     final isSetupRequired = await AdminSecurityService().isPinSetupRequired();
     final remaining = await AdminSecurityService().getRemainingLockoutSeconds();
 
+    if (!mounted) return;
+
+    // Fetch staff from DB
+    final authRepo = context.read<IAuthRepository>();
+    await authRepo.refreshUsers();
+    final staff = authRepo.users.where((u) => u.role == 'admin' || u.role == 'bhw').toList();
+
     if (mounted) {
       setState(() {
         _isSetupMode = isSetupRequired;
         _remainingSeconds = remaining;
+        _staffList = staff;
       });
       if (remaining > 0) _startLockoutTimer();
     }
@@ -129,7 +142,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       return;
     }
 
-    AdminRole grantedRole = await AdminSecurityService().verifyPin(input);
+    AdminRole grantedRole = await AdminSecurityService().verifyPin(input, userId: _selectedStaff?.id);
 
     if (grantedRole != AdminRole.none) {
       String roleStr =
@@ -284,6 +297,61 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                               ),
                             ),
                           ] else ...[
+                            if (!_isSetupMode && _staffList.isNotEmpty) ...[
+                              const Text(
+                                "Select Staff Member",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<User>(
+                                    value: _selectedStaff,
+                                    hint: const Text("Select your account"),
+                                    isExpanded: true,
+                                    items: [
+                                      // Master Admin Option (Always available if PIN exists)
+                                      const DropdownMenuItem<User>(
+                                        value: null,
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.stars, color: Colors.amber, size: 18),
+                                            SizedBox(width: 12),
+                                            Text("Master Admin"),
+                                          ],
+                                        ),
+                                      ),
+                                      ..._staffList.map((u) => DropdownMenuItem(
+                                        value: u,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              u.role == 'admin' ? Icons.admin_panel_settings : Icons.medical_services,
+                                              color: u.role == 'admin' ? Colors.red : Colors.blue,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(u.fullName),
+                                          ],
+                                        ),
+                                      )),
+                                    ],
+                                    onChanged: (val) => setState(() => _selectedStaff = val),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
                             const Text(
                               "Admin PIN",
                               style: TextStyle(

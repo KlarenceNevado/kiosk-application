@@ -5,14 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../auth/domain/i_auth_repository.dart';
 
-class PatientLoginScreen extends StatefulWidget {
-  const PatientLoginScreen({super.key});
+class ResidentLoginScreen extends StatefulWidget {
+  const ResidentLoginScreen({super.key});
 
   @override
-  State<PatientLoginScreen> createState() => _PatientLoginScreenState();
+  State<ResidentLoginScreen> createState() => _ResidentLoginScreenState();
 }
 
-class _PatientLoginScreenState extends State<PatientLoginScreen> {
+class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
   final _phoneController = TextEditingController();
   final _pinController = TextEditingController();
   bool _isLoading = false;
@@ -30,13 +30,13 @@ class _PatientLoginScreenState extends State<PatientLoginScreen> {
     setState(() => _isLoading = true);
 
     final error =
-        await context.read<IAuthRepository>().loginPatientDevice(phone, pin);
+        await context.read<IAuthRepository>().loginResidentDevice(phone, pin);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (error == null) {
-      context.go('/patient/home');
+      context.go('/resident/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error), backgroundColor: Colors.red));

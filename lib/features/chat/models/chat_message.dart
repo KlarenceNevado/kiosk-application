@@ -14,6 +14,7 @@ class ChatMessage {
   final DateTime updatedAt;
   final bool isForwarded;
   final bool isSynced;
+  final bool isRead;
   final String? mediaUrl;
   final String? mediaPath;
 
@@ -29,6 +30,7 @@ class ChatMessage {
     this.isForwarded = false,
     required this.updatedAt,
     this.isSynced = false,
+    this.isRead = false,
     this.mediaUrl,
     this.mediaPath,
   });
@@ -91,6 +93,7 @@ class ChatMessage {
               DateTime.now().toIso8601String())
           .toLocal(),
       isSynced: map['is_synced'] == 1,
+      isRead: parseBool(map['is_read']),
       mediaUrl: map['media_url'],
       mediaPath: map['media_path'],
     );
@@ -126,6 +129,7 @@ class ChatMessage {
       'reactions': jsonEncode(reactions),
       'is_forwarded': isForwarded ? 1 : 0,
       'is_deleted': isDeleted ? 1 : 0,
+      'is_read': isRead ? 1 : 0,
       'updated_at': updatedAt.toIso8601String(),
       'media_url': mediaUrl,
       'media_path': mediaPath,
@@ -152,6 +156,7 @@ class ChatMessage {
       'reactions': reactions,
       'is_forwarded': isForwarded,
       'is_deleted': isDeleted,
+      'is_read': isRead,
       'updated_at': updatedAt.toUtc().toIso8601String(),
     };
   }
@@ -162,6 +167,7 @@ class ChatMessage {
     bool? isForwarded,
     bool? isDeleted,
     bool? isSynced,
+    bool? isRead,
   }) {
     return ChatMessage(
       id: id,
@@ -175,6 +181,7 @@ class ChatMessage {
       isDeleted: isDeleted ?? this.isDeleted,
       updatedAt: DateTime.now(),
       isSynced: isSynced ?? this.isSynced,
+      isRead: isRead ?? this.isRead,
     );
   }
 }

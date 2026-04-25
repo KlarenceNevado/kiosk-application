@@ -7,19 +7,19 @@ import '../../auth/domain/i_auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import 'package:uuid/uuid.dart';
 import '../../mobile/screens/mobile_history_screen.dart';
-import 'patient_dashboard_screen.dart';
-import 'patient_announcements_screen.dart';
-import '../../chat/screens/patient_chat_screen.dart';
+import 'resident_dashboard_screen.dart';
+import 'resident_announcements_screen.dart';
+import '../../chat/screens/resident_chat_screen.dart';
 import '../../chat/domain/i_chat_repository.dart';
 import '../data/mobile_navigation_provider.dart';
 import '../../../../core/services/security/notification_service.dart';
 import '../../../../core/domain/i_system_repository.dart';
 import '../../user_history/domain/i_history_repository.dart';
 
-/// The unified navigation shell for the Patient Mobile App.
+/// The unified navigation shell for the Resident Mobile App.
 /// 4 tabs: Dashboard, History, Announcements, Profile
-class PatientNavShell extends StatelessWidget {
-  const PatientNavShell({super.key});
+class ResidentNavShell extends StatelessWidget {
+  const ResidentNavShell({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -48,11 +48,11 @@ class PatientNavShell extends StatelessWidget {
         }
 
         final List<Widget> screens = [
-          const PatientDashboardScreen(),
+          const ResidentDashboardScreen(),
           const MobileHistoryScreen(),
-          const PatientChatScreen(), // NEW TAB
-          const PatientAnnouncementsScreen(),
-          const _PatientProfileTab(),
+          const ResidentChatScreen(), // NEW TAB
+          const ResidentAnnouncementsScreen(),
+          const _ResidentProfileTab(),
         ];
 
         return Scaffold(
@@ -163,8 +163,8 @@ class PatientNavShell extends StatelessWidget {
 }
 
 /// Profile tab — shows user info and logout button.
-class _PatientProfileTab extends StatelessWidget {
-  const _PatientProfileTab();
+class _ResidentProfileTab extends StatelessWidget {
+  const _ResidentProfileTab();
 
   String _maskPhone(String? phone) {
     if (phone == null || phone.isEmpty) return "--";
@@ -206,7 +206,7 @@ class _PatientProfileTab extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              user?.fullName ?? "Patient",
+              user?.fullName ?? "Resident",
               style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -253,7 +253,7 @@ class _PatientProfileTab extends StatelessWidget {
             _buildInfoTile(
                 Icons.phone, "Phone Number", _maskPhone(user?.phoneNumber)),
             _buildInfoTile(
-                Icons.badge, "Patient ID", user?.id.substring(0, 8) ?? "--"),
+                Icons.badge, "Resident ID", user?.id.substring(0, 8) ?? "--"),
 
             const SizedBox(height: 32),
 
@@ -378,7 +378,7 @@ class _PatientProfileTab extends StatelessWidget {
                   context.read<MobileNavigationProvider>().reset();
                   await context.read<IAuthRepository>().logout();
                   if (context.mounted) {
-                    context.go('/patient/login');
+                    context.go('/resident/login');
                   }
                 },
               ),

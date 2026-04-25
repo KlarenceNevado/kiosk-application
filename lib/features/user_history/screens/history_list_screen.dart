@@ -91,7 +91,7 @@ class _HistoryListScreenState extends State<HistoryListScreen> {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go(AppRoutes.patientHome);
+            context.go(AppRoutes.residentHome);
           }
         },
         actions: [

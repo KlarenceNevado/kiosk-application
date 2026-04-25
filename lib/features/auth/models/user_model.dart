@@ -22,6 +22,8 @@ class User {
   final String? deviceToken;
   final String username;
   final int? fingerprintId; // NEW: Biometric ID (1-1000)
+  final String? assignedBhwId; // NEW: Assigned Health Worker
+  final String? assignedBhwName; // NEW: Display name for BHW
 
   User({
     required this.id,
@@ -45,6 +47,8 @@ class User {
     this.deviceToken,
     required this.username,
     this.fingerprintId,
+    this.assignedBhwId,
+    this.assignedBhwName,
   });
 
   String get fullName {
@@ -87,6 +91,8 @@ class User {
       'device_token': deviceToken,
       'username': username,
       'fingerprint_id': fingerprintId,
+      'assigned_bhw_id': assignedBhwId,
+      'assigned_bhw_name': assignedBhwName,
     };
   }
 
@@ -123,6 +129,8 @@ class User {
       deviceToken: map['deviceToken'] ?? map['device_token'],
       username: map['username'] ?? '',
       fingerprintId: map['fingerprint_id'] != null ? (map['fingerprint_id'] as num).toInt() : null,
+      assignedBhwId: map['assigned_bhw_id'] ?? map['assignedBhwId'],
+      assignedBhwName: map['assigned_bhw_name'] ?? map['assignedBhwName'],
     );
   }
 
@@ -150,6 +158,8 @@ class User {
     String? deviceToken,
     String? username,
     int? fingerprintId,
+    String? assignedBhwId,
+    String? assignedBhwName,
   }) {
     return User(
       id: id ?? this.id,
@@ -173,8 +183,23 @@ class User {
       deviceToken: deviceToken ?? this.deviceToken,
       username: username ?? this.username,
       fingerprintId: fingerprintId ?? this.fingerprintId,
+      assignedBhwId: assignedBhwId ?? this.assignedBhwId,
+      assignedBhwName: assignedBhwName ?? this.assignedBhwName,
     );
   }
 
   factory User.fromJson(String source) => User.fromMap(json.decode(source));
+
+  factory User.empty() => User(
+        id: '',
+        firstName: '',
+        middleInitial: '',
+        lastName: '',
+        sitio: '',
+        phoneNumber: '',
+        pinCode: '123456',
+        dateOfBirth: DateTime.now(),
+        gender: '',
+        username: 'unknown',
+      );
 }

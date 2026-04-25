@@ -45,7 +45,7 @@ class _MobileSplashScreenState extends State<MobileSplashScreen>
       setState(() => _statusText = "Ready!");
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
-      context.go(AppRoutes.patientLogin);
+      context.go(AppRoutes.residentLogin);
     }
   }
 
@@ -97,7 +97,7 @@ class _MobileSplashScreenState extends State<MobileSplashScreen>
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      "Patient Companion Portal",
+                      "Resident Companion Portal",
                       style: TextStyle(
                         fontSize: 18,
                         color: AppColors.textSecondary,

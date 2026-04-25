@@ -155,12 +155,17 @@ class MainMenuScreen extends StatelessWidget {
                             childAspectRatio: 2.2,
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
-                              _buildInfoCard(Icons.cake_outlined, "Age",
-                                  "${user.age} Years Old"),
-                              _buildInfoCard(
-                                  Icons.wc_outlined, "Gender", user.gender),
-                              _buildInfoCard(Icons.location_on_outlined,
-                                  "Sitio", user.sitio),
+                              if (user.role != 'visitor') ...[
+                                _buildInfoCard(Icons.cake_outlined, "Age",
+                                    "${user.age} Years Old"),
+                                _buildInfoCard(
+                                    Icons.wc_outlined, "Gender", user.gender),
+                                _buildInfoCard(Icons.location_on_outlined,
+                                    "Sitio", user.sitio),
+                              ] else ...[
+                                _buildInfoCard(Icons.person_outline_rounded,
+                                    "Role", "Guest Visitor"),
+                              ],
                               _buildInfoCard(
                                   Icons.calendar_month_outlined,
                                   "Last Checkup",

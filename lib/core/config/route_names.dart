@@ -27,9 +27,9 @@ class AppRoutes {
   static const String adminHardware = '/admin/hardware';
 
 
-  static const String patientLogin = '/patient/login';
-  static const String patientDashboard = '/patient/dashboard';
-  static const String patientHome = '/patient/home';
-  static const String patientSplash = '/patient/splash';
+  static const String residentLogin = '/resident/login';
+  static const String residentDashboard = '/resident/dashboard';
+  static const String residentHome = '/resident/home';
+  static const String residentSplash = '/resident/splash';
   static const String publicResult = '/results/:id';
 }

@@ -1,8 +1,5 @@
-import 'dart:io';
-import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -12,7 +9,6 @@ import '../../../auth/domain/i_auth_repository.dart';
 import '../../../auth/models/user_model.dart';
 import '../../../health_check/models/vital_signs_model.dart';
 import '../../services/pdf_report_service.dart';
-import '../../../../core/services/security/encryption_service.dart';
 
 class AdminReportsTab extends StatefulWidget {
   const AdminReportsTab({super.key});
@@ -22,128 +18,34 @@ class AdminReportsTab extends StatefulWidget {
 }
 
 class _AdminReportsTabState extends State<AdminReportsTab> {
-  bool _isGenerating = false;
-  String _dateFilter = "ALL TIME";
+  DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
+  DateTime _endDate = DateTime.now();
+  String _sitioFilter = "ALL SITIOS";
+  String _genderFilter = "ALL GENDERS";
 
-  List<VitalSigns> _getFilteredRecords(List<VitalSigns> allRecords) {
-    if (_dateFilter == "ALL TIME") return allRecords;
-
-    final now = DateTime.now();
-    DateTime start;
-
-    if (_dateFilter == "THIS WEEK") {
-      start = now.subtract(Duration(days: now.weekday - 1));
-      start = DateTime(start.year, start.month, start.day);
-    } else if (_dateFilter == "THIS MONTH") {
-      start = DateTime(now.year, now.month, 1);
-    } else if (_dateFilter == "LAST MONTH") {
-      start = DateTime(now.year, now.month - 1, 1);
-      final end = DateTime(now.year, now.month, 0);
-      return allRecords
-          .where((r) =>
-              r.phtTimestamp.isAfter(start) &&
-              r.phtTimestamp.isBefore(end.add(const Duration(days: 1))))
-          .toList();
-    } else {
-      return allRecords;
-    }
-
-    return allRecords
-        .where((r) =>
-            r.phtTimestamp.isAfter(start.subtract(const Duration(seconds: 1))))
-        .toList();
-  }
-
-  Future<void> _exportToCSV() async {
-    setState(() => _isGenerating = true);
-    try {
-      final historyRepo = context.read<IHistoryRepository>();
-      final authRepo = context.read<IAuthRepository>();
-      final records = _getFilteredRecords(historyRepo.records);
-
-      if (records.isEmpty) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("No records found for the selected filter."),
-            backgroundColor: Colors.orange));
-        return;
-      }
-
-      List<List<dynamic>> rows = [];
-      rows.add([
-        "Record ID",
-        "Patient Name",
-        "Phone Number",
-        "Date",
-        "Time",
-        "Heart Rate",
-        "Systolic BP",
-        "Diastolic BP",
-        "Oxygen",
-        "Temperature",
-        "BMI",
-        "BMI Category",
-        "Status"
-      ]);
-
-      for (var record in records) {
-        final user = authRepo.users.firstWhere((u) => u.id == record.userId,
-            orElse: () => User(
-                id: '',
-                firstName: 'Unknown',
-                middleInitial: '',
-                lastName: '',
-                sitio: '',
-                phoneNumber: '',
-                pinCode: '',
-                dateOfBirth: DateTime.now(),
-                gender: '',
-                username: 'unknown'));
-        rows.add([
-          record.id,
-          user.fullName,
-          user.phoneNumber,
-          DateFormat('yyyy-MM-dd').format(record.phtTimestamp),
-          DateFormat('HH:mm').format(record.phtTimestamp),
-          record.heartRate,
-          record.systolicBP,
-          record.diastolicBP,
-          record.oxygen,
-          record.temperature,
-          record.bmi ?? '',
-          record.bmiCategory ?? '',
-          record.status
-        ]);
-      }
-
-      String csv = const ListToCsvConverter().convert(rows);
-      final encryptedCsv = EncryptionService().encryptData(csv);
-
-      final directory = await getApplicationDocumentsDirectory();
-      final String filePath =
-          '${directory.path}/kiosk_report_${DateTime.now().millisecondsSinceEpoch}.csv.aes';
-      final File file = File(filePath);
-      await file.writeAsString(encryptedCsv);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Report exported successfully to documents folder."),
-        backgroundColor: AppColors.brandGreen,
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Export Error: $e"), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
-    }
+  List<VitalSigns> _getFilteredRecords(List<VitalSigns> allRecords, List<User> users) {
+    return allRecords.where((r) {
+      final inDate = r.phtTimestamp.isAfter(_startDate.subtract(const Duration(seconds: 1))) && 
+                     r.phtTimestamp.isBefore(_endDate.add(const Duration(days: 1)));
+      
+      if (!inDate) return false;
+      
+      final user = users.firstWhere((u) => u.id == r.userId, orElse: () => User.empty());
+      
+      final sitioMatch = _sitioFilter == "ALL SITIOS" || user.sitio == _sitioFilter;
+      final genderMatch = _genderFilter == "ALL GENDERS" || user.gender.toUpperCase() == _genderFilter.toUpperCase();
+      
+      return sitioMatch && genderMatch;
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final historyRepo = context.watch<IHistoryRepository>();
     final authRepo = context.watch<IAuthRepository>();
-    final filteredRecords = _getFilteredRecords(historyRepo.records);
+    final filteredRecords = _getFilteredRecords(historyRepo.records, authRepo.users);
+    
+    final allSitios = authRepo.users.map((u) => u.sitio).toSet().toList()..sort();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
@@ -156,40 +58,33 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Health Analytics & Reports",
+                  Text("Barangay Health Reports",
                       style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: AppColors.brandDark)),
                   Text(
-                      "Insights and regulatory data for Barangay Health management.",
+                      "Official regulatory data for LGU City Health Office transmission.",
                       style: TextStyle(fontSize: 14, color: Colors.grey)),
                 ],
               ),
-              Row(
-                children: [
-                  _buildActionButton(
-                    icon: Icons.table_chart,
-                    label: "CSV EXPORT",
-                    color: Colors.blue[700]!,
-                    onPressed: _exportToCSV,
-                    isLoading: _isGenerating,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildActionButton(
-                    icon: Icons.picture_as_pdf,
-                    label: "MONTHLY PDF",
-                    color: AppColors.brandGreen,
-                    onPressed: () =>
-                        PdfReportService.generateAndPrintMonthlyReport(
-                            users: authRepo.users, records: filteredRecords),
-                  ),
-                ],
+              _buildActionButton(
+                icon: Icons.assignment_turned_in,
+                label: "OFFICIAL LGU REPORT",
+                color: AppColors.brandGreen,
+                onPressed: () => PdfReportService.generateOfficialLGUReport(
+                  users: authRepo.users,
+                  records: historyRepo.records,
+                  startDate: _startDate,
+                  endDate: _endDate,
+                  sitio: _sitioFilter,
+                  gender: _genderFilter,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 32),
-          _buildFilterBar(),
+          _buildEnhancedFilterBar(allSitios),
           const SizedBox(height: 32),
           _buildSummaryCards(filteredRecords, authRepo.users.length),
           const SizedBox(height: 32),
@@ -198,10 +93,10 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
             children: [
               Expanded(
                   flex: 3,
-                  child:
-                      _buildDistributionChart(filteredRecords, authRepo.users)),
+                  child: RepaintBoundary(
+                      child: _buildDistributionChart(filteredRecords, authRepo.users))),
               const SizedBox(width: 24),
-              Expanded(flex: 2, child: _buildRiskPieChart(filteredRecords)),
+              Expanded(flex: 2, child: RepaintBoundary(child: _buildRiskPieChart(filteredRecords))),
             ],
           ),
           const SizedBox(height: 32),
@@ -211,46 +106,116 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
     );
   }
 
-  Widget _buildFilterBar() {
+  Widget _buildEnhancedFilterBar(List<String> sitios) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.grey.shade200)),
       child: Row(
         children: [
-          const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
-          const SizedBox(width: 12),
-          const Text("Time Period:",
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          // Date Range Selector
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: () async {
+                final range = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2024),
+                  lastDate: DateTime.now(),
+                  initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+                );
+                if (range != null) {
+                  setState(() {
+                    _startDate = range.start;
+                    _endDate = range.end;
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.date_range, size: 18, color: AppColors.brandGreen),
+                    const SizedBox(width: 12),
+                    Text(
+                      "${DateFormat('MMM dd, yyyy').format(_startDate)}  →  ${DateFormat('MMM dd, yyyy').format(_endDate)}",
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           const SizedBox(width: 16),
-          _buildFilterChip("ALL TIME"),
-          _buildFilterChip("THIS WEEK"),
-          _buildFilterChip("THIS MONTH"),
-          _buildFilterChip("LAST MONTH"),
+          // Sitio Filter
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _sitioFilter,
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(value: "ALL SITIOS", child: Text("All Sitios")),
+                    ...sitios.map((s) => DropdownMenuItem(value: s, child: Text(s))),
+                  ],
+                  onChanged: (val) => setState(() => _sitioFilter = val!),
+                ),
+              ),
+            ),
+          ),
+          // Gender Filter
+          const SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _genderFilter,
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: "ALL GENDERS", child: Text("All Genders")),
+                    DropdownMenuItem(value: "MALE", child: Text("Male")),
+                    DropdownMenuItem(value: "FEMALE", child: Text("Female")),
+                  ],
+                  onChanged: (val) => setState(() => _genderFilter = val!),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _startDate = DateTime.now().subtract(const Duration(days: 30));
+                _endDate = DateTime.now();
+                _sitioFilter = "ALL SITIOS";
+                _genderFilter = "ALL GENDERS";
+              });
+            },
+            icon: const Icon(Icons.restart_alt, size: 18),
+            label: const Text("Reset"),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label) {
-    final active = _dateFilter == label;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: active,
-        onSelected: (val) {
-          if (val) setState(() => _dateFilter = label);
-        },
-        selectedColor: AppColors.brandGreen,
-        labelStyle: TextStyle(color: active ? Colors.white : Colors.black87),
-      ),
-    );
-  }
-
-  Widget _buildSummaryCards(List<VitalSigns> records, int patientCount) {
+  Widget _buildSummaryCards(List<VitalSigns> records, int residentCount) {
     final highRisk = records
         .where((r) =>
             r.status.toUpperCase().contains('HIGH') ||
@@ -258,13 +223,13 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
         .length;
     return Row(
       children: [
-        _buildStatCard("Total Screenings", records.length.toString(),
+        _buildStatCard("Screenings in Range", records.length.toString(),
             Icons.analytics, Colors.blue),
         const SizedBox(width: 20),
-        _buildStatCard("High Risk Cases", highRisk.toString(), Icons.warning,
+        _buildStatCard("High Risk in Range", highRisk.toString(), Icons.warning,
             Colors.orange),
         const SizedBox(width: 20),
-        _buildStatCard("Total Patients", patientCount.toString(), Icons.people,
+        _buildStatCard("Total Registered", residentCount.toString(), Icons.people,
             AppColors.brandGreen),
       ],
     );
@@ -308,17 +273,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
     Map<String, int> sitioStats = {};
     for (var r in records) {
       final user = users.firstWhere((u) => u.id == r.userId,
-          orElse: () => User(
-              id: '',
-              firstName: '',
-              middleInitial: '',
-              lastName: '',
-              sitio: 'Unknown',
-              phoneNumber: '',
-              pinCode: '',
-              dateOfBirth: DateTime.now(),
-              gender: '',
-              username: 'unknown'));
+          orElse: () => User.empty());
       sitioStats[user.sitio] = (sitioStats[user.sitio] ?? 0) + 1;
     }
 
@@ -336,47 +291,52 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 24),
           Expanded(
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: (sitioStats.values.isEmpty
-                    ? 10
-                    : sitioStats.values
-                            .reduce((a, b) => a > b ? a : b)
-                            .toDouble() +
-                        2),
-                barGroups: List.generate(sortedKeys.length, (i) {
-                  return BarChartGroupData(x: i, barRods: [
-                    BarChartRodData(
-                        toY: sitioStats[sortedKeys[i]]!.toDouble(),
-                        color: AppColors.brandGreen,
-                        width: 22,
-                        borderRadius: BorderRadius.circular(4))
-                  ]);
-                }),
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (val, meta) => Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(sortedKeys[val.toInt()].split(' ').last,
-                            style: const TextStyle(fontSize: 10)),
+            child: sortedKeys.isEmpty 
+            ? const Center(child: Text("No data for current filters"))
+            : BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: (sitioStats.values.isEmpty
+                      ? 10
+                      : sitioStats.values
+                              .reduce((a, b) => a > b ? a : b)
+                              .toDouble() +
+                          2),
+                  barGroups: List.generate(sortedKeys.length, (i) {
+                    return BarChartGroupData(x: i, barRods: [
+                      BarChartRodData(
+                          toY: sitioStats[sortedKeys[i]]!.toDouble(),
+                          color: AppColors.brandGreen,
+                          width: 22,
+                          borderRadius: BorderRadius.circular(4))
+                    ]);
+                  }),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (val, meta) {
+                          if (val.toInt() >= sortedKeys.length) return const SizedBox();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(sortedKeys[val.toInt()].split(' ').last,
+                                style: const TextStyle(fontSize: 10)),
+                          );
+                        },
                       ),
                     ),
+                    leftTitles: const AxisTitles(
+                        sideTitles:
+                            SideTitles(showTitles: true, reservedSize: 30)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
                   ),
-                  leftTitles: const AxisTitles(
-                      sideTitles:
-                          SideTitles(showTitles: true, reservedSize: 30)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
                 ),
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
               ),
-            ),
           ),
         ],
       ),
@@ -481,10 +441,15 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Recent Screenings Detail",
+          const Text("Detailed Screenings in Range",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 16),
-          Table(
+          records.isEmpty 
+          ? const Center(child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: Text("No data found for the current filter settings."),
+          ))
+          : Table(
             columnWidths: const {
               0: FlexColumnWidth(2),
               1: FlexColumnWidth(1.5),
@@ -497,7 +462,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                 children: const [
                   Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text("PATIENT",
+                      child: Text("RESIDENT",
                           style: TextStyle(fontWeight: FontWeight.bold))),
                   Padding(
                       padding: EdgeInsets.all(12),
@@ -513,19 +478,9 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                           style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
               ),
-              ...records.reversed.take(15).map((r) {
+              ...records.reversed.take(50).map((r) {
                 final user = users.firstWhere((u) => u.id == r.userId,
-                    orElse: () => User(
-                        id: '',
-                        firstName: 'Unknown',
-                        middleInitial: '',
-                        lastName: '',
-                        sitio: '',
-                        phoneNumber: '',
-                        pinCode: '',
-                        dateOfBirth: DateTime.now(),
-                        gender: '',
-                        username: 'unknown'));
+                    orElse: () => User.empty());
                 return TableRow(
                   children: [
                     Padding(
@@ -534,7 +489,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                     Padding(
                         padding: const EdgeInsets.all(12),
                         child:
-                            Text(DateFormat('MMM dd').format(r.phtTimestamp))),
+                            Text(DateFormat('MMM dd, yyyy').format(r.phtTimestamp))),
                     Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(
@@ -588,7 +543,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
       style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
     );

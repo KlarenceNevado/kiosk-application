@@ -92,17 +92,16 @@ class VitalsSyncHandler extends SyncHandler {
         final db = await dbHelper.database;
         final batch = db.batch();
         for (var row in cloudVitals) {
-          final exists = await dbHelper.getVitalSignById(row['id']);
-          if (exists == null) {
-            anyNew = true;
-            latestNew = row;
-          }
+          // Optimization: Skip existence check inside loop for better performance.
+          // batch.insert with 'replace' already handles updates vs inserts efficiently.
           final prepared = _prepareRowForSqlite(row);
           batch.insert('vitals', prepared,
               conflictAlgorithm: ConflictAlgorithm.replace);
           latestTimestamp = row['updated_at'];
         }
         await batch.commit(noResult: true);
+        anyNew = true; // Assume new if we got any cloud data in this pull
+        latestNew = cloudVitals.last;
       }
 
       if (latestTimestamp != null) {

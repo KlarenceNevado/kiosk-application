@@ -6,9 +6,12 @@ import '../models/chat_message.dart';
 abstract class IChatRepository extends ChangeNotifier {
   List<ChatMessage> get messages;
   Map<String, bool> get onlineStatus;
-  User? get selectedPatient;
+  User? get selectedResident;
 
-  void setSelectedPatient(User? patient);
+  void setSelectedResident(User? resident);
+  int getUnreadCount(String? userId);
+  DateTime? getLatestMessageTime(String userId);
+  void markAsRead(String otherUserId);
 
   void initChat(String currentUserId, String otherUserId);
 

@@ -60,13 +60,19 @@ class AdminDesktopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Admin Desktop',
-      theme: AppTheme.lightTheme,
-      // FIXED: Uses adminRouter to start at Admin Login
-      routerConfig: adminRouter,
-      debugShowCheckedModeBanner: false,
-      scrollBehavior: const FluidScrollBehavior(),
+    // ExcludeSemantics disables the Windows accessibility bridge entirely,
+    // which is the root cause of "Failed to update ui::AXTree" errors.
+    // This admin app is a private health management tool and does not
+    // require screen reader support.
+    return ExcludeSemantics(
+      child: MaterialApp.router(
+        title: 'Admin Desktop',
+        theme: AppTheme.lightTheme,
+        // FIXED: Uses adminRouter to start at Admin Login
+        routerConfig: adminRouter,
+        debugShowCheckedModeBanner: false,
+        scrollBehavior: const FluidScrollBehavior(),
+      ),
     );
   }
 }
